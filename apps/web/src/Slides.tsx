@@ -12,6 +12,8 @@ const DEFAULT_ZOOM = 8;
 const pick = <T,>(steps: T[], ok: (t: T) => boolean) => steps.find(ok) ?? steps[steps.length - 1];
 const MIME_IMAGE = "application/x-papershow-image";
 const MIME_SLIDE = "application/x-papershow-slide";
+/** Matches the server's default for a new clip. */
+const NEW_CLIP_MIN = 15;
 const DAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -73,6 +75,9 @@ export function Slides() {
   const [images, setImages] = useState<ImageMeta[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [dropAt, setDropAt] = useState<number | null>(null);
+  /** What's in hand, so the track can open a gap the right size for it. */
+  const [dragging, setDragging] = useState<{ kind: "image" | "slide"; id: string; minutes: number } | null>(null);
+  const trackEl = useRef<HTMLDivElement>(null);
   const [resizing, setResizing] = useState<{ id: string; minutes: number } | null>(null);
   const clipEls = useRef(new Map<string, HTMLElement>());
   const scroller = useRef<HTMLDivElement>(null);
@@ -107,16 +112,27 @@ export function Slides() {
 
   // ── Dragging onto / within the track ────────────────────────────────────
 
+  // Clips other than the one in hand, in order: where a drop can land between.
+  const others = slides.filter((s) => s.id !== (dragging?.kind === "slide" ? dragging.id : null));
+
+  /**
+   * Where a drop at `clientX` lands, among `others`. Measured on the timeline as it
+   * would be without the gap, so the preview doesn't jitter as clips slide aside.
+   */
   const indexAt = (clientX: number) => {
-    let i = 0;
-    for (const s of slides) {
-      const el = clipEls.current.get(s.id);
-      if (!el) continue;
-      const r = el.getBoundingClientRect();
-      if (clientX < r.left + r.width / 2) return i;
-      i++;
+    const x = clientX - (trackEl.current?.getBoundingClientRect().left ?? 0);
+    let acc = 0;
+    for (let i = 0; i < others.length; i++) {
+      const w = minutesOf(others[i]) * ppm;
+      if (x < acc + w / 2) return i;
+      acc += w;
     }
-    return slides.length;
+    return others.length;
+  };
+
+  const endDrag = () => {
+    setDragging(null);
+    setDropAt(null);
   };
 
   const onDragOver = (e: DragEvent) => {
@@ -130,19 +146,18 @@ export function Slides() {
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
     const at = indexAt(e.clientX);
-    setDropAt(null);
     const imageId = e.dataTransfer.getData(MIME_IMAGE);
     const slideId = e.dataTransfer.getData(MIME_SLIDE);
+    endDrag();
     if (imageId) {
       api.addSlide(imageId, at).then((s) => {
         accept(s);
         setSelected(s.slides[at]?.id ?? null);
       });
     } else if (slideId) {
-      const ids = slides.map((s) => s.id);
-      const from = ids.indexOf(slideId);
-      ids.splice(from, 1);
-      ids.splice(from < at ? at - 1 : at, 0, slideId);
+      const ids = slides.map((s) => s.id).filter((id) => id !== slideId);
+      ids.splice(at, 0, slideId);
+      if (ids.join() === slides.map((s) => s.id).join()) return;
       edit(
         (s) => ({ ...s, slides: ids.map((id, i) => ({ ...s.slides.find((x) => x.id === id)!, position: i })) }),
         () => api.reorderSlides(ids),
@@ -326,6 +341,7 @@ export function Slides() {
                 })}
               </div>
               <div
+                ref={trackEl}
                 className="track"
                 style={{ minWidth: rulerMinutes * ppm, ["--grid" as string]: `${15 * ppm}px` }}
                 onDragOver={onDragOver}
@@ -333,10 +349,13 @@ export function Slides() {
                 onDrop={onDrop}
                 onClick={(e) => e.target === e.currentTarget && setSelected(null)}
               >
-                {slides.map((s, i) => {
+                {slides.map((s) => {
                   const img = byId.get(s.imageId);
                   const minutes = minutesOf(s);
-                  return (
+                  const lifted = dragging?.kind === "slide" && dragging.id === s.id && dropAt !== null;
+                  const ghostHere = dropAt !== null && !lifted && others.indexOf(s) === dropAt;
+                  return [
+                    ghostHere && <Ghost key="ghost" minutes={dragging?.minutes ?? 15} ppm={ppm} />,
                     <div
                       key={s.id}
                       ref={(el) => {
@@ -347,7 +366,7 @@ export function Slides() {
                       data-selected={s.id === selected}
                       data-disabled={!s.enabled}
                       data-live={!pinned && showing?.slideId === s.id}
-                      data-drop-before={dropAt === i}
+                      data-lifted={lifted}
                       data-size={minutes * ppm < 44 ? "xs" : minutes * ppm < 96 ? "s" : undefined}
                       style={{
                         width: minutes * ppm,
@@ -357,7 +376,9 @@ export function Slides() {
                       onDragStart={(e) => {
                         e.dataTransfer.setData(MIME_SLIDE, s.id);
                         e.dataTransfer.effectAllowed = "move";
+                        setDragging({ kind: "slide", id: s.id, minutes });
                       }}
+                      onDragEnd={endDrag}
                       onClick={() => setSelected(s.id)}
                       title={img?.name}
                     >
@@ -380,10 +401,10 @@ export function Slides() {
                           if (e.key === "ArrowLeft") setDuration(s.id, minutes - 1);
                         }}
                       />
-                    </div>
-                  );
+                    </div>,
+                  ];
                 })}
-                <div className="drop-end" data-on={dropAt === slides.length && slides.length > 0} />
+                {dropAt !== null && dropAt >= others.length && <Ghost key="ghost" minutes={dragging?.minutes ?? 15} ppm={ppm} />}
                 {playheadX !== null && <div className="playhead" style={{ transform: `translateX(${playheadX}px)` }} />}
               </div>
             </div>
@@ -410,7 +431,9 @@ export function Slides() {
                         onDragStart={(e) => {
                           e.dataTransfer.setData(MIME_IMAGE, img.id);
                           e.dataTransfer.effectAllowed = "copy";
+                          setDragging({ kind: "image", id: img.id, minutes: NEW_CLIP_MIN });
                         }}
+                        onDragEnd={endDrag}
                         data-live={showing?.imageId === img.id}
                         title={`Drag “${img.name}” onto the timeline`}
                       >
@@ -429,6 +452,15 @@ export function Slides() {
           </div>
         </section>
       </main>
+    </div>
+  );
+}
+
+/** Where the clip in hand will land if you let go: a glowing gap its own length. */
+function Ghost({ minutes, ppm }: { minutes: number; ppm: number }) {
+  return (
+    <div className="ghost" style={{ width: minutes * ppm }} aria-hidden>
+      {minutes * ppm >= 44 && <span>{fmtMinutes(minutes)}</span>}
     </div>
   );
 }

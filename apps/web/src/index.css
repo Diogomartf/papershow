@@ -33,6 +33,10 @@
   --grip: rgba(40,30,15,.18);
   --toggle-off: #d8ccb0;
   --knob: #fff;
+  --ghost: rgba(250, 205, 80, .26);
+  --ghost-edge: rgba(214, 160, 30, .75);
+  --ghost-glow: rgba(250, 200, 70, .35);
+  --ghost-ink: #8a6410;
   /* e-ink is reflective: it only glows as much as the room does */
   --dim: none;
   --radius: 10px;
@@ -85,6 +89,10 @@
   --grip: rgba(255,225,180,.22);
   --toggle-off: #4a3f33;
   --knob: #efe6d4;
+  --ghost: rgba(250, 200, 80, .16);
+  --ghost-edge: rgba(240, 190, 70, .6);
+  --ghost-glow: rgba(250, 190, 60, .22);
+  --ghost-ink: #f0c869;
   --dim: brightness(.78) sepia(.12);
 }
 
@@ -594,15 +602,23 @@ a.ghost { display: inline-block; }
 .clip[data-selected="true"] { box-shadow: 0 0 0 2px var(--ink) inset, 0 0 0 2px var(--track); }
 .clip[data-live="true"]:not([data-selected="true"]) { box-shadow: 0 0 0 2px var(--signal) inset, 0 0 0 2px var(--track); }
 .clip[data-disabled="true"] { opacity: .45; filter: grayscale(1); }
-.clip[data-drop-before="true"]::before, .drop-end[data-on="true"] {
-  content: "";
-  position: absolute; left: -3px; top: -6px; bottom: -6px;
-  width: 3px; border-radius: 2px;
-  background: var(--signal);
-  z-index: 3;
+/* the clip in hand folds out of its old spot while it hovers somewhere else */
+.clip[data-lifted="true"] { width: 0 !important; box-shadow: none; opacity: 0; margin: 0; }
+
+/* drop preview: a warm, glowing gap where the clip will land */
+.ghost {
+  flex: none;
+  height: 100%;
+  display: grid; place-items: center;
+  border-radius: 8px;
+  background: var(--ghost);
+  box-shadow: 0 0 0 1.5px var(--ghost-edge) inset, 0 0 18px 2px var(--ghost-glow);
+  font: 600 11px/1 var(--mono);
+  color: var(--ghost-ink);
+  pointer-events: none;
+  animation: ghostIn 160ms var(--ease-out) both;
 }
-.drop-end { position: relative; width: 0; }
-.drop-end[data-on="true"] { left: 0; }
+@keyframes ghostIn { from { opacity: 0; transform: scaleX(.6); } }
 
 .clip-label {
   position: absolute; left: 0; right: 10px; bottom: 0;
