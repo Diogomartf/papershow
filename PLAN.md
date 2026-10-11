@@ -1,4 +1,6 @@
-# ImageGen / SlideGen / ShowPi — Plan
+# Papershow — Plan
+
+An e-ink slideshow: **ImageGen** makes the images, **SlideGen** decides what is on `/live`, **ShowPi** puts it on the panel.
 
 ## The system
 
@@ -40,7 +42,7 @@ express in SVG. On the server, `@resvg/resvg-js` rasterizes in milliseconds with
 ## Stack
 
 - **Monorepo** (pnpm workspaces), TypeScript everywhere except the Pi client
-  - `packages/scene`: Scene types, `sceneToSvg()`, binding substitution, dithering. Shared by web and server.
+  - `packages/scene` (`@papershow/scene`): Scene types, `sceneToSvg()`, binding substitution, dithering. Shared by web and server.
   - `apps/web`: Vite + React. ImageGen editor now, SlideGen admin later.
   - `apps/server`: Hono on Node or Bun, SQLite (scenes, slides, schedule, plugin cache), resvg.
   - `apps/showpi`: small Python client, since Waveshare's drivers are Python.

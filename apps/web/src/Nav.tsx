@@ -16,6 +16,7 @@ export function Nav({ current }: { current: "draw" | "show" }) {
   return (
     <nav className="nav">
       <span className="mark" aria-hidden />
+      <span className="wordmark">Papershow</span>
       <a href="/" aria-current={current === "draw" ? "page" : undefined} onClick={go("/")}>ImageGen</a>
       <a href="/slides" aria-current={current === "show" ? "page" : undefined} onClick={go("/slides")}>SlideGen</a>
     </nav>

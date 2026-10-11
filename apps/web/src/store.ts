@@ -1,6 +1,6 @@
 // Saved images live on the server (SlideGen), so every device sees the same set.
 // Only the draft being edited stays in this browser's IndexedDB.
-import type { Scene } from "@imagegen/scene";
+import type { Scene } from "@papershow/scene";
 
 export type ImageMeta = { id: string; name: string; updatedAt: number };
 

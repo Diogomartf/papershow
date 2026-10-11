@@ -10,8 +10,8 @@ import type { Slide, State } from "./slides";
 const ZOOMS = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96];
 const DEFAULT_ZOOM = 8;
 const pick = <T,>(steps: T[], ok: (t: T) => boolean) => steps.find(ok) ?? steps[steps.length - 1];
-const MIME_IMAGE = "application/x-imagegen-image";
-const MIME_SLIDE = "application/x-imagegen-slide";
+const MIME_IMAGE = "application/x-papershow-image";
+const MIME_SLIDE = "application/x-papershow-slide";
 const DAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -81,7 +81,7 @@ export function Slides() {
   const fitted = useRef(false);
 
   useEffect(() => {
-    document.title = "SlideGen";
+    document.title = "SlideGen · Papershow";
     const load = () => listImages().then(setImages, () => {});
     load();
     addEventListener("focus", load);

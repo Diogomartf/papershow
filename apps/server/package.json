@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@hono/node-server": "2.1.4",
-    "@imagegen/scene": "workspace:*",
+    "@papershow/scene": "workspace:*",
     "hono": "4.13.13",
     "tsx": "4.23.15"
   },

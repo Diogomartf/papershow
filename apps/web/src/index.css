@@ -432,6 +432,12 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
 
 .nav { display: flex; align-items: center; gap: 2px; }
 .nav .mark { margin-right: 8px; }
+.wordmark {
+  margin-right: 14px;
+  font-weight: 680;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+}
 .nav a {
   padding: 6px 9px;
   border-radius: 8px;

@@ -1,5 +1,5 @@
 {
-  "name": "@imagegen/scene",
+  "name": "@papershow/scene",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",

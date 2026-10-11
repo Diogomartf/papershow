@@ -1,5 +1,5 @@
 import { toSvg } from "drawesome";
-import { dither, pack1bpp, type Scene } from "@imagegen/scene";
+import { dither, pack1bpp, type Scene } from "@papershow/scene";
 
 async function sceneToCanvas(scene: Scene): Promise<HTMLCanvasElement> {
   const svg = toSvg(scene.strokes, scene.width, scene.height, scene.background);

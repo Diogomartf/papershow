@@ -2,17 +2,20 @@ lockfileVersion: 5.4
 
 importers:
 
+  .:
+    specifiers: {}
+
   apps/server:
     specifiers:
       '@hono/node-server': 2.1.4
-      '@imagegen/scene': workspace:*
+      '@papershow/scene': workspace:*
       '@types/node': ^24
       hono: 4.13.13
       tsx: 4.23.15
       typescript: ~6.0.2
     dependencies:
       '@hono/node-server': 2.1.4_hono@4.13.13
-      '@imagegen/scene': link:../../packages/scene
+      '@papershow/scene': link:../../packages/scene
       hono: 4.13.13
       tsx: 4.23.15
     devDependencies:
@@ -21,7 +24,7 @@ importers:
 
   apps/web:
     specifiers:
-      '@imagegen/scene': workspace:*
+      '@papershow/scene': workspace:*
       '@types/node': ^24.13.3
       '@types/react': ^19.2.18
       '@types/react-dom': ^19.2.7
@@ -33,7 +36,7 @@ importers:
       typescript: ~6.0.2
       vite: ^8.3.0
     dependencies:
-      '@imagegen/scene': link:../../packages/scene
+      '@papershow/scene': link:../../packages/scene
       drawesome: 0.1.2_e3cbrgf6bscnlwawgospfwyoim
       react: 19.3.0
       react-dom: 19.3.0_react@19.3.0

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type Context } from "hono";
-import type { Scene } from "@imagegen/scene";
+import type { Scene } from "@papershow/scene";
 import * as store from "./db.ts";
 import { showing, upcoming, type Live, type Showing } from "./schedule.ts";
 

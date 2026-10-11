@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Draw, type DrawHandle, type Stroke } from "drawesome";
 import "drawesome/styles.css";
-import { PANEL, type Scene } from "@imagegen/scene";
+import { PANEL, type Scene } from "@papershow/scene";
 import { paintMono, renderScene } from "./render";
 import { getDraft, imageUrl, putDraft, putImage } from "./store";
 import { Gallery } from "./Gallery";
@@ -40,6 +40,7 @@ export default function App() {
   const [galleryKey, setGalleryKey] = useState(0);
 
   useEffect(() => {
+    document.title = "ImageGen · Papershow";
     getDraft().then((d) => setScene(d ?? newScene()));
   }, []);
 

@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { Scene } from "@imagegen/scene";
+import type { Scene } from "@papershow/scene";
 import type { Live, Slide } from "./schedule.ts";
 
 const path = process.env.DB ?? new URL("../data/imagegen.db", import.meta.url).pathname;

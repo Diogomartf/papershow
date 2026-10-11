@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Scene } from "@imagegen/scene";
+import type { Scene } from "@papershow/scene";
 import { deleteImage, fileUrl, getImage, imageUrl, listImages, type ImageMeta } from "./store";
 import { setLive } from "./slides";
 

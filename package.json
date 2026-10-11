@@ -1,5 +1,5 @@
 {
-  "name": "imagegen-monorepo",
+  "name": "papershow",
   "private": true,
   "scripts": {
     "dev": "pnpm -r --parallel dev",
