@@ -8,13 +8,20 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@expo-google-fonts/inter": "0.4.2",
     "@hono/node-server": "2.1.4",
     "@papershow/scene": "workspace:*",
+    "@resvg/resvg-js": "2.6.2",
+    "fast-png": "8.0.0",
     "hono": "4.13.13",
+    "satori": "0.47.1",
     "tsx": "4.23.15"
   },
   "devDependencies": {
     "@types/node": "^24",
     "typescript": "~6.0.2"
+  },
+  "imports": {
+    "#jsx/jsx-runtime": "./src/jsx/jsx-runtime.ts"
   }
 }

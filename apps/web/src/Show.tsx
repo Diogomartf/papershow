@@ -1,0 +1,206 @@
+import { useEffect } from "react";
+import { LightSwitch } from "./LightSwitch";
+import { Nav, navigate } from "./Nav";
+import { useLiveState } from "./live";
+import * as api from "./slides";
+import type { ShowEntry } from "./slides";
+import { useItems, type Item } from "./sources";
+import { useUndoToast } from "./Undo";
+
+const fmt = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`);
+
+/** /show — what runs: playlists, images and apps, top to bottom, then again. */
+export function Show() {
+  const { state, accept } = useLiveState();
+  const { items, itemOf } = useItems();
+  const toast = useUndoToast();
+
+  useEffect(() => {
+    document.title = "Show · Papershow";
+  }, []);
+
+  const show = state?.show ?? [];
+  const playlists = state?.playlists ?? [];
+  const clipsOf = (playlistId: string) => (state?.slides ?? []).filter((s) => s.playlistId === playlistId);
+  const minutesOf = (e: ShowEntry) =>
+    e.playlistId
+      ? clipsOf(e.playlistId).filter((s) => s.enabled).reduce((n, s) => n + s.durationS / 60, 0)
+      : e.durationS / 60;
+  const loopMin = show.filter((e) => e.enabled).reduce((n, e) => n + minutesOf(e), 0);
+  const onAir = state?.live.mode === "rotate" && !state.showing?.asleep ? state?.showing?.entryId : null;
+
+  const nameOf = (e: ShowEntry) =>
+    e.playlistId ? (playlists.find((p) => p.id === e.playlistId)?.name ?? "Playlist") : (itemOf(e.source)?.name ?? "…");
+
+  const move = (i: number, dir: -1 | 1) => {
+    const ids = show.map((e) => e.id);
+    const j = i + dir;
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    api.reorderShow(ids).then(accept);
+  };
+
+  const remove = (e: ShowEntry, index: number) => {
+    api.removeFromShow(e.id).then(accept);
+    toast.show(`Removed ${nameOf(e)} from the show`, () => api.restoreShowEntry(e, index).then(accept));
+  };
+
+  const add = (what: { playlistId: string } | { source: Item["source"] }, name: string) =>
+    api.addToShow(what).then((s) => {
+      accept(s);
+      toast.show(`Added ${name} to the show`);
+    });
+
+  return (
+    <div className="app">
+      <header className="bar">
+        <div className="bar-left">
+          <Nav current="show" />
+        </div>
+        <div />
+        <div className="bar-right">
+          <LightSwitch />
+          <a className="ghost" href="/live" target="_blank" rel="noreferrer">Open /live ↗</a>
+        </div>
+      </header>
+
+      <main className="pl-overview">
+        <div className="pl-head">
+          <div>
+            <h1>Show</h1>
+            <p className="muted">
+              Runs top to bottom, then starts over{loopMin ? ` · one time around takes ${fmt(loopMin)}` : ""}.
+            </p>
+          </div>
+        </div>
+
+        <ol className="pl-rows">
+          {show.map((e, i) => {
+            const clips = e.playlistId ? clipsOf(e.playlistId) : [];
+            const single = e.source ? itemOf(e.source) : undefined;
+            return (
+              <li key={e.id} data-off={!e.enabled} data-onair={onAir === e.id}>
+                <div className="pl-order">
+                  <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Play ${nameOf(e)} earlier`}>↑</button>
+                  <button onClick={() => move(i, 1)} disabled={i === show.length - 1} aria-label={`Play ${nameOf(e)} later`}>↓</button>
+                </div>
+
+                {e.playlistId ? (
+                  <button className="pl-main" onClick={() => navigate(`/playlist/${e.playlistId}`)}>
+                    <span className="pl-title">
+                      {nameOf(e)}
+                      {onAir === e.id && <span className="on-air" data-on="true">On air</span>}
+                    </span>
+                    <span className="muted">
+                      Playlist · {clips.length ? `${clips.length} ${clips.length === 1 ? "item" : "items"} · ${fmt(minutesOf(e))}` : "empty, add items to it"}
+                    </span>
+                    <span className="pl-strip" aria-hidden>
+                      {clips.slice(0, 8).map((s) => {
+                        const it = itemOf(s.source);
+                        return it ? <img key={s.id} src={it.thumb} alt="" /> : null;
+                      })}
+                      {clips.length > 8 && <span className="pl-more">+{clips.length - 8}</span>}
+                    </span>
+                  </button>
+                ) : (
+                  <div className="pl-main single">
+                    {single && <img className="single-thumb" src={single.thumb} alt="" />}
+                    <span>
+                      <span className="pl-title">
+                        {nameOf(e)}
+                        {onAir === e.id && <span className="on-air" data-on="true">On air</span>}
+                      </span>
+                      <span className="muted">{single?.label ?? "Item"}</span>
+                    </span>
+                  </div>
+                )}
+
+                <div className="pl-row-actions">
+                  {!e.playlistId && (
+                    <div className="stepper" aria-label="Duration">
+                      <button
+                        onClick={() => api.updateShowEntry(e.id, { durationS: e.durationS - 60 }).then(accept)}
+                        disabled={e.durationS <= 60}
+                        aria-label="One minute less"
+                      >
+                        −
+                      </button>
+                      <span className="tabular">{fmt(e.durationS / 60)}</span>
+                      <button onClick={() => api.updateShowEntry(e.id, { durationS: e.durationS + 60 }).then(accept)} aria-label="One minute more">
+                        +
+                      </button>
+                    </div>
+                  )}
+                  <button
+                    className="toggle"
+                    role="switch"
+                    aria-checked={e.enabled}
+                    aria-label={`${nameOf(e)} runs`}
+                    title={e.enabled ? "Runs in the show" : "Skipped"}
+                    onClick={() => api.updateShowEntry(e.id, { enabled: !e.enabled }).then(accept)}
+                  >
+                    <span />
+                  </button>
+                  {e.playlistId && (
+                    <button className="ghost" onClick={() => navigate(`/playlist/${e.playlistId}`)}>Open</button>
+                  )}
+                  <button className="ghost danger" onClick={() => remove(e, i)} aria-label={`Remove ${nameOf(e)} from the show`}>
+                    Remove
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+          {state && !show.length && <li className="pl-empty muted">The show is empty. Add a playlist, a drawing or an app below.</li>}
+        </ol>
+
+        <section className="show-add">
+          <h2>Add to the show</h2>
+          <div className="add-group">
+            <h3>Playlists</h3>
+            <ul className="add-playlists">
+              {playlists.map((p) => (
+                <li key={p.id}>
+                  <button onClick={() => add({ playlistId: p.id }, p.name)}>
+                    <span className="plus">+</span> {p.name}
+                    <small className="muted">{clipsOf(p.id).length} items</small>
+                  </button>
+                </li>
+              ))}
+              <li>
+                <button
+                  className="new"
+                  onClick={() =>
+                    api.createPlaylist().then((s) => {
+                      accept(s);
+                      navigate(`/playlist/${s.created}`);
+                    })
+                  }
+                >
+                  New playlist
+                </button>
+              </li>
+            </ul>
+          </div>
+          <div className="add-group">
+            <h3>Drawings and apps, on their own</h3>
+            <ul className="add-items">
+              {items.map((it) => (
+                <li key={it.key}>
+                  <button onClick={() => add({ source: it.source }, it.name)} title={`Add ${it.name} to the show`}>
+                    <img src={it.thumb} alt="" />
+                    <span>
+                      <span className="plus">+</span> {it.name}
+                    </span>
+                    <small className="muted">{it.label}</small>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      </main>
+      {toast.node}
+    </div>
+  );
+}

@@ -1,0 +1,282 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { LightSwitch } from "./LightSwitch";
+import { Nav, navigate } from "./Nav";
+import * as appsApi from "./apps";
+import type { AppInstance, AppKind, Field } from "./apps";
+import { addToShow, setLive } from "./slides";
+
+/** The form's state, tagged with the app it belongs to so it can never be saved onto another. */
+type Draft = { id: string; name: string; config: Record<string, unknown> };
+const body = (d: Draft) => JSON.stringify({ name: d.name, config: d.config });
+
+/** Lists show as "a, b, c" while you type; the server splits them. */
+const toForm = (fields: Field[], config: Record<string, unknown>) =>
+  Object.fromEntries(
+    Object.entries(config).map(([k, v]) => [k, fields.find((f) => f.key === k)?.type === "list" && Array.isArray(v) ? v.join(", ") : v]),
+  );
+
+/** `newKind`: setting up an app that isn't created yet; nothing is saved until "Create app". */
+export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
+  const [catalog, setCatalog] = useState<AppKind[]>([]);
+  const [apps, setApps] = useState<AppInstance[] | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [saved, setSaved] = useState(true);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    document.title = "Apps · Papershow";
+    Promise.all([appsApi.getCatalog(), appsApi.listApps()]).then(([c, a]) => {
+      setCatalog(c);
+      setApps(a);
+    });
+  }, []);
+
+  // No app in the URL: open the most recent one.
+  useEffect(() => {
+    if (!id && !newKind && apps?.length) {
+      history.replaceState(null, "", `/apps/${apps[0].id}`);
+      dispatchEvent(new PopStateEvent("popstate"));
+    }
+  }, [id, newKind, apps]);
+
+  const current = apps?.find((a) => a.id === id) ?? null;
+  const kindId = current?.kind ?? newKind;
+  const kind = useMemo(() => catalog.find((k) => k.kind === kindId), [catalog, kindId]);
+  const isNew = !current && !!newKind && !!kind;
+
+  // Load the selected app into the form.
+  const lastSaved = useRef("");
+  useEffect(() => {
+    if (current && kind) {
+      const d = { id: current.id, name: current.name, config: toForm(kind.fields, current.config) };
+      lastSaved.current = body(d);
+      setDraft(d);
+      setSaved(true);
+    } else if (newKind && kind) {
+      setDraft({ id: `new:${kind.kind}`, name: kind.name, config: toForm(kind.fields, kind.defaults) });
+    } else setDraft(null);
+    // Only when switching apps, not on every save echo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id, newKind, kind]);
+
+  // Preview the draft as you type; clocks also tick while you watch.
+  useEffect(() => {
+    if (!draft || !kind) return;
+    const ctrl = new AbortController();
+    let url: string | null = null;
+    const run = () =>
+      appsApi.previewApp(kind.kind, draft.config, ctrl.signal).then((u) => {
+        url = u;
+        setPreview((old) => {
+          if (old) URL.revokeObjectURL(old);
+          return u;
+        });
+      }, () => {});
+    const t = setTimeout(run, 180);
+    const tick = kind.periodMs <= 60_000 ? setInterval(run, 15_000) : undefined;
+    return () => {
+      ctrl.abort();
+      clearTimeout(t);
+      clearInterval(tick);
+      void url;
+    };
+  }, [draft, kind]);
+
+  // Save shortly after you stop typing.
+  useEffect(() => {
+    if (!draft || draft.id !== current?.id) return;
+    const b = body(draft);
+    if (b === lastSaved.current) return;
+    setSaved(false);
+    const t = setTimeout(async () => {
+      const next = await appsApi.updateApp(draft.id, { name: draft.name, config: draft.config });
+      lastSaved.current = b;
+      setApps((list) => list?.map((a) => (a.id === next.id ? next : a)) ?? null);
+      setSaved(true);
+    }, 450);
+    return () => clearTimeout(t);
+  }, [draft, current?.id]);
+
+  const flash = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast((t) => (t === msg ? null : t)), 2400);
+  };
+
+  const create = async () => {
+    if (!kind || !draft) return;
+    const app = await appsApi.createApp(kind.kind, { name: draft.name, config: draft.config });
+    setApps((list) => [app, ...(list ?? [])]);
+    navigate(`/apps/${app.id}`);
+    flash(`Created ${app.name}`);
+  };
+
+  const remove = async () => {
+    if (!current) return;
+    await appsApi.deleteApp(current.id);
+    const rest = apps?.filter((a) => a.id !== current.id) ?? [];
+    setApps(rest);
+    navigate(rest.length ? `/apps/${rest[0].id}` : "/apps");
+  };
+
+  const set = (key: string, value: unknown) => setDraft((d) => d && { ...d, config: { ...d.config, [key]: value } });
+
+  return (
+    <div className="app apps">
+      <header className="bar">
+        <div className="bar-left">
+          <Nav current="apps" />
+        </div>
+        <div />
+        <div className="bar-right">
+          <LightSwitch />
+          <a className="ghost" href="/live" target="_blank" rel="noreferrer">Open /live ↗</a>
+        </div>
+      </header>
+
+      <main className="apps-main">
+        <aside className="rail">
+          <h2>Your apps</h2>
+          <ul className="rail-list">
+            {apps?.map((a) => (
+              <li key={a.id}>
+                <a
+                  href={`/apps/${a.id}`}
+                  aria-current={a.id === id ? "page" : undefined}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigate(`/apps/${a.id}`);
+                  }}
+                >
+                  <img src={appsApi.appFrameUrl(a)} alt="" />
+                  <span>
+                    <strong>{a.id === id && draft ? draft.name : a.name}</strong>
+                    <small>{catalog.find((k) => k.kind === a.kind)?.name}</small>
+                  </span>
+                </a>
+              </li>
+            ))}
+            {apps?.length === 0 && <li className="muted rail-empty">None yet. Pick one below.</li>}
+          </ul>
+
+          <h2>New app</h2>
+          <ul className="kinds">
+            {catalog.map((k) => (
+              <li key={k.kind}>
+                <button onClick={() => navigate(`/apps/new/${k.kind}`)} aria-current={newKind === k.kind ? "true" : undefined}>
+                  <strong>{k.name}</strong>
+                  <small>{k.description}</small>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </aside>
+
+        <section className="app-stage">
+          <div className="device small">
+            <div className="panel">
+              {preview && (current || isNew) ? (
+                <img className="live-img" key={preview} src={preview} alt="" />
+              ) : (
+                <p className="panel-empty">{apps?.length === 0 ? "Pick an app on the left to set it up." : ""}</p>
+              )}
+            </div>
+            <span className="ribbon" aria-hidden />
+          </div>
+          <div className="shelf thin" aria-hidden />
+        </section>
+
+        <aside className="settings">
+          {(current || isNew) && kind && draft ? (
+            <>
+              <div className="settings-head">
+                <input
+                  className="name"
+                  value={draft.name}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  aria-label="App name"
+                  spellCheck={false}
+                />
+                <span className="saved" data-on={saved}>{isNew ? "Not created yet" : saved ? "Saved" : "Saving…"}</span>
+              </div>
+              <p className="muted kind-line">
+                {kind.name}
+                {kind.mock && <span className="chip">Mock data</span>}
+              </p>
+
+              {kind.fields.map((f) => (
+                <FieldInput key={f.key} field={f} value={draft.config[f.key]} onChange={(v) => set(f.key, v)} />
+              ))}
+
+              {isNew ? (
+                <div className="settings-actions">
+                  <button className="primary" onClick={create}>Create app</button>
+                  <button className="ghost" onClick={() => navigate("/apps")}>Cancel</button>
+                </div>
+              ) : (
+                <div className="settings-actions">
+                  <button
+                    className="primary"
+                    onClick={async () => {
+                      await setLive({ mode: "pin", source: { kind: "app", id: current!.id } });
+                      flash(`${draft.name} is now on /live`);
+                    }}
+                  >
+                    Show now
+                  </button>
+                  <button
+                    className="ghost"
+                    onClick={async () => {
+                      await addToShow({ source: { kind: "app", id: current!.id } });
+                      flash(`Added ${draft.name} to the show`);
+                    }}
+                  >
+                    Add to show
+                  </button>
+                  <button className="ghost danger" onClick={remove}>Delete</button>
+                </div>
+              )}
+            </>
+          ) : (
+            apps && <p className="muted">Set up an app to see its settings here.</p>
+          )}
+        </aside>
+      </main>
+
+      <div className="toast" data-on={!!toast} role="status">{toast}</div>
+    </div>
+  );
+}
+
+function FieldInput({ field, value, onChange }: { field: Field; value: unknown; onChange: (v: unknown) => void }) {
+  const id = `f-${field.key}`;
+  return (
+    <div className="setting">
+      <label htmlFor={id}>{field.label}</label>
+      {field.type === "toggle" ? (
+        <button id={id} className="toggle" role="switch" aria-checked={!!value} onClick={() => onChange(!value)}>
+          <span />
+        </button>
+      ) : field.type === "select" ? (
+        <div className="segmented" role="radiogroup" id={id}>
+          {field.options.map((o) => (
+            <button key={o.value} role="radio" aria-checked={value === o.value} onClick={() => onChange(o.value)}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <input
+          id={id}
+          className="text"
+          value={String(value ?? "")}
+          placeholder={field.placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          spellCheck={false}
+          autoComplete="off"
+        />
+      )}
+      {field.hint && <small className="muted">{field.hint}</small>}
+    </div>
+  );
+}

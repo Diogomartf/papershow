@@ -40,7 +40,7 @@ export default function App() {
   const [galleryKey, setGalleryKey] = useState(0);
 
   useEffect(() => {
-    document.title = "ImageGen · Papershow";
+    document.title = "Draw · Papershow";
     getDraft().then((d) => setScene(d ?? newScene()));
   }, []);
 

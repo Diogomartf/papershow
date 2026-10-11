@@ -32,7 +32,7 @@ export function Gallery({ open, refreshKey, currentId, onClose, onOpen, onLive }
   };
 
   const live = async (item: ImageMeta) => {
-    await setLive({ mode: "pin", imageId: item.id });
+    await setLive({ mode: "pin", source: { kind: "image", id: item.id } });
     onLive(item.name);
   };
 

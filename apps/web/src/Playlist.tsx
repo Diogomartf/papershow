@@ -1,16 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent, type PointerEvent } from "react";
 import { Nav } from "./Nav";
 import { LightSwitch } from "./LightSwitch";
 import { useSideScroll } from "./scroll";
-import { fileUrl, listImages, type ImageMeta } from "./store";
+import { keyOf, parseKey, useItems, type Item, type Source } from "./sources";
 import * as api from "./slides";
-import type { Slide, State } from "./slides";
+import { useLiveState, useNow } from "./live";
+import { FloatingMenu, useUndoToast } from "./Undo";
+import type { Playlist as PlaylistT, Slide, State } from "./slides";
+import { navigate } from "./Nav";
 
 /** Timeline zoom, in pixels per minute. */
 const ZOOMS = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96];
 const DEFAULT_ZOOM = 8;
 const pick = <T,>(steps: T[], ok: (t: T) => boolean) => steps.find(ok) ?? steps[steps.length - 1];
-const MIME_IMAGE = "application/x-papershow-image";
+/** A drawing or app from the strip, as "kind:id". */
+const MIME_SOURCE = "application/x-papershow-source";
 const MIME_SLIDE = "application/x-papershow-slide";
 /** Matches the server's default for a new clip. */
 const NEW_CLIP_MIN = 15;
@@ -26,57 +30,14 @@ const fmtCountdown = (ms: number) => {
   return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
 };
 
-/** Server state, kept fresh by long-polling; `skew` lines our clock up with the server's. */
-function useSlideGen() {
-  const [state, setState] = useState<State | null>(null);
-  const [skew, setSkew] = useState(0);
-  const accept = useCallback((s: State) => {
-    setState(s);
-    setSkew(s.now - Date.now());
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        accept(await api.getState());
-      } catch {
-        /* the loop below retries */
-      }
-      while (alive) {
-        try {
-          const s = await api.waitState();
-          if (alive) accept(s);
-        } catch {
-          await new Promise((r) => setTimeout(r, 3000));
-        }
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [accept]);
-
-  return { state, setState, accept, skew };
-}
-
-function useNow(skew: number, every = 250) {
-  const [now, setNow] = useState(() => Date.now() + skew);
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now() + skew), every);
-    return () => clearInterval(t);
-  }, [skew, every]);
-  return now;
-}
-
-export function Slides() {
-  const { state, setState, accept, skew } = useSlideGen();
+export function Playlist({ id }: { id: string | null }) {
+  const { state, setState, accept, skew } = useLiveState();
   const now = useNow(skew);
-  const [images, setImages] = useState<ImageMeta[]>([]);
+  const { items, itemOf } = useItems();
   const [selected, setSelected] = useState<string | null>(null);
   const [dropAt, setDropAt] = useState<number | null>(null);
   /** What's in hand, so the track can open a gap the right size for it. */
-  const [dragging, setDragging] = useState<{ kind: "image" | "slide"; id: string; minutes: number } | null>(null);
+  const [dragging, setDragging] = useState<{ kind: "source" | "slide"; id: string; minutes: number } | null>(null);
   const trackEl = useRef<HTMLDivElement>(null);
   const [resizing, setResizing] = useState<{ id: string; minutes: number } | null>(null);
   const clipEls = useRef(new Map<string, HTMLElement>());
@@ -86,23 +47,23 @@ export function Slides() {
   const fitted = useRef(false);
 
   useEffect(() => {
-    document.title = "SlideGen · Papershow";
-    const load = () => listImages().then(setImages, () => {});
-    load();
-    addEventListener("focus", load);
-    return () => removeEventListener("focus", load);
+    document.title = "Playlists · Papershow";
   }, []);
 
-  const byId = useMemo(() => new Map(images.map((i) => [i.id, i])), [images]);
-  const slides = state?.slides ?? [];
+  const playlists = state?.playlists ?? [];
+  const current = playlists.find((p) => p.id === id) ?? playlists[0];
+  const pid = current?.id;
+  const allSlides = state?.slides ?? [];
+  /** The open playlist's clips; the loop plays every enabled playlist in turn. */
+  const slides = allSlides.filter((s) => s.playlistId === pid);
+  const inShow = !!state?.show.some((e) => e.playlistId === pid);
   const minutesOf = (s: Slide) => (resizing?.id === s.id ? resizing.minutes : s.durationS / 60);
   const totalMin = slides.filter((s) => s.enabled).reduce((n, s) => n + minutesOf(s), 0);
 
   const showing = state?.showing ?? null;
   const pinned = state?.live.mode === "pin";
-  const liveImage = showing ? byId.get(showing.imageId) : undefined;
-  const next = state?.upcoming[0];
-  const nextSlide = next && slides.find((s) => s.id === next.slideId);
+  const liveItem = itemOf(showing?.source);
+  const next = state?.sequence[1];
 
   // Optimistic edit: show it now, then take whatever the server says.
   const edit = (local: (s: State) => State, remote: () => Promise<State>) => {
@@ -137,29 +98,35 @@ export function Slides() {
 
   const onDragOver = (e: DragEvent) => {
     const types = e.dataTransfer.types;
-    if (!types.includes(MIME_IMAGE) && !types.includes(MIME_SLIDE)) return;
+    if (!types.includes(MIME_SOURCE) && !types.includes(MIME_SLIDE)) return;
     e.preventDefault();
-    e.dataTransfer.dropEffect = types.includes(MIME_IMAGE) ? "copy" : "move";
+    e.dataTransfer.dropEffect = types.includes(MIME_SOURCE) ? "copy" : "move";
     setDropAt(indexAt(e.clientX));
   };
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
     const at = indexAt(e.clientX);
-    const imageId = e.dataTransfer.getData(MIME_IMAGE);
+    const source = parseKey(e.dataTransfer.getData(MIME_SOURCE));
     const slideId = e.dataTransfer.getData(MIME_SLIDE);
     endDrag();
-    if (imageId) {
-      api.addSlide(imageId, at).then((s) => {
+    if (source) {
+      api.addSlide(source, pid, at).then((s) => {
         accept(s);
-        setSelected(s.slides[at]?.id ?? null);
+        setSelected(s.slides.filter((x) => x.playlistId === pid)[at]?.id ?? null);
       });
     } else if (slideId) {
       const ids = slides.map((s) => s.id).filter((id) => id !== slideId);
       ids.splice(at, 0, slideId);
       if (ids.join() === slides.map((s) => s.id).join()) return;
       edit(
-        (s) => ({ ...s, slides: ids.map((id, i) => ({ ...s.slides.find((x) => x.id === id)!, position: i })) }),
+        (s) => ({
+          ...s,
+          slides: [
+            ...s.slides.filter((x) => x.playlistId !== pid),
+            ...ids.map((id, i) => ({ ...s.slides.find((x) => x.id === id)!, position: i })),
+          ],
+        }),
         () => api.reorderSlides(ids),
       );
     }
@@ -201,12 +168,19 @@ export function Slides() {
   const patch = (id: string, p: Partial<Slide>) =>
     edit((s) => ({ ...s, slides: s.slides.map((x) => (x.id === id ? { ...x, ...p } : x)) }), () => api.updateSlide(id, p));
 
+  const toast = useUndoToast();
+
+  /** Remove at once; the toast offers to put it back exactly as it was. */
   const remove = (id: string) => {
+    const slide = allSlides.find((x) => x.id === id);
+    if (!slide) return;
+    const index = slides.findIndex((x) => x.id === id);
     setSelected(null);
     edit((s) => ({ ...s, slides: s.slides.filter((x) => x.id !== id) }), () => api.removeSlide(id));
+    toast.show(`Removed ${itemOf(slide.source)?.name ?? "clip"}`, () => api.restoreSlide(slide, index).then(accept));
   };
 
-  const pin = (imageId: string) => api.setLive({ mode: "pin", imageId }).then(accept);
+  const pin = (source: Source) => api.setLive({ mode: "pin", source }).then(accept);
   const resume = () => api.setLive({ mode: "rotate" }).then(accept);
 
   useEffect(() => {
@@ -222,11 +196,11 @@ export function Slides() {
   // ── Playhead: inside the clip that's on air ─────────────────────────────
 
   let playheadX: number | null = null;
-  if (!pinned && showing?.slideId && showing.clip) {
+  if (!pinned && showing?.clipId && showing.clip) {
     let x = 0;
     for (const s of slides) {
       const w = minutesOf(s) * ppm;
-      if (s.id === showing.slideId) {
+      if (s.id === showing.clipId) {
         const { startedAt, endsAt } = showing.clip;
         const f = Math.min(1, Math.max(0, (now - startedAt) / (endsAt - startedAt)));
         playheadX = x + f * w;
@@ -243,6 +217,9 @@ export function Slides() {
     const total = slides.reduce((n, s) => n + s.durationS / 60, 0);
     if (total) setPpm([...ZOOMS].reverse().find((z) => z * total <= width) ?? ZOOMS[0]);
   }, [slides]);
+  useEffect(() => {
+    fitted.current = false;
+  }, [pid]);
   useEffect(() => {
     if (!fitted.current && slides.length) {
       fitted.current = true;
@@ -281,36 +258,45 @@ export function Slides() {
         <section className="onair">
           <div className="device small">
             <div className="panel">
-              {showing ? (
+              {showing && !showing.blank ? (
                 <img className="live-img" src={`/live.png?e=${encodeURIComponent(showing.etag)}`} alt="" />
+              ) : showing?.asleep ? (
+                <p className="panel-empty">Asleep. The panel keeps its last picture until {clock(showing.asleep)}.</p>
               ) : (
-                <p className="panel-empty">Nothing on /live. Drag an image onto the timeline, or show one now.</p>
+                <p className="panel-empty">Nothing on /live. Add this playlist to the show, or show something now.</p>
               )}
             </div>
             <span className="ribbon" aria-hidden />
           </div>
 
           <div className="status">
-            <span className="on-air" data-on={!!showing}>{showing ? "On air" : "Off air"}</span>
-            <h1>{liveImage?.name ?? (showing ? "…" : "Nothing showing")}</h1>
-            {pinned ? (
+            <span className="on-air" data-on={!!showing && !showing.asleep} data-asleep={!!showing?.asleep}>
+              {showing?.asleep ? "Asleep" : showing ? "On air" : "Off air"}
+            </span>
+            <h1>{showing?.asleep ? "Good night" : liveItem?.name ?? (showing ? "…" : "Nothing showing")}</h1>
+            {showing?.asleep ? (
+              <p>
+                Night until <span className="tabular">{clock(showing.asleep)}</span>. The playlist
+                {pinned ? " and the pinned item resume" : " resumes"} then.
+              </p>
+            ) : pinned ? (
               <p>
                 Pinned to /live until you resume the sequence.{" "}
                 <button className="link" onClick={resume}>Resume sequence</button>
               </p>
             ) : showing?.slideId ? (
               <p>
-                {nextSlide && next ? (
+                {next ? (
                   <>
-                    Next: <strong>{byId.get(nextSlide.imageId)?.name ?? "…"}</strong> in{" "}
+                    Next: <strong>{itemOf(next.source)?.name ?? "…"}</strong> in{" "}
                     <span className="tabular">{fmtCountdown(next.at - now)}</span>
                   </>
                 ) : (
-                  "The only image in the sequence right now."
+                  "The only item in the playlist right now."
                 )}
               </p>
             ) : (
-              <p>The sequence is empty or nothing is scheduled for now.</p>
+              <p>The playlist is empty or nothing is scheduled for now.</p>
             )}
           </div>
         </section>
@@ -318,9 +304,38 @@ export function Slides() {
         <section className="desk">
           <div className="timeline">
             <div className="timeline-head">
-              <h2>Sequence</h2>
+              {state && !current && (
+                <button
+                  className="ghost"
+                  onClick={() => api.createPlaylist().then((s) => (accept(s), navigate(`/playlist/${s.created}`)))}
+                >
+                  + New playlist
+                </button>
+              )}
+              {state && current && (
+                <PlaylistTabs
+                  playlists={playlists}
+                  current={current}
+                  onPick={(p) => navigate(`/playlist/${p.id}`)}
+                  onCreate={() =>
+                    api.createPlaylist().then((s) => {
+                      accept(s);
+                      navigate(`/playlist/${s.created}`);
+                    })
+                  }
+                  onRename={(p, name) => api.updatePlaylist(p.id, { name }).then(accept)}
+                  onDelete={(p) =>
+                    api.deletePlaylist(p.id).then((s) => {
+                      accept(s);
+                      navigate(s.playlists[0] ? `/playlist/${s.playlists[0].id}` : "/show");
+                    })
+                  }
+                />
+              )}
               <span className="muted">
-                {slides.length ? `Loops every ${fmtMinutes(totalMin)}` : "Drag images here to build a loop"}
+                {slides.length
+                  ? `${fmtMinutes(totalMin)} · ${inShow ? "in the show" : "not in the show"}`
+                  : "Drag drawings or apps here"}
               </span>
               <div className="zoom" role="group" aria-label="Zoom">
                 <button onClick={() => zoom(-1)} disabled={ppm === ZOOMS[0]} aria-label="Zoom out">−</button>
@@ -350,7 +365,7 @@ export function Slides() {
                 onClick={(e) => e.target === e.currentTarget && setSelected(null)}
               >
                 {slides.map((s) => {
-                  const img = byId.get(s.imageId);
+                  const img = itemOf(s.source);
                   const minutes = minutesOf(s);
                   const lifted = dragging?.kind === "slide" && dragging.id === s.id && dropAt !== null;
                   const ghostHere = dropAt !== null && !lifted && others.indexOf(s) === dropAt;
@@ -365,12 +380,12 @@ export function Slides() {
                       className="clip"
                       data-selected={s.id === selected}
                       data-disabled={!s.enabled}
-                      data-live={!pinned && showing?.slideId === s.id}
+                      data-live={!pinned && showing?.clipId === s.id}
                       data-lifted={lifted}
                       data-size={minutes * ppm < 44 ? "xs" : minutes * ppm < 96 ? "s" : undefined}
                       style={{
                         width: minutes * ppm,
-                        backgroundImage: img ? `url("${fileUrl(img)}")` : undefined,
+                        backgroundImage: img ? `url("${img.thumb}")` : undefined,
                       }}
                       draggable={!resizing}
                       onDragStart={(e) => {
@@ -380,13 +395,26 @@ export function Slides() {
                       }}
                       onDragEnd={endDrag}
                       onClick={() => setSelected(s.id)}
+                      aria-haspopup="menu"
                       title={img?.name}
                     >
                       <span className="clip-label">
-                        <span className="clip-name">{img?.name ?? "Missing image"}</span>
+                        <span className="clip-name">{img?.name ?? "Missing"}</span>
                         <span className="clip-dur">{fmtMinutes(minutes)}</span>
                       </span>
                       {(s.start || s.days.length < 7) && <span className="clip-flag" title="Has a schedule">◷</span>}
+                      <button
+                        className="clip-x"
+                        aria-label={`Remove ${img?.name ?? "clip"}`}
+                        title="Remove"
+                        draggable={false}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          remove(s.id);
+                        }}
+                      >
+                        ✕
+                      </button>
                       <span
                         className="clip-handle"
                         onPointerDown={(e) => startResize(e, s)}
@@ -412,54 +440,136 @@ export function Slides() {
             {sel ? (
               <Inspector
                 slide={sel}
-                image={byId.get(sel.imageId)}
+                item={itemOf(sel.source)}
                 minutes={minutesOf(sel)}
                 onDuration={(m) => setDuration(sel.id, m)}
                 onPatch={(p) => patch(sel.id, p)}
-                onShowNow={() => pin(sel.imageId)}
+                onShowNow={() => pin(sel.source)}
                 onRemove={() => remove(sel.id)}
               />
             ) : (
               <div className="bin">
-                <span className="bin-label">Images</span>
+                <span className="bin-label">Add</span>
                 <ul ref={binList} data-more-start={binEdges.start} data-more-end={binEdges.end}>
-                  {images.map((img) => (
-                    <li key={img.id}>
+                  {items.map((item) => (
+                    <li key={item.key}>
                       <div
                         className="bin-item"
                         draggable
                         onDragStart={(e) => {
-                          e.dataTransfer.setData(MIME_IMAGE, img.id);
+                          e.dataTransfer.setData(MIME_SOURCE, item.key);
                           e.dataTransfer.effectAllowed = "copy";
-                          setDragging({ kind: "image", id: img.id, minutes: NEW_CLIP_MIN });
+                          setDragging({ kind: "source", id: item.key, minutes: NEW_CLIP_MIN });
                         }}
                         onDragEnd={endDrag}
-                        data-live={showing?.imageId === img.id}
-                        title={`Drag “${img.name}” onto the timeline`}
+                        data-live={!!showing?.source && keyOf(showing.source) === item.key}
+                        data-kind={item.source.kind}
+                        title={`Drag “${item.name}” onto the timeline`}
                       >
-                        <img src={fileUrl(img)} alt="" draggable={false} />
-                        <span>{img.name}</span>
+                        <img src={item.thumb} alt="" draggable={false} />
+                        <span>{item.name}</span>
+                        <small>{item.label}</small>
                       </div>
-                      <button className="bin-live" onClick={() => pin(img.id)} title="Show this on /live now">
+                      <button className="bin-live" onClick={() => pin(item.source)} title="Show this on /live now">
                         Show now
                       </button>
                     </li>
                   ))}
-                  {!images.length && <li className="muted">No images yet. Make one in ImageGen.</li>}
+                  {!items.length && <li className="muted">Nothing yet. Draw something, or set up an app.</li>}
                 </ul>
               </div>
             )}
           </div>
         </section>
       </main>
+
+      {sel && !resizing && !dragging && (
+        <FloatingMenu anchor={clipEls.current.get(sel.id) ?? null} onClose={() => setSelected(null)}>
+          <button role="menuitem" onClick={() => pin(sel.source)}>Show now</button>
+          <button role="menuitem" className="danger" onClick={() => remove(sel.id)}>Remove</button>
+        </FloatingMenu>
+      )}
+      {toast.node}
     </div>
   );
 }
 
+type TabsProps = {
+  playlists: PlaylistT[];
+  current: PlaylistT;
+  onPick: (p: PlaylistT) => void;
+  onCreate: () => void;
+  onRename: (p: PlaylistT, name: string) => void;
+  onDelete: (p: PlaylistT) => void;
+};
+
+/** The playlists, in loop order. Double-click a name to rename it. */
+function PlaylistTabs({ playlists, current, onPick, onCreate, onRename, onDelete }: TabsProps) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  return (
+    <div className="pl-tabs">
+      <a className="pl-all" href="/show" onClick={(e) => (e.preventDefault(), navigate("/show"))} title="The show">
+        Show
+      </a>
+      <div className="pl-list" role="tablist" aria-label="Playlists">
+        {playlists.map((p) =>
+          editing === p.id ? (
+            <input
+              key={p.id}
+              className="pl-rename"
+              defaultValue={p.name}
+              autoFocus
+              onFocus={(e) => e.target.select()}
+              onBlur={(e) => {
+                setEditing(null);
+                if (e.target.value.trim() && e.target.value !== p.name) onRename(p, e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                if (e.key === "Escape") setEditing(null);
+              }}
+              aria-label="Playlist name"
+            />
+          ) : (
+            <button
+              key={p.id}
+              role="tab"
+              aria-selected={p.id === current.id}
+              onClick={() => onPick(p)}
+              onDoubleClick={() => setEditing(p.id)}
+              title="Double-click to rename"
+            >
+              {p.name}
+            </button>
+          ),
+        )}
+        <button className="pl-add" onClick={onCreate} aria-label="New playlist" title="New playlist">+</button>
+      </div>
+      <div className="pl-actions">
+        {confirm ? (
+          <>
+            <span className="muted">Delete {current.name}?</span>
+            <button className="danger" onClick={() => (setConfirm(false), onDelete(current))}>Delete</button>
+            <button onClick={() => setConfirm(false)}>Cancel</button>
+          </>
+        ) : (
+          <button className="danger" onClick={() => setConfirm(true)} title="Delete this playlist and its items">Delete</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const clock = (t: number) => {
+  const d = new Date(t);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
 /** Where the clip in hand will land if you let go: a glowing gap its own length. */
 function Ghost({ minutes, ppm }: { minutes: number; ppm: number }) {
   return (
-    <div className="ghost" style={{ width: minutes * ppm }} aria-hidden>
+    <div className="drop-ghost" style={{ width: minutes * ppm }} aria-hidden>
       {minutes * ppm >= 44 && <span>{fmtMinutes(minutes)}</span>}
     </div>
   );
@@ -467,7 +577,7 @@ function Ghost({ minutes, ppm }: { minutes: number; ppm: number }) {
 
 type InspectorProps = {
   slide: Slide;
-  image: ImageMeta | undefined;
+  item: Item | undefined;
   minutes: number;
   onDuration: (minutes: number) => void;
   onPatch: (p: Partial<Slide>) => void;
@@ -475,14 +585,14 @@ type InspectorProps = {
   onRemove: () => void;
 };
 
-function Inspector({ slide, image, minutes, onDuration, onPatch, onShowNow, onRemove }: InspectorProps) {
+function Inspector({ slide, item, minutes, onDuration, onPatch, onShowNow, onRemove }: InspectorProps) {
   const allDay = !slide.start || !slide.end;
   return (
     <div className="inspector">
-      <img src={image ? fileUrl(image) : undefined} alt="" />
+      <img src={item?.thumb} alt="" />
       <div className="field">
         <label>Clip</label>
-        <strong>{image?.name ?? "Missing image"}</strong>
+        <strong>{item?.name ?? "Missing"}</strong>
       </div>
 
       <div className="field">

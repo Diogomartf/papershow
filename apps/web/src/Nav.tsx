@@ -12,13 +12,25 @@ const go = (to: string) => (e: MouseEvent) => {
   navigate(to);
 };
 
-export function Nav({ current }: { current: "draw" | "show" }) {
+const SECTIONS = [
+  { id: "dashboard", href: "/", label: "Dashboard" },
+  { id: "show", href: "/show", label: "Show" },
+  { id: "apps", href: "/apps", label: "Apps" },
+  { id: "draw", href: "/draw", label: "Draw" },
+] as const;
+
+export type Section = (typeof SECTIONS)[number]["id"];
+
+export function Nav({ current }: { current: Section }) {
   return (
     <nav className="nav">
       <span className="mark" aria-hidden />
       <span className="wordmark">Papershow</span>
-      <a href="/" aria-current={current === "draw" ? "page" : undefined} onClick={go("/")}>ImageGen</a>
-      <a href="/slides" aria-current={current === "show" ? "page" : undefined} onClick={go("/slides")}>SlideGen</a>
+      {SECTIONS.map((s) => (
+        <a key={s.id} href={s.href} aria-current={current === s.id ? "page" : undefined} onClick={go(s.href)}>
+          {s.label}
+        </a>
+      ))}
     </nav>
   );
 }
