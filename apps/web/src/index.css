@@ -1084,6 +1084,90 @@ a.ghost { display: inline-block; }
 
 .bin-item small { color: var(--ink-3); font-size: 11px; font-weight: 500; margin-top: -2px; }
 
+/* ── Phones ────────────────────────────────────────
+   One column that scrolls; the panel goes full width; touch targets stay large. */
+
+@media (max-width: 720px) {
+  body { overflow: auto; }
+  .app { height: auto; min-height: 100dvh; overflow: visible; }
+
+  /* header: mark + sections (+ the switch) on one row; page controls wrap below */
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 14px; }
+  .bar-left { flex: 1 1 auto; flex-wrap: wrap; row-gap: 8px; }
+  .bar-right { flex: 0 0 auto; }
+  .bar > div:empty { display: none; }
+  .wordmark, .divider, .bar-right a.ghost[href="/live"], .primary kbd { display: none; }
+  .nav .mark { margin-right: 4px; }
+  .nav a { padding: 8px 8px; }
+  .lightswitch { margin-right: 0; }
+
+  /* the panel, full width wherever it appears */
+  .panel,
+  .device.small .panel,
+  .dash .device.small .panel,
+  .app-stage .device.small .panel { width: calc(100vw - 52px); min-width: 0; }
+
+  /* Draw: name and view switch get their own row */
+  .bar-left .name { order: 3; flex: 1 1 100%; width: auto; margin-left: -8px; }
+  .bar > .segmented { order: 4; }
+  .bar-right { margin-left: auto; }
+  .stage { padding-top: 12px; grid-template-rows: auto auto; align-content: start; }
+  /* Drawesome sizes its bar to its widest panel; scale it to the phone (zoom keeps taps aligned) */
+  .panel [class*="Draw_toolbar"] { zoom: .76; }
+  .shelf { height: 100px; }
+  .engraving { display: none; }
+
+  /* Dashboard */
+  .dash-main, .show-main { grid-template-rows: auto auto; }
+  .dash-top { flex-direction: column; align-items: stretch; gap: 16px; padding: 8px 16px 0; }
+  .dash-onair { justify-items: center; }
+  .dash-caption { justify-self: stretch; }
+  .dash-side { width: auto; padding-bottom: 16px; }
+
+  /* Playlist */
+  .onair { flex-direction: column; align-items: center; gap: 12px; padding: 8px 16px 0; }
+  .status { width: auto; align-self: stretch; padding-bottom: 16px; }
+  .desk { padding: 16px 10px; }
+  .timeline-head { flex-wrap: wrap; row-gap: 10px; padding: 14px 14px 4px; }
+  .pl-tabs { flex: 1 1 100%; flex-wrap: wrap; row-gap: 8px; }
+  .zoom { margin-left: auto; }
+  .track-scroll { padding: 0 14px 14px; }
+  .bin { padding: 12px 14px 16px; }
+  .bin-label { display: none; }
+  .inspector { gap: 16px; padding: 12px 14px 16px; }
+  .inspector > img { display: none; }
+  .inspector-actions { margin-left: 0; }
+  .clip-x { opacity: .9; transform: none; } /* no hover on touch */
+
+  /* Show */
+  .pl-overview { padding: 16px 14px 40px; }
+  .pl-head h1 { font-size: 24px; }
+  .pl-rows li { flex-wrap: wrap; gap: 10px; padding: 12px; }
+  .pl-main { flex: 1 1 calc(100% - 40px); }
+  .pl-row-actions { flex: 1 1 100%; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+  .single-thumb { width: 80px; }
+  .add-items button { width: calc((100vw - 52px) / 2); }
+
+  /* Apps: your apps and new kinds become rows you swipe; stage, then settings */
+  .apps-main { grid-template-columns: minmax(0, 1fr); }
+  .rail { overflow: visible; padding: 4px 14px 8px; }
+  .rail h2 { margin: 10px 2px 6px; }
+  .rail-list, .kinds { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+  .rail-list li, .kinds li { flex: none; }
+  .rail-list a { padding: 6px 10px 6px 6px; box-shadow: 0 0 0 1px var(--line); }
+  .rail-list img { width: 56px; }
+  .kinds button { padding: 8px 12px; box-shadow: 0 0 0 1px var(--line); white-space: nowrap; }
+  .kinds small { display: none; }
+  .app-stage { padding-top: 8px; }
+  .settings { border-left: 0; border-top: 1px solid var(--line); padding: 16px 16px 40px; overflow: visible; }
+
+  /* sheets and menus */
+  .sheet { top: auto; left: 10px; height: 75dvh; width: auto; transform: translateY(calc(100% + 20px)); }
+  .toast { top: auto; bottom: calc(18px + env(safe-area-inset-bottom)); max-width: calc(100vw - 32px); }
+  .toast[data-on="true"] { transform: translate(-50%, 0); }
+  .viewer footer { flex-wrap: wrap; justify-content: center; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0ms !important; }
 }

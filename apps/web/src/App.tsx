@@ -6,6 +6,7 @@ import { paintMono, renderScene } from "./render";
 import { getDraft, imageUrl, putDraft, putImage } from "./store";
 import { Gallery } from "./Gallery";
 import { Nav } from "./Nav";
+import { useNarrow } from "./media";
 import { LightSwitch } from "./LightSwitch";
 
 // Ink mode: greys dither, colours become greys.
@@ -38,6 +39,7 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryKey, setGalleryKey] = useState(0);
+  const narrow = useNarrow();
 
   useEffect(() => {
     document.title = "Draw · Papershow";
@@ -136,7 +138,7 @@ export default function App() {
           <button className="ghost" onClick={startNew}>New</button>
           <button className="ghost" onClick={() => setGalleryOpen(true)}>Gallery</button>
           <button className="primary" onClick={save} disabled={saving}>
-            {saving ? "Saving…" : "Save & open"}
+            {saving ? "Saving…" : narrow ? "Save" : "Save & open"}
             <kbd>⌘S</kbd>
           </button>
         </div>
@@ -152,10 +154,12 @@ export default function App() {
               initialStrokes={scene.strokes}
               onChange={onStrokes}
               swatches={view === "eink" ? SWATCHES_EINK : SWATCHES}
-              controls={{ custom: view !== "eink" }}
+              // A phone can't fit all seven pens: keep the essentials and the controls that matter.
+              tools={narrow ? ["pencil", "pen", "marker", "brush"] : undefined}
+              controls={narrow ? { custom: false, opacity: false, minimize: false, clear: false } : { custom: view !== "eink" }}
               look="studio"
               theme="light"
-              inset={-102}
+              inset={narrow ? -88 : -102}
             />
             <canvas ref={preview} className="eink" data-on={view === "eink"} aria-hidden />
           </div>

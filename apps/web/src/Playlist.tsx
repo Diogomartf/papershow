@@ -181,6 +181,25 @@ export function Playlist({ id }: { id: string | null }) {
   };
 
   const pin = (source: Source) => api.setLive({ mode: "pin", source }).then(accept);
+
+  /** Swap a clip with its neighbour: reordering without dragging. */
+  const move = (id: string, dir: -1 | 1) => {
+    const ids = slides.map((s) => s.id);
+    const i = ids.indexOf(id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    edit(
+      (s) => ({
+        ...s,
+        slides: [
+          ...s.slides.filter((x) => x.playlistId !== pid),
+          ...ids.map((x, k) => ({ ...s.slides.find((y) => y.id === x)!, position: k })),
+        ],
+      }),
+      () => api.reorderSlides(ids),
+    );
+  };
   const resume = () => api.setLive({ mode: "rotate" }).then(accept);
 
   useEffect(() => {
@@ -462,9 +481,20 @@ export function Playlist({ id }: { id: string | null }) {
                           setDragging({ kind: "source", id: item.key, minutes: NEW_CLIP_MIN });
                         }}
                         onDragEnd={endDrag}
+                        // Tap to add at the end: drag and drop doesn't exist on touch screens.
+                        onClick={() =>
+                          pid &&
+                          api.addSlide(item.source, pid).then((s) => {
+                            accept(s);
+                            toast.show(`Added ${item.name}`);
+                          })
+                        }
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLElement).click()}
                         data-live={!!showing?.source && keyOf(showing.source) === item.key}
                         data-kind={item.source.kind}
-                        title={`Drag “${item.name}” onto the timeline`}
+                        title={`Add “${item.name}”: tap to put it at the end, or drag it into place`}
                       >
                         <img src={item.thumb} alt="" draggable={false} />
                         <span>{item.name}</span>
@@ -486,6 +516,12 @@ export function Playlist({ id }: { id: string | null }) {
       {sel && !resizing && !dragging && (
         <FloatingMenu anchor={clipEls.current.get(sel.id) ?? null} onClose={() => setSelected(null)}>
           <button role="menuitem" onClick={() => pin(sel.source)}>Show now</button>
+          {slides.indexOf(sel) > 0 && (
+            <button role="menuitem" onClick={() => move(sel.id, -1)} aria-label="Play earlier">← Earlier</button>
+          )}
+          {slides.indexOf(sel) < slides.length - 1 && (
+            <button role="menuitem" onClick={() => move(sel.id, 1)} aria-label="Play later">Later →</button>
+          )}
           <button role="menuitem" className="danger" onClick={() => remove(sel.id)}>Remove</button>
         </FloatingMenu>
       )}
