@@ -1,0 +1,20 @@
+{
+  "name": "server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "NODE_ENV=production tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.4",
+    "@imagegen/scene": "workspace:*",
+    "hono": "4.13.13",
+    "tsx": "4.23.15"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "typescript": "~6.0.2"
+  }
+}

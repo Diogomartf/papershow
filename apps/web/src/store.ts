@@ -1,27 +1,45 @@
-// Saved images live in IndexedDB until SlideGen exists; then this becomes a fetch client.
+// Saved images live on the server (SlideGen), so every device sees the same set.
+// Only the draft being edited stays in this browser's IndexedDB.
 import type { Scene } from "@imagegen/scene";
 
-export type SavedImage = {
-  id: string;
-  scene: Scene;
-  /** What you drew, in colour. */
-  png: Blob;
-  /** What the panel will show: 800×480, dithered to 1 bit. */
-  mono: Blob;
-};
+export type ImageMeta = { id: string; name: string; updatedAt: number };
 
-const DB = "imagegen";
-const IMAGES = "images";
-const KV = "kv";
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, init);
+  if (!res.ok) throw new Error(`${init?.method ?? "GET"} ${path} → ${res.status}`);
+  return (res.status === 204 ? undefined : await res.json()) as T;
+}
+
+export const listImages = () => api<ImageMeta[]>("/api/images");
+export const getImage = (id: string) => api<ImageMeta & { scene: Scene }>(`/api/images/${id}`);
+export const deleteImage = (id: string) => api<void>(`/api/images/${id}`, { method: "DELETE" });
+
+export function putImage(scene: Scene, files: { png: Blob; mono: Blob; bin: Blob }) {
+  const form = new FormData();
+  form.set("scene", JSON.stringify(scene));
+  form.set("png", files.png);
+  form.set("mono", files.mono);
+  form.set("bin", files.bin);
+  return api<ImageMeta>(`/api/images/${scene.id}`, { method: "PUT", body: form });
+}
+
+/** The image file itself. `v` busts the cache when the image is re-saved. */
+export const fileUrl = (img: ImageMeta, kind: "mono" | "png" = "mono") =>
+  `/api/images/${img.id}/${kind}.png?v=${img.updatedAt}`;
+
+/** The page that shows a saved image on its own. */
+export const imageUrl = (id: string) => `/i/${id}`;
+
+// ── Draft ──────────────────────────────────────────────────────────────────
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function db(): Promise<IDBDatabase> {
   dbPromise ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB, 1);
+    const req = indexedDB.open("imagegen", 2);
     req.onupgradeneeded = () => {
-      req.result.createObjectStore(IMAGES, { keyPath: "id" });
-      req.result.createObjectStore(KV);
+      if (!req.result.objectStoreNames.contains("kv")) req.result.createObjectStore("kv");
+      if (req.result.objectStoreNames.contains("images")) req.result.deleteObjectStore("images");
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -29,26 +47,14 @@ function db(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
-async function run<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+async function kv<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest): Promise<T> {
   const d = await db();
   return new Promise((resolve, reject) => {
-    const req = fn(d.transaction(store, mode).objectStore(store));
+    const req = fn(d.transaction("kv", mode).objectStore("kv"));
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
 
-export const putImage = (img: SavedImage) => run(IMAGES, "readwrite", (s) => s.put(img));
-export const getImage = (id: string) => run<SavedImage | undefined>(IMAGES, "readonly", (s) => s.get(id));
-export const deleteImage = (id: string) => run(IMAGES, "readwrite", (s) => s.delete(id));
-
-export async function listImages(): Promise<SavedImage[]> {
-  const all = await run<SavedImage[]>(IMAGES, "readonly", (s) => s.getAll());
-  return all.sort((a, b) => b.scene.updatedAt - a.scene.updatedAt);
-}
-
-/** The scene being edited, so a refresh never loses work. */
-export const getDraft = () => run<Scene | undefined>(KV, "readonly", (s) => s.get("draft"));
-export const putDraft = (scene: Scene) => run(KV, "readwrite", (s) => s.put(scene, "draft"));
-
-export const imageUrl = (id: string) => `/i/${id}`;
+export const getDraft = () => kv<Scene | undefined>("readonly", (s) => s.get("draft"));
+export const putDraft = (scene: Scene) => kv<void>("readwrite", (s) => s.put(scene, "draft"));

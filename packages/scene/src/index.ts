@@ -84,7 +84,7 @@ export function dither(
  * Pack a dithered RGBA buffer into the panel's native format: 1 bit per pixel,
  * MSB first, 1 = white. 800×480 → 48,000 bytes, written straight to the EPD.
  */
-export function pack1bpp(rgba: Uint8ClampedArray, width: number, height: number): Uint8Array {
+export function pack1bpp(rgba: Uint8ClampedArray, width: number, height: number): Uint8Array<ArrayBuffer> {
   const stride = Math.ceil(width / 8);
   const out = new Uint8Array(stride * height);
   for (let y = 0; y < height; y++) {

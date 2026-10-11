@@ -1,5 +1,5 @@
 import { toSvg } from "drawesome";
-import { dither, type Scene } from "@imagegen/scene";
+import { dither, pack1bpp, type Scene } from "@imagegen/scene";
 
 async function sceneToCanvas(scene: Scene): Promise<HTMLCanvasElement> {
   const svg = toSvg(scene.strokes, scene.width, scene.height, scene.background);
@@ -31,10 +31,14 @@ const toBlob = (canvas: HTMLCanvasElement) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("PNG encode failed"))), "image/png"),
   );
 
-export async function renderScene(scene: Scene): Promise<{ png: Blob; mono: Blob }> {
+/** Everything SlideGen stores: colour PNG, 1-bit PNG, and the panel's raw 1bpp frame. */
+export async function renderScene(scene: Scene): Promise<{ png: Blob; mono: Blob; bin: Blob }> {
   const png = await toBlob(await sceneToCanvas(scene));
-  const mono = await toBlob(toMono(await sceneToCanvas(scene)));
-  return { png, mono };
+  const monoCanvas = toMono(await sceneToCanvas(scene));
+  const mono = await toBlob(monoCanvas);
+  const pixels = monoCanvas.getContext("2d")!.getImageData(0, 0, scene.width, scene.height).data;
+  const bin = new Blob([pack1bpp(pixels, scene.width, scene.height)], { type: "application/octet-stream" });
+  return { png, mono, bin };
 }
 
 /** For the live e-ink preview: paint the dithered scene onto an existing canvas. */

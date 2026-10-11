@@ -5,6 +5,7 @@ import { PANEL, type Scene } from "@imagegen/scene";
 import { paintMono, renderScene } from "./render";
 import { getDraft, imageUrl, putDraft, putImage } from "./store";
 import { Gallery } from "./Gallery";
+import { Nav } from "./Nav";
 
 // Ink mode: greys dither, colours become greys.
 const SWATCHES = ["#111111", "#555555", "#999999", "#d4d4d4", "#ffffff", "#e5484d", "#f5a524", "#3e63dd", "#30a46c"];
@@ -65,8 +66,7 @@ export default function App() {
     setSaving(true);
     try {
       const current = { ...scene, strokes: draw.current?.getStrokes() ?? scene.strokes, updatedAt: Date.now() };
-      const { png, mono } = await renderScene(current);
-      await putImage({ id: current.id, scene: current, png, mono });
+      await putImage(current, await renderScene(current));
       setScene(current);
       setGalleryKey((k) => k + 1);
       if (tab) tab.location.href = imageUrl(current.id);
@@ -109,7 +109,8 @@ export default function App() {
     <div className="app">
       <header className="bar">
         <div className="bar-left">
-          <span className="mark" aria-hidden />
+          <Nav current="draw" />
+          <span className="divider" aria-hidden />
           <input
             className="name"
             value={scene.name}
@@ -168,6 +169,7 @@ export default function App() {
         currentId={scene.id}
         onClose={() => setGalleryOpen(false)}
         onOpen={open}
+        onLive={(name) => flash(`${name} is now on /live`)}
       />
 
       <div className="toast" data-on={!!toast} role="status">{toast}</div>
