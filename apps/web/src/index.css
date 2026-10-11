@@ -14,6 +14,27 @@
   --paper: #e8e6df;      /* e-ink white is a warm grey */
   --frame: #f2f1ed;
   --accent: #1f1d19;
+  --on-accent: #fff;
+  --tint: rgba(120,95,50,.1);
+  --focus: #3e63dd;
+  --light: linear-gradient(158deg, transparent 38%, rgba(255,250,230,.55) 46%, rgba(255,250,230,.55) 58%, transparent 66%);
+  --frame-hi: #fbfaf7;
+  --drop: rgba(90,60,20,.35);
+  --drop-near: rgba(90,60,20,.18);
+  --oak-sheen: rgba(255,255,255,.4);
+  --cane-hole: #3a2a14;
+  --engrave: rgba(90,60,25,.45);
+  --engrave-hi: rgba(255,235,200,.4);
+  --scrim: rgba(70,50,20,.16);
+  --signal: #c8692e;
+  --track: #efe8d6;
+  --tick: #cfc3a6;
+  --fade: rgba(250,246,234,.95);
+  --grip: rgba(40,30,15,.18);
+  --toggle-off: #d8ccb0;
+  --knob: #fff;
+  /* e-ink is reflective: it only glows as much as the room does */
+  --dim: none;
   --radius: 10px;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
@@ -26,21 +47,90 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* ── Lights off ─────────────────────────────────────────
+   Same room at night: a lamp instead of the sun, walnut-dark oak, and an
+   e-ink panel that only reflects what little light there is. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --wall: #1a1612;
+  --wall-lit: #221c16;
+  --ink: #efe6d4;
+  --ink-2: #b9ac95;
+  --ink-3: #85796a;
+  --line: #3a3128;
+  --surface: #26201a;
+  --oak: #6a4e33;
+  --oak-light: #7e6042;
+  --oak-dark: #4a3624;
+  --cane: #5e4730;
+  --paper: #aaa69c;
+  --frame: #c4c0b7;
+  --frame-hi: #d2cec6;
+  --accent: #efe6d4;
+  --on-accent: #1a1612;
+  --tint: rgba(255,225,180,.08);
+  --focus: #8fb0ff;
+  --light: radial-gradient(ellipse 60% 55% at 50% 38%, rgba(255,184,104,.13), transparent 70%);
+  --drop: rgba(0,0,0,.55);
+  --drop-near: rgba(0,0,0,.35);
+  --oak-sheen: rgba(255,220,170,.12);
+  --cane-hole: #0f0b07;
+  --engrave: rgba(255,220,170,.28);
+  --engrave-hi: rgba(0,0,0,.3);
+  --scrim: rgba(0,0,0,.45);
+  --signal: #e8873f;
+  --track: #1f1a15;
+  --tick: #4a3f33;
+  --fade: rgba(38,32,26,.95);
+  --grip: rgba(255,225,180,.22);
+  --toggle-off: #4a3f33;
+  --knob: #efe6d4;
+  --dim: brightness(.78) sepia(.12);
+}
+
+/* Drawesome stays on its light theme (its dark theme switches the ink to white,
+   and the panel is still paper at night), so lend its bar the dark colours. */
+:root[data-theme="dark"] .sd {
+  --ink: #f4f3f1;
+  --ink-soft: #b4b4bb;
+  --ink-faint: rgba(255, 255, 255, 0.45);
+  --hairline: rgba(255, 255, 255, 0.16);
+  --bar-from: #3a332c;
+  --bar-to: #2a241f;
+  --bar-edge: rgba(0, 0, 0, 0.6);
+  --bar-sheen: rgba(255, 255, 255, 0.11);
+  --sunk: rgba(0, 0, 0, 0.34);
+  --raised: #e9e8e6;
+  --tool-1: #232327; --tool-2: #34343a; --tool-3: #47474f; --tool-4: #3a3a41; --tool-5: #2a2a2f; --tool-6: #1f1f23;
+  --metal-1: #34343a; --metal-2: #63636d; --metal-3: #83838e; --metal-4: #51515a; --metal-5: #2e2e34;
+  --smetal-1: #2b2b30; --smetal-2: #6e6e78; --smetal-3: #a9a9b4; --smetal-4: #85858f;
+  --smetal-5: #63636d; --smetal-6: #45454d; --smetal-7: #2e2e34; --smetal-8: #56565f;
+  --pfacet-1: #32323a; --pfacet-2: #3f3f48; --pfacet-3: #45454e; --pfacet-4: #414149; --pfacet-5: #37373f; --pfacet-6: #2b2b32;
+  --studio-1: #202024; --studio-2: #45454e; --studio-3: #5a5a65; --studio-4: #4e4e57;
+  --studio-5: #43434b; --studio-6: #33333a; --studio-7: #26262b; --studio-8: #35353c;
+  --tool-collar: #101013;
+  color-scheme: dark;
+}
+
+/* Flipping the switch: the whole room cross-fades. */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 420ms; animation-timing-function: ease-out; }
+
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; }
 body { overflow: hidden; }
 button, input, a { font: inherit; color: inherit; }
 button { cursor: pointer; }
-:focus-visible { outline: 2px solid #3e63dd; outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 /* ── Shell ─────────────────────────────────────────── */
 
 .app {
   height: 100%;
+  overflow: hidden;
   display: grid;
   grid-template-rows: auto 1fr;
   background:
-    linear-gradient(158deg, transparent 38%, rgba(255,250,230,.55) 46%, rgba(255,250,230,.55) 58%, transparent 66%),
+    var(--light),
     linear-gradient(180deg, var(--wall-lit), var(--wall));
 }
 
@@ -85,7 +175,7 @@ button.ghost, .sheet .actions button, .sheet .actions a {
   text-decoration: none;
   transition: background-color 120ms, color 120ms;
 }
-button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { background: rgba(120,95,50,.1); color: var(--ink); }
+button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { background: var(--tint); color: var(--ink); }
 
 .primary {
   display: inline-flex; align-items: center; gap: 10px;
@@ -93,7 +183,7 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
   padding: 8px 10px 8px 14px;
   border-radius: 9px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 540;
   text-decoration: none;
   box-shadow: 0 1px 0 rgba(255,255,255,.12) inset, 0 1px 2px rgba(0,0,0,.2);
@@ -105,15 +195,15 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
   font: 11px/1 var(--mono);
   padding: 4px 5px;
   border-radius: 5px;
-  background: rgba(255,255,255,.14);
-  color: rgba(255,255,255,.75);
+  background: color-mix(in srgb, var(--on-accent) 14%, transparent);
+  color: color-mix(in srgb, var(--on-accent) 75%, transparent);
 }
 
 .segmented {
   display: inline-flex;
   padding: 3px;
   border-radius: 10px;
-  background: rgba(120,95,50,.1);
+  background: var(--tint);
 }
 .segmented button {
   border: 0;
@@ -145,12 +235,12 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
   /* the bare panel: thin white frame, a little deeper at the bottom where the driver sits */
   padding: 10px 10px 18px;
   border-radius: 4px;
-  background: linear-gradient(180deg, #fbfaf7, var(--frame));
+  background: linear-gradient(180deg, var(--frame-hi), var(--frame));
   box-shadow:
     0 0 0 1px rgba(60,50,30,.12),
-    0 1px 0 #fff inset,
-    14px 18px 30px -12px rgba(90,60,20,.35),
-    2px 4px 8px -2px rgba(90,60,20,.18);
+    0 1px 0 var(--frame-hi) inset,
+    14px 18px 30px -12px var(--drop),
+    2px 4px 8px -2px var(--drop-near);
 }
 
 .panel {
@@ -182,6 +272,7 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
   transition: opacity 220ms var(--ease-out);
 }
 .eink[data-on="true"] { opacity: .92; }
+.live-img, .thumb img, .bin-item img, .inspector > img, .clip, .viewer img { filter: var(--dim); }
 /* while previewing, fade the live ink so the dithered version reads, but a stroke in progress still shows */
 .panel:has(.eink[data-on="true"]) [class*="Draw_surface"] path { opacity: .3; }
 
@@ -195,7 +286,7 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
     /* grain */
     repeating-linear-gradient(90deg, rgba(150,105,50,.07) 0 2px, transparent 2px 9px, rgba(150,105,50,.05) 9px 10px, transparent 10px 23px),
     linear-gradient(180deg, var(--oak), var(--oak-dark));
-  box-shadow: 0 -1px 0 rgba(255,255,255,.4) inset;
+  box-shadow: 0 -1px 0 var(--oak-sheen) inset;
 }
 /* cane panel below */
 .shelf::after {
@@ -207,8 +298,8 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
   border: 6px solid var(--oak-light);
   border-bottom: 0;
   background:
-    radial-gradient(circle, #3a2a14 2.4px, transparent 2.8px) 0 0 / 9px 9px,
-    radial-gradient(circle, #3a2a14 2.4px, transparent 2.8px) 4.5px 4.5px / 9px 9px,
+    radial-gradient(circle, var(--cane-hole) 2.4px, transparent 2.8px) 0 0 / 9px 9px,
+    radial-gradient(circle, var(--cane-hole) 2.4px, transparent 2.8px) 4.5px 4.5px / 9px 9px,
     var(--cane);
   opacity: .9;
 }
@@ -219,15 +310,15 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
   font: 10px/1 var(--mono);
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: rgba(90,60,25,.45);
-  text-shadow: 0 1px 0 rgba(255,235,200,.4);
+  color: var(--engrave);
+  text-shadow: 0 1px 0 var(--engrave-hi);
 }
 
 /* ── Gallery sheet ─────────────────────────────────── */
 
 .scrim {
   position: fixed; inset: 0;
-  background: rgba(70,50,20,.16);
+  background: var(--scrim);
   opacity: 0; pointer-events: none;
   transition: opacity 200ms var(--ease-out);
   z-index: 40;
@@ -279,7 +370,7 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
   position: fixed; left: 50%; top: 64px;
   padding: 8px 14px;
   border-radius: 999px;
-  background: var(--ink); color: #fff;
+  background: var(--ink); color: var(--wall);
   font-weight: 520;
   transform: translate(-50%, -8px);
   opacity: 0; pointer-events: none;
@@ -295,7 +386,7 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
   display: grid; grid-template-rows: 1fr auto; place-items: center;
   padding: 24px;
   background:
-    linear-gradient(158deg, transparent 38%, rgba(255,250,230,.55) 46%, rgba(255,250,230,.55) 58%, transparent 66%),
+    var(--light),
     linear-gradient(180deg, var(--wall-lit), var(--wall));
 }
 .viewer img {
@@ -308,11 +399,34 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
   border-radius: 4px;
   box-shadow:
     0 0 0 1px rgba(60,50,30,.12),
-    14px 18px 30px -12px rgba(90,60,20,.35),
-    2px 4px 8px -2px rgba(90,60,20,.18);
+    14px 18px 30px -12px var(--drop),
+    2px 4px 8px -2px var(--drop-near);
 }
 .viewer footer { display: flex; align-items: center; gap: 14px; padding-top: 18px; }
 .viewer .title { font-weight: 560; }
+
+/* ── Light switch ──────────────────────────────────── */
+
+.lightswitch {
+  position: relative;
+  width: 26px; height: 34px;
+  margin-right: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: linear-gradient(180deg, var(--frame-hi), var(--frame));
+  box-shadow: 0 0 0 1px var(--line), 0 2px 4px -1px var(--drop-near);
+}
+.lightswitch .rocker {
+  position: absolute; left: 7px; right: 7px; top: 6px; bottom: 6px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #fff 0 50%, #e6e1d6 50%);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.14), 0 1px 1px rgba(0,0,0,.12);
+  transition: background 160ms var(--ease-out);
+}
+/* off: the rocker tips the other way */
+.lightswitch[aria-checked="false"] .rocker { background: linear-gradient(180deg, #d6d0c4 0 50%, #fbfaf7 50%); }
+.lightswitch:active .rocker { transform: scale(.96); }
 
 /* ── Nav ───────────────────────────────────────────── */
 
@@ -327,7 +441,7 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
   transition: color 120ms, background-color 120ms;
 }
 .nav a:hover { color: var(--ink); }
-.nav a[aria-current="page"] { color: var(--ink); background: rgba(120,95,50,.1); }
+.nav a[aria-current="page"] { color: var(--ink); background: var(--tint); }
 .divider { width: 1px; height: 18px; margin: 0 6px; background: var(--line); }
 
 .muted { color: var(--ink-3); }
@@ -342,6 +456,7 @@ a.ghost { display: inline-block; }
   min-height: 0;
   display: grid;
   grid-template-rows: 1fr auto;
+  grid-template-columns: minmax(0, 1fr); /* the timeline scrolls; the page never does */
 }
 
 .onair {
@@ -369,7 +484,7 @@ a.ghost { display: inline-block; }
 @keyframes einkFlash {
   0% { filter: invert(1); }
   50% { filter: invert(0) brightness(1.4); }
-  100% { filter: none; }
+  100% { filter: var(--dim); }
 }
 .panel-empty {
   position: absolute; inset: 0;
@@ -389,7 +504,7 @@ a.ghost { display: inline-block; }
   color: var(--ink-3);
 }
 .on-air::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.on-air[data-on="true"] { color: #c8692e; }
+.on-air[data-on="true"] { color: var(--signal); }
 .on-air[data-on="true"]::before { animation: pulse 2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
 
@@ -405,14 +520,32 @@ a.ghost { display: inline-block; }
 .timeline {
   border-radius: 14px;
   background: var(--surface);
-  box-shadow: 0 0 0 1px rgba(90,60,20,.12), 0 12px 30px -12px rgba(90,60,20,.45);
+  box-shadow: 0 0 0 1px rgba(90,60,20,.12), 0 12px 30px -12px var(--drop);
   overflow: hidden;
 }
 .timeline-head { display: flex; align-items: baseline; gap: 12px; padding: 14px 18px 4px; }
 .timeline-head h2 { margin: 0; font-size: 14px; font-weight: 620; }
 .timeline-head .muted { font-size: 13px; }
+.zoom { margin-left: auto; display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--tint); }
+.zoom button { border: 0; background: transparent; min-width: 26px; height: 24px; padding: 0 8px; border-radius: 6px; color: var(--ink-2); font-weight: 560; font-size: 13px; }
+.zoom button:hover:not(:disabled) { background: var(--surface); color: var(--ink); }
+.zoom button:disabled { opacity: .35; cursor: default; }
 
 .track-scroll { overflow-x: auto; padding: 0 18px 14px; }
+
+/* No scrollbars: the wheel scrolls sideways, and the edges fade where there's more. */
+.track-scroll, .bin ul { scrollbar-width: none; overscroll-behavior-x: contain; }
+.track-scroll::-webkit-scrollbar, .bin ul::-webkit-scrollbar { display: none; }
+.track-scroll, .bin ul {
+  --fade-start: 0px;
+  --fade-end: 0px;
+  mask-image: linear-gradient(90deg, transparent, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent);
+  transition: --fade-start 200ms, --fade-end 200ms;
+}
+[data-more-start="true"] { --fade-start: 48px; }
+[data-more-end="true"] { --fade-end: 48px; }
+@property --fade-start { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --fade-end { syntax: "<length>"; inherits: false; initial-value: 0px; }
 
 .ruler { position: relative; height: 20px; }
 .ruler span {
@@ -422,7 +555,7 @@ a.ghost { display: inline-block; }
   font: 10px/1 var(--mono);
   color: var(--ink-3);
 }
-.ruler span[data-major="true"] { height: 9px; background: #cfc3a6; }
+.ruler span[data-major="true"] { height: 9px; background: var(--tick); }
 .ruler span[data-major="true"]:not(:empty)::after { content: none; }
 .ruler span { text-indent: 4px; white-space: nowrap; line-height: 0; }
 
@@ -431,7 +564,8 @@ a.ghost { display: inline-block; }
   display: flex;
   height: 84px;
   border-radius: 10px;
-  background: repeating-linear-gradient(90deg, transparent 0 95px, rgba(120,95,50,.08) 95px 96px), #efe8d6;
+  /* a faint line every quarter hour */
+  background: repeating-linear-gradient(90deg, transparent 0 calc(var(--grid) - 1px), var(--tint) calc(var(--grid) - 1px) var(--grid)), var(--track);
   box-shadow: 0 1px 2px rgba(90,60,20,.12) inset;
 }
 
@@ -445,20 +579,20 @@ a.ghost { display: inline-block; }
   background-size: auto 100%;
   background-repeat: repeat-x;
   background-blend-mode: multiply;
-  box-shadow: 0 0 0 1px rgba(40,30,15,.25) inset, 0 0 0 2px #efe8d6;
+  box-shadow: 0 0 0 1px rgba(40,30,15,.25) inset, 0 0 0 2px var(--track);
   cursor: grab;
   overflow: hidden;
   transition: width 120ms var(--ease-out), box-shadow 120ms;
 }
 .clip:active { cursor: grabbing; }
-.clip[data-selected="true"] { box-shadow: 0 0 0 2px var(--ink) inset, 0 0 0 2px #efe8d6; }
-.clip[data-live="true"]:not([data-selected="true"]) { box-shadow: 0 0 0 2px #c8692e inset, 0 0 0 2px #efe8d6; }
+.clip[data-selected="true"] { box-shadow: 0 0 0 2px var(--ink) inset, 0 0 0 2px var(--track); }
+.clip[data-live="true"]:not([data-selected="true"]) { box-shadow: 0 0 0 2px var(--signal) inset, 0 0 0 2px var(--track); }
 .clip[data-disabled="true"] { opacity: .45; filter: grayscale(1); }
 .clip[data-drop-before="true"]::before, .drop-end[data-on="true"] {
   content: "";
   position: absolute; left: -3px; top: -6px; bottom: -6px;
   width: 3px; border-radius: 2px;
-  background: #c8692e;
+  background: var(--signal);
   z-index: 3;
 }
 .drop-end { position: relative; width: 0; }
@@ -468,12 +602,14 @@ a.ghost { display: inline-block; }
   position: absolute; left: 0; right: 10px; bottom: 0;
   display: flex; justify-content: space-between; align-items: end; gap: 6px;
   padding: 14px 8px 6px;
-  background: linear-gradient(180deg, transparent, rgba(250,246,234,.95) 60%);
+  background: linear-gradient(180deg, transparent, var(--fade) 60%);
   font-size: 12px;
   pointer-events: none;
 }
 .clip-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .clip-dur { flex: none; font: 11px/1 var(--mono); color: var(--ink-2); }
+.clip[data-size="s"] .clip-name { display: none; }
+.clip[data-size="xs"] .clip-label, .clip[data-size="xs"] .clip-flag { display: none; }
 .clip-flag { position: absolute; top: 4px; left: 6px; font-size: 12px; color: var(--ink-2); }
 
 .clip-handle {
@@ -481,7 +617,7 @@ a.ghost { display: inline-block; }
   width: 10px;
   cursor: ew-resize;
   touch-action: none;
-  background: linear-gradient(90deg, transparent 3px, rgba(40,30,15,.18) 3px 4px, transparent 4px 6px, rgba(40,30,15,.18) 6px 7px, transparent 7px);
+  background: linear-gradient(90deg, transparent 3px, var(--grip) 3px 4px, transparent 4px 6px, var(--grip) 6px 7px, transparent 7px);
   background-size: 100% 22px;
   background-position: center;
   background-repeat: no-repeat;
@@ -491,7 +627,7 @@ a.ghost { display: inline-block; }
 .playhead {
   position: absolute; top: -26px; bottom: -4px; left: 0;
   width: 2px; margin-left: -1px;
-  background: #c8692e;
+  background: var(--signal);
   pointer-events: none;
   z-index: 4;
   transition: transform 250ms linear;
@@ -501,7 +637,7 @@ a.ghost { display: inline-block; }
   position: absolute; top: 0; left: -4px;
   width: 10px; height: 10px;
   border-radius: 2px 2px 50% 50%;
-  background: #c8692e;
+  background: var(--signal);
 }
 
 /* image bin */
@@ -519,19 +655,18 @@ a.ghost { display: inline-block; }
   width: 120px; aspect-ratio: 5 / 3;
   border-radius: 6px;
   background: var(--paper);
-  mix-blend-mode: multiply;
   box-shadow: 0 0 0 1px var(--line);
   transition: box-shadow 120ms, transform 160ms var(--ease-out);
 }
 .bin-item:hover img { box-shadow: 0 0 0 1px var(--ink-3); transform: translateY(-1px); }
-.bin-item[data-live="true"] img { box-shadow: 0 0 0 2px #c8692e; }
+.bin-item[data-live="true"] img { box-shadow: 0 0 0 2px var(--signal); }
 .bin-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bin-live {
   justify-self: start;
   border: 0; background: none; padding: 0;
   font-size: 12px; color: var(--ink-3);
 }
-.bin-live:hover { color: #c8692e; }
+.bin-live:hover { color: var(--signal); }
 
 /* inspector for the selected clip */
 .inspector {
@@ -542,7 +677,7 @@ a.ghost { display: inline-block; }
 .inspector > img { width: 80px; aspect-ratio: 5 / 3; border-radius: 5px; box-shadow: 0 0 0 1px var(--line); }
 .field { display: grid; gap: 6px; }
 .field label { font: 600 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
-.stepper { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: rgba(120,95,50,.1); }
+.stepper { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--tint); }
 .stepper span { min-width: 64px; text-align: center; font-weight: 560; }
 .stepper button, .days button, .hours button {
   border: 0; background: transparent;
@@ -552,7 +687,7 @@ a.ghost { display: inline-block; }
 }
 .stepper button:hover:not(:disabled) { background: var(--surface); color: var(--ink); }
 .stepper button:disabled { opacity: .35; cursor: default; }
-.days, .hours { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: rgba(120,95,50,.1); }
+.days, .hours { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--tint); }
 .days button[aria-pressed="true"], .hours button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
 .hours { gap: 6px; padding-right: 8px; }
 .hours input { border: 0; background: var(--surface); border-radius: 6px; padding: 4px 6px; font-variant-numeric: tabular-nums; }
@@ -560,13 +695,13 @@ a.ghost { display: inline-block; }
   position: relative;
   width: 38px; height: 22px; padding: 0;
   border: 0; border-radius: 999px;
-  background: #d8ccb0;
+  background: var(--toggle-off);
   transition: background-color 160ms;
 }
 .toggle span {
   position: absolute; top: 2px; left: 2px;
   width: 18px; height: 18px; border-radius: 50%;
-  background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2);
+  background: var(--knob); box-shadow: 0 1px 2px rgba(0,0,0,.2);
   transition: transform 180ms var(--ease-out);
 }
 .toggle[aria-checked="true"] { background: var(--ink); }

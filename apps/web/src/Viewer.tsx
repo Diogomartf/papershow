@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { fileUrl, getImage, type ImageMeta } from "./store";
+import { useLights } from "./theme";
 
 /** /i/:id — the saved image on its own, ready to look at, drag out, or download. */
 export function Viewer({ id }: { id: string }) {
+  useLights();
   const [image, setImage] = useState<ImageMeta | null | undefined>(undefined);
   const [mode, setMode] = useState<"mono" | "png">(
     new URLSearchParams(location.search).get("v") === "ink" ? "png" : "mono",

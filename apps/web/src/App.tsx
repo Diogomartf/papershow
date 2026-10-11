@@ -6,6 +6,7 @@ import { paintMono, renderScene } from "./render";
 import { getDraft, imageUrl, putDraft, putImage } from "./store";
 import { Gallery } from "./Gallery";
 import { Nav } from "./Nav";
+import { LightSwitch } from "./LightSwitch";
 
 // Ink mode: greys dither, colours become greys.
 const SWATCHES = ["#111111", "#555555", "#999999", "#d4d4d4", "#ffffff", "#e5484d", "#f5a524", "#3e63dd", "#30a46c"];
@@ -130,6 +131,7 @@ export default function App() {
         </div>
 
         <div className="bar-right">
+          <LightSwitch />
           <button className="ghost" onClick={startNew}>New</button>
           <button className="ghost" onClick={() => setGalleryOpen(true)}>Gallery</button>
           <button className="primary" onClick={save} disabled={saving}>

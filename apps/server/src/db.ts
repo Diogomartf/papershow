@@ -103,13 +103,21 @@ export function listSlides(): Slide[] {
   return (db.prepare("select * from slides order by position").all() as SlideRow[]).map(toSlide);
 }
 
+/** New clips run a quarter of an hour; drag the edge to change it. */
+const DEFAULT_CLIP_S = 15 * 60;
+
 /** Add a clip at `at` in the sequence (end by default), shifting the rest along. */
 export function addSlide(imageId: string, at?: number): Slide {
   const id = crypto.randomUUID().slice(0, 8);
   const ids = listSlides().map((s) => s.id);
   ids.splice(at ?? ids.length, 0, id);
   db.exec("begin");
-  db.prepare("insert into slides (id, image_id, position) values (?, ?, ?)").run(id, imageId, ids.length);
+  db.prepare("insert into slides (id, image_id, position, duration_s) values (?, ?, ?, ?)").run(
+    id,
+    imageId,
+    ids.length,
+    DEFAULT_CLIP_S,
+  );
   reorderSlides(ids, false);
   db.exec("commit");
   return listSlides().find((s) => s.id === id)!;

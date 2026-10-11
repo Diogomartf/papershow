@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent } from "react";
 import { Nav } from "./Nav";
+import { LightSwitch } from "./LightSwitch";
+import { useSideScroll } from "./scroll";
 import { fileUrl, listImages, type ImageMeta } from "./store";
 import * as api from "./slides";
 import type { Slide, State } from "./slides";
 
-const PX_PER_MIN = 96;
+/** Timeline zoom, in pixels per minute. */
+const ZOOMS = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96];
+const DEFAULT_ZOOM = 8;
+const pick = <T,>(steps: T[], ok: (t: T) => boolean) => steps.find(ok) ?? steps[steps.length - 1];
 const MIME_IMAGE = "application/x-imagegen-image";
 const MIME_SLIDE = "application/x-imagegen-slide";
 const DAYS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -70,6 +75,10 @@ export function Slides() {
   const [dropAt, setDropAt] = useState<number | null>(null);
   const [resizing, setResizing] = useState<{ id: string; minutes: number } | null>(null);
   const clipEls = useRef(new Map<string, HTMLElement>());
+  const scroller = useRef<HTMLDivElement>(null);
+  const binList = useRef<HTMLUListElement>(null);
+  const [ppm, setPpm] = useState(DEFAULT_ZOOM);
+  const fitted = useRef(false);
 
   useEffect(() => {
     document.title = "SlideGen";
@@ -154,11 +163,11 @@ export function Slides() {
     setResizing({ id: slide.id, minutes: startMin });
 
     const move = (ev: globalThis.PointerEvent) =>
-      setResizing({ id: slide.id, minutes: Math.max(1, Math.round(startMin + (ev.clientX - startX) / PX_PER_MIN)) });
+      setResizing({ id: slide.id, minutes: Math.max(1, Math.round(startMin + (ev.clientX - startX) / ppm)) });
     const up = (ev: globalThis.PointerEvent) => {
       handle.removeEventListener("pointermove", move);
       handle.removeEventListener("pointerup", up);
-      const minutes = Math.max(1, Math.round(startMin + (ev.clientX - startX) / PX_PER_MIN));
+      const minutes = Math.max(1, Math.round(startMin + (ev.clientX - startX) / ppm));
       setResizing(null);
       if (minutes !== startMin) setDuration(slide.id, minutes);
     };
@@ -201,7 +210,7 @@ export function Slides() {
   if (!pinned && showing?.slideId && showing.clip) {
     let x = 0;
     for (const s of slides) {
-      const w = minutesOf(s) * PX_PER_MIN;
+      const w = minutesOf(s) * ppm;
       if (s.id === showing.slideId) {
         const { startedAt, endsAt } = showing.clip;
         const f = Math.min(1, Math.max(0, (now - startedAt) / (endsAt - startedAt)));
@@ -213,7 +222,32 @@ export function Slides() {
   }
 
   const sel = slides.find((s) => s.id === selected);
-  const rulerMinutes = Math.max(Math.ceil(totalMin) + 4, 12);
+  // Zoom: largest step where the whole loop fits; on first load, start there.
+  const fit = useCallback(() => {
+    const width = (scroller.current?.clientWidth ?? 1000) - 36 - 80;
+    const total = slides.reduce((n, s) => n + s.durationS / 60, 0);
+    if (total) setPpm([...ZOOMS].reverse().find((z) => z * total <= width) ?? ZOOMS[0]);
+  }, [slides]);
+  useEffect(() => {
+    if (!fitted.current && slides.length) {
+      fitted.current = true;
+      fit();
+    }
+  }, [slides, fit]);
+  const zoom = useCallback(
+    (dir: 1 | -1) => setPpm((z) => ZOOMS[Math.min(ZOOMS.length - 1, Math.max(0, ZOOMS.indexOf(z) + dir))]),
+    [],
+  );
+  const trackEdges = useSideScroll(scroller, zoom);
+  const binEdges = useSideScroll(binList);
+
+  // Ruler: ticks at least 8px apart, labels at least 64px apart, on friendly minute steps.
+  const allMin = slides.reduce((n, s) => n + minutesOf(s), 0);
+  const visibleMin = Math.floor(((scroller.current?.clientWidth ?? 1200) - 36) / ppm);
+  const rulerMinutes = Math.max(Math.ceil(allMin), visibleMin);
+  const minor = pick([1, 5, 15, 60], (m) => m * ppm >= 8);
+  const major = pick([5, 15, 30, 60, 120, 240], (m) => m * ppm >= 64);
+  const fmtTick = (m: number) => (m === 0 ? "0" : m % 60 === 0 ? `${m / 60}h` : m > 60 ? `${Math.floor(m / 60)}h${m % 60}` : `${m}m`);
 
   return (
     <div className="app show">
@@ -223,6 +257,7 @@ export function Slides() {
         </div>
         <div />
         <div className="bar-right">
+          <LightSwitch />
           <a className="ghost" href="/live" target="_blank" rel="noreferrer">Open /live ↗</a>
         </div>
       </header>
@@ -272,19 +307,27 @@ export function Slides() {
               <span className="muted">
                 {slides.length ? `Loops every ${fmtMinutes(totalMin)}` : "Drag images here to build a loop"}
               </span>
+              <div className="zoom" role="group" aria-label="Zoom">
+                <button onClick={() => zoom(-1)} disabled={ppm === ZOOMS[0]} aria-label="Zoom out">−</button>
+                <button onClick={fit} disabled={!slides.length}>Fit</button>
+                <button onClick={() => zoom(1)} disabled={ppm === ZOOMS[ZOOMS.length - 1]} aria-label="Zoom in">+</button>
+              </div>
             </div>
 
-            <div className="track-scroll">
-              <div className="ruler" style={{ width: rulerMinutes * PX_PER_MIN }}>
-                {Array.from({ length: rulerMinutes + 1 }, (_, m) => (
-                  <span key={m} style={{ left: m * PX_PER_MIN }} data-major={m % 5 === 0}>
-                    {m % 5 === 0 ? `${m}m` : ""}
-                  </span>
-                ))}
+            <div className="track-scroll" ref={scroller} data-more-start={trackEdges.start} data-more-end={trackEdges.end}>
+              <div className="ruler" style={{ width: rulerMinutes * ppm }}>
+                {Array.from({ length: Math.floor(rulerMinutes / minor) + 1 }, (_, i) => {
+                  const m = i * minor;
+                  return (
+                    <span key={m} style={{ left: m * ppm }} data-major={m % major === 0}>
+                      {m % major === 0 ? fmtTick(m) : ""}
+                    </span>
+                  );
+                })}
               </div>
               <div
                 className="track"
-                style={{ minWidth: rulerMinutes * PX_PER_MIN }}
+                style={{ minWidth: rulerMinutes * ppm, ["--grid" as string]: `${15 * ppm}px` }}
                 onDragOver={onDragOver}
                 onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setDropAt(null)}
                 onDrop={onDrop}
@@ -305,8 +348,9 @@ export function Slides() {
                       data-disabled={!s.enabled}
                       data-live={!pinned && showing?.slideId === s.id}
                       data-drop-before={dropAt === i}
+                      data-size={minutes * ppm < 44 ? "xs" : minutes * ppm < 96 ? "s" : undefined}
                       style={{
-                        width: minutes * PX_PER_MIN,
+                        width: minutes * ppm,
                         backgroundImage: img ? `url("${fileUrl(img)}")` : undefined,
                       }}
                       draggable={!resizing}
@@ -357,7 +401,7 @@ export function Slides() {
             ) : (
               <div className="bin">
                 <span className="bin-label">Images</span>
-                <ul>
+                <ul ref={binList} data-more-start={binEdges.start} data-more-end={binEdges.end}>
                   {images.map((img) => (
                     <li key={img.id}>
                       <div
