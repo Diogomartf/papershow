@@ -17,6 +17,8 @@ export type AppDef<C extends Record<string, unknown>, D> = {
   fields: Field[];
   /** The frame can change at most this often; renders are cached per period, aligned to the clock. */
   periodMs: number;
+  /** How long it stays on when added, if not the usual 15 minutes. A clock only needs a minute. */
+  clipS?: number;
   /** True while `data` returns made-up numbers instead of calling a real source. */
   mock: boolean;
   data(config: C, now: Date): D | Promise<D>;

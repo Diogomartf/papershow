@@ -11,6 +11,7 @@ export default defineApp({
     { key: "showDate", label: "Show date", type: "toggle" },
   ],
   periodMs: 60_000,
+  clipS: 60,
   mock: false,
   data: () => null,
   view: ({ config, now }) => {

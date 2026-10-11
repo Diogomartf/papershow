@@ -9,6 +9,8 @@ export default defineConfig({
   server: {
     port: 5193,
     strictPort: true,
+    // Reachable from phones (and the Pi) on the home network.
+    host: true,
     proxy: { "/api": server, "/live": server },
   },
 });

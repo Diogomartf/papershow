@@ -33,6 +33,7 @@ export default defineApp({
   defaults: { timeZone: "Europe/Lisbon" },
   fields: [{ key: "timeZone", label: "Time zone", type: "text", placeholder: "Europe/Lisbon", hint: "Any IANA zone" }],
   periodMs: 60_000,
+  clipS: 60,
   mock: true,
   data: (config, now) => {
     const t = clockParts(now, config.timeZone);

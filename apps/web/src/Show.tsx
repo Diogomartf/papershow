@@ -7,6 +7,8 @@ import type { ShowEntry } from "./slides";
 import { useItems, type Item } from "./sources";
 import { useUndoToast } from "./Undo";
 
+const every = (m: number) => (m === 60 ? "Hourly" : m % 60 ? `${m} min` : `${m / 60} h`);
+const repeatLine = (m: number) => (m === 60 ? "every hour" : m % 60 ? `every ${m} min` : `every ${m / 60} hours`);
 const fmt = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`);
 
 /** /show — what runs: playlists, images and apps, top to bottom, then again. */
@@ -23,7 +25,9 @@ export function Show() {
   const playlists = state?.playlists ?? [];
   const clipsOf = (playlistId: string) => (state?.slides ?? []).filter((s) => s.playlistId === playlistId);
   const minutesOf = (e: ShowEntry) =>
-    e.playlistId
+    e.everyM
+      ? 0
+      : e.playlistId
       ? clipsOf(e.playlistId).filter((s) => s.enabled).reduce((n, s) => n + s.durationS / 60, 0)
       : e.durationS / 60;
   const loopMin = show.filter((e) => e.enabled).reduce((n, e) => n + minutesOf(e), 0);
@@ -69,7 +73,8 @@ export function Show() {
           <div>
             <h1>Show</h1>
             <p className="muted">
-              Runs top to bottom, then starts over{loopMin ? ` · one time around takes ${fmt(loopMin)}` : ""}.
+              Runs top to bottom, then starts over{loopMin ? ` · one time around takes ${fmt(loopMin)}` : ""}. Set a drawing or app
+              to repeat on the clock, like a clock every hour, and it cuts in between turns.
             </p>
           </div>
         </div>
@@ -110,12 +115,37 @@ export function Show() {
                         {nameOf(e)}
                         {onAir === e.id && <span className="on-air" data-on="true">On air</span>}
                       </span>
-                      <span className="muted">{single?.label ?? "Item"}</span>
+                      <span className="muted">
+                        {single?.label ?? "Item"}
+                        {e.everyM ? ` · cuts in ${repeatLine(e.everyM)}` : ""}
+                      </span>
                     </span>
                   </div>
                 )}
 
                 <div className="pl-row-actions">
+                  {!e.playlistId && (
+                    <div className="segmented repeat" role="radiogroup" aria-label={`When ${nameOf(e)} plays`}>
+                      <button role="radio" aria-checked={!e.everyM} onClick={() => api.updateShowEntry(e.id, { everyM: null }).then(accept)} title="Takes its turn in the loop">
+                        In loop
+                      </button>
+                      {api.REPEAT_EVERY.map((m) => (
+                        <button
+                          key={m}
+                          role="radio"
+                          aria-checked={e.everyM === m}
+                          title={`Interrupts the loop ${repeatLine(m)}`}
+                          onClick={() =>
+                            api
+                              .updateShowEntry(e.id, { everyM: m, ...(e.durationS >= m * 60 ? { durationS: 60 } : {}) })
+                              .then(accept)
+                          }
+                        >
+                          {every(m)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {!e.playlistId && (
                     <div className="stepper" aria-label="Duration">
                       <button
@@ -126,7 +156,11 @@ export function Show() {
                         −
                       </button>
                       <span className="tabular">{fmt(e.durationS / 60)}</span>
-                      <button onClick={() => api.updateShowEntry(e.id, { durationS: e.durationS + 60 }).then(accept)} aria-label="One minute more">
+                      <button
+                        onClick={() => api.updateShowEntry(e.id, { durationS: e.durationS + 60 }).then(accept)}
+                        disabled={!!e.everyM && e.durationS >= (e.everyM - 1) * 60}
+                        aria-label="One minute more"
+                      >
                         +
                       </button>
                     </div>

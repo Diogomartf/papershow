@@ -27,7 +27,12 @@ export type ShowEntry = {
   source: Source | null;
   durationS: number;
   enabled: boolean;
+  /** Minutes: a single item interrupts the loop on the clock this often (60 = on the hour). Null = a turn in the loop. */
+  everyM: number | null;
 };
+
+/** How often a single item can repeat; each divides the day, so "every hour" lands on the hour. */
+export const REPEAT_EVERY = [15, 30, 60, 120] as const;
 
 /** One clip's turn on air, in the loop ahead. */
 export type Turn = {
@@ -119,7 +124,7 @@ export async function restoreSlide(slide: Slide, index: number): Promise<State> 
 }
 
 export const addToShow = (what: { playlistId: string } | { source: Source }, at?: number) => call("/api/show", "POST", { ...what, at });
-export const updateShowEntry = (id: string, patch: Partial<Pick<ShowEntry, "durationS" | "enabled">>) =>
+export const updateShowEntry = (id: string, patch: Partial<Pick<ShowEntry, "durationS" | "enabled" | "everyM">>) =>
   call(`/api/show/${id}`, "PATCH", patch);
 export const reorderShow = (ids: string[]) => call("/api/show/order", "PUT", { ids });
 export const removeFromShow = (id: string) => call(`/api/show/${id}`, "DELETE");
@@ -128,5 +133,5 @@ export const removeFromShow = (id: string) => call(`/api/show/${id}`, "DELETE");
 export async function restoreShowEntry(entry: ShowEntry, index: number): Promise<State> {
   const st = await addToShow(entry.playlistId ? { playlistId: entry.playlistId } : { source: entry.source! }, index);
   const back = st.show[index];
-  return back ? updateShowEntry(back.id, { durationS: entry.durationS, enabled: entry.enabled }) : st;
+  return back ? updateShowEntry(back.id, { durationS: entry.durationS, enabled: entry.enabled, everyM: entry.everyM }) : st;
 }

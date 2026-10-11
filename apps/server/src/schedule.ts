@@ -77,11 +77,42 @@ export function sleepUntil(sleep: Sleep, now = Date.now()): number | null {
   return wake.getTime();
 }
 
+// ── Repeats ────────────────────────────────────────────────────────────────
+
+/** A single image or app that interrupts the loop on the clock: every `everyM` minutes, for `durationS`. */
+export type Repeat = { id: string; source: Source; durationS: number; everyM: number };
+
+/** Choices that divide the day evenly, so "every hour" lands on the hour. */
+export const REPEAT_EVERY = [15, 30, 60, 120, 180];
+
+/** When the latest slot began, counted from local midnight. */
+function slotStart(r: Repeat, now: number) {
+  const midnight = new Date(now).setHours(0, 0, 0, 0);
+  const every = r.everyM * 60_000;
+  return midnight + Math.floor((now - midnight) / every) * every;
+}
+
+/** At most a minute short of the interval, so the loop always gets a turn. */
+const repeatMs = (r: Repeat) => Math.min(r.durationS * 1000, (r.everyM - 1) * 60_000);
+
+/** The repeat on air at `now`, if any; the first in show order wins a tie. */
+function repeatAt(repeats: Repeat[], now: number) {
+  for (const r of repeats) {
+    const startedAt = slotStart(r, now);
+    if (now < startedAt + repeatMs(r)) return { r, clip: { startedAt, endsAt: startedAt + repeatMs(r) } };
+  }
+  return null;
+}
+
 /** Seconds until the next minute boundary, when a time window could open or close. */
 const toNextMinute = (now: number) => 60_000 - (now % 60_000);
 
-export function showing(live: Live, slides: Slide[], now = Date.now()): Showing | null {
+export function showing(live: Live, slides: Slide[], now = Date.now(), repeats: Repeat[] = []): Showing | null {
   if (live.mode === "pin") return { source: live.source, slideId: null, endsAt: null, clip: null };
+
+  // A repeat takes over for its slot; the loop keeps time underneath and resumes where the clock says.
+  const rep = repeatAt(repeats, now);
+  if (rep) return { source: rep.r.source, slideId: rep.r.id, endsAt: rep.clip.endsAt, clip: rep.clip };
 
   const at = new Date(now);
   // `slides` arrive in play order (playlist by playlist), so keep that order.
@@ -99,6 +130,14 @@ export function showing(live: Live, slides: Slide[], now = Date.now()): Showing 
       // A single clip never changes on its own.
       let endsAt: number | null = eligible.length === 1 ? null : clip.endsAt;
       if (windowed) endsAt = Math.min(endsAt ?? Infinity, now + toNextMinute(now));
+      if (repeats.length) {
+        // On air between the last repeat and the next one.
+        const lastEnd = Math.max(...repeats.map((r) => slotStart(r, now) + repeatMs(r)));
+        const next = Math.min(...repeats.map((r) => slotStart(r, now) + r.everyM * 60_000));
+        clip.startedAt = Math.max(clip.startedAt, lastEnd);
+        clip.endsAt = Math.min(clip.endsAt, next);
+        endsAt = Math.min(endsAt ?? Infinity, next);
+      }
       return { source: slide.source, slideId: slide.id, endsAt, clip };
     }
     t -= ms;
@@ -107,13 +146,13 @@ export function showing(live: Live, slides: Slide[], now = Date.now()): Showing 
 }
 
 /** The next few clip changes, for the admin's "up next". */
-export function upcoming(slides: Slide[], now = Date.now(), count = 3): { slideId: string; at: number }[] {
+export function upcoming(slides: Slide[], now = Date.now(), count = 3, repeats: Repeat[] = []): { slideId: string; at: number }[] {
   const out: { slideId: string; at: number }[] = [];
-  let current = showing({ mode: "rotate" }, slides, now);
+  let current = showing({ mode: "rotate" }, slides, now, repeats);
   // Step through look-again points; minute ticks inside one clip are skipped.
   for (let guard = 0; current?.endsAt && out.length < count && guard < 500; guard++) {
     const at = current.endsAt;
-    const next = showing({ mode: "rotate" }, slides, at);
+    const next = showing({ mode: "rotate" }, slides, at, repeats);
     if (next?.slideId && next.slideId !== current.slideId) out.push({ slideId: next.slideId, at });
     current = next;
   }
@@ -134,14 +173,19 @@ export type Turn = {
 
 /**
  * The loop from now: the clip on air, then every change after it until the loop
- * comes back around (or `max` turns). Time windows are respected along the way.
+ * comes back around (or `max` turns). Time windows and repeats are respected along the way.
  */
-export function sequence(slides: Slide[], now = Date.now(), max = 60): Turn[] {
+export function sequence(slides: Slide[], now = Date.now(), max = 60, repeats: Repeat[] = []): Turn[] {
   const byId = new Map(slides.map((s) => [s.id, s]));
+  const repeatById = new Map(repeats.map((r) => [r.id, r]));
   const turn = (t: number): Turn | null => {
-    const s = showing({ mode: "rotate" }, slides, t);
-    const slide = s?.slideId ? byId.get(s.slideId) : undefined;
-    if (!s?.clip || !slide) return null;
+    const s = showing({ mode: "rotate" }, slides, t, repeats);
+    if (!s?.clip || !s.slideId) return null;
+    const rep = repeatById.get(s.slideId);
+    if (rep)
+      return { key: rep.id, entryId: rep.id, clipId: null, playlistId: null, source: rep.source, at: s.clip.startedAt, endsAt: s.clip.endsAt };
+    const slide = byId.get(s.slideId);
+    if (!slide) return null;
     return {
       key: slide.id,
       entryId: slide.entryId ?? null,
@@ -152,12 +196,33 @@ export function sequence(slides: Slide[], now = Date.now(), max = 60): Turn[] {
       endsAt: s.clip.endsAt,
     };
   };
-  const first = turn(now);
+  const nextRepeat = (t: number) => Math.min(...repeats.map((r) => slotStart(r, t) + r.everyM * 60_000));
+  // Only repeats and nothing on air yet: start from the next one.
+  const first = turn(now) ?? (repeats.length ? turn(nextRepeat(now)) : null);
   if (!first) return [];
   const out = [first];
-  for (let t = first.endsAt; out.length < max; ) {
+  if (!repeats.length) {
+    for (let t = first.endsAt; out.length < max; ) {
+      const next = turn(t);
+      if (!next || (next.key === first.key && out.length > 1)) break;
+      out.push(next);
+      t = next.endsAt;
+    }
+    return out;
+  }
+  // With repeats the same clip can come back after an interruption, so look ahead by time instead:
+  // one time around the loop, or until every repeat has come up at least once.
+  const at = new Date(now);
+  const cycle = slides.filter((s) => isActive(s, at)).reduce((sum, s) => sum + s.durationS * 1000, 0);
+  const horizon = first.at + Math.max(cycle, ...repeats.map((r) => r.everyM * 60_000));
+  for (let t = first.endsAt; out.length < max && t < horizon; ) {
     const next = turn(t);
-    if (!next || (next.key === first.key && out.length > 1)) break;
+    if (!next) {
+      // Nothing in the loop: skip ahead to the next repeat.
+      if (nextRepeat(t) >= horizon) break;
+      t = nextRepeat(t);
+      continue;
+    }
     out.push(next);
     t = next.endsAt;
   }

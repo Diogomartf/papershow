@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Scene } from "@papershow/scene";
-import { DEFAULT_SLEEP, sameSource, type Live, type Sleep, type Slide, type Source } from "./schedule.ts";
+import { DEFAULT_SLEEP, REPEAT_EVERY, sameSource, type Live, type Repeat, type Sleep, type Slide, type Source } from "./schedule.ts";
 
 const path = process.env.DB ?? new URL("../data/imagegen.db", import.meta.url).pathname;
 mkdirSync(dirname(path), { recursive: true });
@@ -96,6 +96,10 @@ db.exec(`
     check ((playlist_id is not null) + (image_id is not null) + (app_id is not null) = 1)
   );
 `);
+
+// A single image or app can repeat on the clock (every 15, 30, 60… minutes) instead of taking a turn in the loop.
+if (!(db.prepare("pragma table_info(show)").all() as { name: string }[]).some((c) => c.name === "every_m"))
+  db.exec("alter table show add column every_m integer");
 
 // First run with the show: what used to play (every enabled playlist, in order) becomes it.
 if (!db.prepare("select 1 from settings where key = 'show-ready'").get()) {
@@ -241,7 +245,7 @@ export function listSlides(): Slide[] {
 export function loopSlides(): Slide[] {
   const clips = listSlides();
   return listShow()
-    .filter((e) => e.enabled)
+    .filter((e) => e.enabled && !e.everyM)
     .flatMap((e): Slide[] =>
       e.playlistId
         ? clips
@@ -277,9 +281,20 @@ export type ShowEntry = {
   /** How long a single image or app stays on; playlists use their clips' lengths. */
   durationS: number;
   enabled: boolean;
+  /** Minutes: interrupt the loop on the clock this often (e.g. 60 = on the hour). Null = a turn in the loop. */
+  everyM: number | null;
 };
 
-type ShowRow = { id: string; position: number; playlist_id: string | null; image_id: string | null; app_id: string | null; duration_s: number; enabled: number };
+type ShowRow = {
+  id: string;
+  position: number;
+  playlist_id: string | null;
+  image_id: string | null;
+  app_id: string | null;
+  duration_s: number;
+  enabled: number;
+  every_m: number | null;
+};
 
 export function listShow(): ShowEntry[] {
   return (db.prepare("select * from show order by position").all() as ShowRow[]).map((r) => ({
@@ -289,32 +304,45 @@ export function listShow(): ShowEntry[] {
     source: r.image_id ? { kind: "image", id: r.image_id } : r.app_id ? { kind: "app", id: r.app_id } : null,
     durationS: r.duration_s,
     enabled: !!r.enabled,
+    everyM: r.playlist_id ? null : r.every_m,
   }));
 }
 
+/** Show entries that repeat on the clock rather than taking a turn. */
+export const repeats = (): Repeat[] =>
+  listShow()
+    .filter((e) => e.enabled && e.source && e.everyM)
+    .map((e) => ({ id: e.id, source: e.source!, durationS: e.durationS, everyM: e.everyM! }));
+
 /** Add a playlist, image or app to the show at `at` (end by default). */
-export function addShowEntry(what: { playlistId: string } | { source: Source }, at?: number) {
+export function addShowEntry(what: { playlistId: string } | { source: Source }, at?: number, durationS = DEFAULT_CLIP_S) {
   const id = crypto.randomUUID().slice(0, 8);
   const ids = listShow().map((e) => e.id);
   ids.splice(at ?? ids.length, 0, id);
   const src = "source" in what ? what.source : null;
   db.exec("begin");
-  db.prepare("insert into show (id, position, playlist_id, image_id, app_id) values (?, ?, ?, ?, ?)").run(
+  db.prepare("insert into show (id, position, playlist_id, image_id, app_id, duration_s) values (?, ?, ?, ?, ?, ?)").run(
     id,
     ids.length,
     "playlistId" in what ? what.playlistId : null,
     src?.kind === "image" ? src.id : null,
     src?.kind === "app" ? src.id : null,
+    durationS,
   );
   reorderShow(ids, false);
   db.exec("commit");
   return id;
 }
 
-export function updateShowEntry(id: string, patch: { durationS?: number; enabled?: boolean }) {
+export function updateShowEntry(id: string, patch: { durationS?: number; enabled?: boolean; everyM?: number | null }) {
   if (patch.durationS !== undefined)
     db.prepare("update show set duration_s = ? where id = ?").run(Math.max(1, Math.round(patch.durationS / 60)) * 60, id);
   if (patch.enabled !== undefined) db.prepare("update show set enabled = ? where id = ?").run(patch.enabled ? 1 : 0, id);
+  if (patch.everyM !== undefined)
+    db.prepare("update show set every_m = ? where id = ? and playlist_id is null").run(
+      REPEAT_EVERY.includes(patch.everyM as number) ? patch.everyM : null,
+      id,
+    );
 }
 
 export function reorderShow(ids: string[], transaction = true) {
@@ -372,7 +400,7 @@ export function deletePlaylist(id: string) {
 const DEFAULT_CLIP_S = 15 * 60;
 
 /** Add a clip to a playlist at `at` (end by default), shifting the rest along. */
-export function addSlide(source: Source, playlistId: string, at?: number): Slide {
+export function addSlide(source: Source, playlistId: string, at?: number, durationS = DEFAULT_CLIP_S): Slide {
   const id = crypto.randomUUID().slice(0, 8);
   const ids = listSlides()
     .filter((s) => s.playlistId === playlistId)
@@ -385,7 +413,7 @@ export function addSlide(source: Source, playlistId: string, at?: number): Slide
     source.kind === "image" ? source.id : null,
     source.kind === "app" ? source.id : null,
     ids.length,
-    DEFAULT_CLIP_S,
+    durationS,
   );
   reorderSlides(ids, false);
   db.exec("commit");

@@ -63,7 +63,7 @@ async function liveNow(now = Date.now()): Promise<LiveNow | null> {
     };
   }
 
-  const s = showing(store.getLive(), store.loopSlides(), now);
+  const s = showing(store.getLive(), store.loopSlides(), now, store.repeats());
   if (!s) return null;
   const f = await sourceFrame(s.source, now).catch((err) => {
     console.error("render failed", s.source, err);
@@ -254,21 +254,30 @@ app.get("/api/frame/:kind/:id", async (c) => {
   return c.body(png);
 });
 
+/** How long a new clip stays on: 15 minutes, or what the app asks for (a clock only needs a minute). */
+function clipLength(source: Source) {
+  const row = source.kind === "app" ? store.getApp(source.id) : undefined;
+  return (row && APPS[row.kind]?.clipS) || 15 * 60;
+}
+
 // ── Playlists + what's live ────────────────────────────────────────────────
 
 async function state() {
   const now = Date.now();
   const slides = store.listSlides();
   const loop = store.loopSlides();
+  const repeats = store.repeats();
   const live = await liveNow(now);
+  const onAir = loop.find((x) => x.id === live?.slideId);
+  const repeat = repeats.find((r) => r.id === live?.slideId);
   return {
     now,
     live: store.getLive(),
     showing: live && {
       source: live.source,
       slideId: live.slideId,
-      entryId: loop.find((x) => x.id === live.slideId)?.entryId ?? null,
-      clipId: loop.find((x) => x.id === live.slideId)?.clipId ?? null,
+      entryId: onAir?.entryId ?? repeat?.id ?? null,
+      clipId: onAir?.clipId ?? null,
       endsAt: live.endsAt,
       clip: live.clip,
       etag: live.etag,
@@ -279,8 +288,8 @@ async function state() {
     slides,
     playlists: store.listPlaylists(),
     show: store.listShow(),
-    upcoming: upcoming(loop, now),
-    sequence: sequence(loop, now),
+    upcoming: upcoming(loop, now, 3, repeats),
+    sequence: sequence(loop, now, 60, repeats),
     display: lastSeen,
   };
 }
@@ -298,7 +307,7 @@ app.post("/api/slides", async (c) => {
   const source: Source | undefined = body.source ?? (body.imageId ? { kind: "image", id: body.imageId } : undefined);
   if (!source || !exists(source)) return c.json({ error: "no such image or app" }, 404);
   const playlist = (body.playlistId && store.getPlaylist(body.playlistId)) || store.listPlaylists()[0];
-  store.addSlide(source, playlist.id, body.at);
+  store.addSlide(source, playlist.id, body.at, clipLength(source));
   changed();
   return c.json(await state());
 });
@@ -356,7 +365,7 @@ app.post("/api/show", async (c) => {
     if (!store.getPlaylist(body.playlistId)) return c.json({ error: "no such playlist" }, 404);
     store.addShowEntry({ playlistId: body.playlistId }, body.at);
   } else if (body.source && exists(body.source)) {
-    store.addShowEntry({ source: body.source }, body.at);
+    store.addShowEntry({ source: body.source }, body.at, clipLength(body.source));
   } else return c.json({ error: "add a playlist, image or app" }, 400);
   changed();
   return c.json(await state());

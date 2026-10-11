@@ -977,7 +977,7 @@ a.ghost { display: inline-block; }
 .add-group h3 { margin: 0 0 8px; font: 600 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 .add-playlists, .add-items { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .add-playlists button {
-  display: inline-flex; align-items: baseline; gap: 6px;
+  display: inline-flex; align-items: center; gap: 6px;
   height: 32px; padding: 0 12px; border: 0; border-radius: 9px;
   background: var(--surface); box-shadow: 0 0 0 1px var(--line);
   font-weight: 560;
@@ -993,7 +993,11 @@ a.ghost { display: inline-block; }
 .add-items img { width: 100%; aspect-ratio: 5 / 3; border-radius: 4px; background: var(--paper); box-shadow: 0 0 0 1px var(--line); filter: var(--dim); }
 .add-items small { font-size: 11px; }
 .plus { color: var(--ink-3); }
+.add-playlists small { font-weight: 450; }
 
+/* Repeat: a single item can interrupt the loop on the clock */
+.repeat button { padding: 5px 9px; font-size: 13px; white-space: nowrap; }
+.pl-row-actions .repeat { margin-right: 8px; }
 .pl-confirm { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; color: var(--ink-2); padding-left: 4px; }
 
 /* ── Apps ──────────────────────────────────────────── */
