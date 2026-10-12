@@ -27,6 +27,8 @@
   --engrave-hi: rgba(255,235,200,.4);
   --scrim: rgba(70,50,20,.16);
   --signal: #c8692e;
+  --danger: #b4231b;
+  --danger-tint: rgba(180,35,27,.08);
   --track: #efe8d6;
   --tick: #cfc3a6;
   --fade: rgba(250,246,234,.95);
@@ -83,6 +85,8 @@
   --engrave-hi: rgba(0,0,0,.3);
   --scrim: rgba(0,0,0,.45);
   --signal: #e8873f;
+  --danger: #ec7b6c;
+  --danger-tint: rgba(236,123,108,.12);
   --track: #1f1a15;
   --tick: #4a3f33;
   --fade: rgba(38,32,26,.95);
@@ -888,31 +892,41 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 
 /* ── Floating menu, remove, undo ─────────────────── */
 
+/* Sits on the theme's surface with a hairline, like the cards: no inverted slab. */
 .float-menu {
   position: fixed;
-  transform: translate(-50%, calc(-100% - 8px));
-  display: flex; gap: 2px;
-  padding: 4px;
+  transform: translate(-50%, calc(-100% - 10px));
+  display: flex; align-items: center; gap: 1px;
+  padding: 3px;
   border-radius: 10px;
-  background: var(--ink);
-  box-shadow: 0 10px 30px -8px var(--drop), 0 0 0 1px rgba(0,0,0,.2);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line), 0 2px 6px -2px var(--drop-near), 0 14px 28px -12px var(--drop);
   z-index: 60;
   animation: menuIn 140ms var(--ease-out);
 }
-@keyframes menuIn { from { opacity: 0; transform: translate(-50%, calc(-100% - 4px)) scale(.96); } }
+@keyframes menuIn { from { opacity: 0; transform: translate(-50%, calc(-100% - 6px)) scale(.97); } }
+/* The pointer: a turned square showing only its lower edges, so the hairline runs around it. */
 .float-menu::after {
   content: ""; position: absolute; left: 50%; bottom: -5px;
-  width: 10px; height: 10px; margin-left: -5px;
-  background: var(--ink); transform: rotate(45deg); border-radius: 2px;
+  width: 9px; height: 9px; margin-left: -4.5px;
+  background: var(--surface);
+  box-shadow: 1px 1px 0 0 var(--line);
+  transform: rotate(45deg); border-radius: 0 0 2px 0;
 }
 .float-menu button {
   position: relative; z-index: 1;
-  border: 0; background: transparent;
-  height: 30px; padding: 0 12px; border-radius: 7px;
-  color: var(--wall); font-size: 13px; font-weight: 560; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 10px 0 8px;
+  border: 0; border-radius: 7px; background: transparent;
+  color: var(--ink-2); font-size: 13px; font-weight: 540; white-space: nowrap;
+  transition: background-color 120ms, color 120ms;
 }
-.float-menu button:hover { background: color-mix(in srgb, var(--wall) 14%, transparent); }
-.float-menu button.danger { color: #ff8a80; }
+.float-menu button svg { flex: none; opacity: .8; }
+.float-menu button:hover { background: var(--tint); color: var(--ink); }
+.float-menu button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.float-menu button.danger { color: var(--danger); }
+.float-menu button.danger:hover { background: var(--danger-tint); color: var(--danger); }
+.float-menu-divider { width: 1px; height: 16px; margin: 0 3px; background: var(--line); }
 
 .clip-x {
   position: absolute; top: 5px; right: 13px;

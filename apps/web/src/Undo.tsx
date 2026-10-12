@@ -84,3 +84,32 @@ export function FloatingMenu({
     </div>
   );
 }
+
+// Line icons for menu items, 14px, drawn in the text colour.
+const ICONS = {
+  show: <><rect x="2" y="3" width="12" height="8" rx="1.5" /><path d="M6 14h4M8 11v3" /></>,
+  earlier: <path d="M10 3.5 5.5 8l4.5 4.5" />,
+  later: <path d="M6 3.5 10.5 8 6 12.5" />,
+  open: <path d="M6 3.5h6.5V10M12.5 3.5 4 12" />,
+  remove: <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" />,
+};
+
+/** One action in a FloatingMenu: an icon and a short label. `danger` for actions that take something away. */
+export function MenuItem({
+  icon,
+  danger,
+  children,
+  ...rest
+}: { icon: keyof typeof ICONS; danger?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button role="menuitem" className={danger ? "danger" : undefined} {...rest}>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        {ICONS[icon]}
+      </svg>
+      {children}
+    </button>
+  );
+}
+
+/** A hairline between groups, so a destructive action sits apart. */
+export const MenuDivider = () => <span className="float-menu-divider" role="separator" />;

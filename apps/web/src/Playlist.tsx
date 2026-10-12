@@ -6,7 +6,7 @@ import { useSideScroll } from "./scroll";
 import { keyOf, parseKey, useItems, type Item, type Source } from "./sources";
 import * as api from "./slides";
 import { useLiveState, useNow } from "./live";
-import { FloatingMenu, useUndoToast } from "./Undo";
+import { FloatingMenu, MenuDivider, MenuItem, useUndoToast } from "./Undo";
 import type { Playlist as PlaylistT, Slide, State } from "./slides";
 import { navigate } from "./Nav";
 
@@ -517,14 +517,15 @@ export function Playlist({ id }: { id: string | null }) {
       {sel && !resizing && !dragging && (
         // Clicks in the clip's settings below keep it selected: only clicking elsewhere lets go.
         <FloatingMenu anchor={clipEls.current.get(sel.id) ?? null} onClose={() => setSelected(null)} keepOpenWithin=".inspector">
-          <button role="menuitem" onClick={() => pin(sel.source)}>Show now</button>
+          <MenuItem icon="show" onClick={() => pin(sel.source)}>Show now</MenuItem>
           {slides.indexOf(sel) > 0 && (
-            <button role="menuitem" onClick={() => move(sel.id, -1)} aria-label="Play earlier">← Earlier</button>
+            <MenuItem icon="earlier" onClick={() => move(sel.id, -1)} aria-label="Play earlier">Earlier</MenuItem>
           )}
           {slides.indexOf(sel) < slides.length - 1 && (
-            <button role="menuitem" onClick={() => move(sel.id, 1)} aria-label="Play later">Later →</button>
+            <MenuItem icon="later" onClick={() => move(sel.id, 1)} aria-label="Play later">Later</MenuItem>
           )}
-          <button role="menuitem" className="danger" onClick={() => remove(sel.id)}>Remove</button>
+          <MenuDivider />
+          <MenuItem icon="remove" danger onClick={() => remove(sel.id)}>Remove</MenuItem>
         </FloatingMenu>
       )}
       {toast.node}

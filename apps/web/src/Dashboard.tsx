@@ -6,7 +6,7 @@ import { useLiveState, useNow } from "./live";
 import { NightSettings } from "./NightSettings";
 import * as api from "./slides";
 import { frameAt, setLive } from "./slides";
-import { FloatingMenu, useUndoToast } from "./Undo";
+import { FloatingMenu, MenuDivider, MenuItem, useUndoToast } from "./Undo";
 import { useItems } from "./sources";
 
 const hhmm = (t: number) => {
@@ -199,15 +199,16 @@ export function Dashboard() {
           const entry = state.show.find((e) => e.id === turn.entryId);
           return (
             <FloatingMenu anchor={menu.el} onClose={closeMenu}>
-              <button role="menuitem" onClick={() => (setMenu(null), setLive({ mode: "pin", source: turn.source }).then(accept))}>
+              <MenuItem icon="show" onClick={() => (setMenu(null), setLive({ mode: "pin", source: turn.source }).then(accept))}>
                 Show now
-              </button>
+              </MenuItem>
               {turn.playlistId && (
-                <button role="menuitem" onClick={() => navigate(`/playlist/${turn.playlistId}`)}>Open playlist</button>
+                <MenuItem icon="open" onClick={() => navigate(`/playlist/${turn.playlistId}`)}>Open playlist</MenuItem>
               )}
-              <button
-                role="menuitem"
-                className="danger"
+              <MenuDivider />
+              <MenuItem
+                icon="remove"
+                danger
                 title={clip ? "Remove from its playlist" : "Remove from the show"}
                 onClick={async () => {
                   setMenu(null);
@@ -225,7 +226,7 @@ export function Dashboard() {
                 }}
               >
                 Remove
-              </button>
+              </MenuItem>
             </FloatingMenu>
           );
         })()}
