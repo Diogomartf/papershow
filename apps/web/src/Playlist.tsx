@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent, type PointerEvent } from "react";
 import { Nav } from "./Nav";
 import { LightSwitch } from "./LightSwitch";
+import { LiveLink } from "./LiveLink";
 import { useSideScroll } from "./scroll";
 import { keyOf, parseKey, useItems, type Item, type Source } from "./sources";
 import * as api from "./slides";
@@ -269,7 +270,7 @@ export function Playlist({ id }: { id: string | null }) {
         <div />
         <div className="bar-right">
           <LightSwitch />
-          <a className="ghost" href="/live" target="_blank" rel="noreferrer">Open /live ↗</a>
+          <LiveLink />
         </div>
       </header>
 

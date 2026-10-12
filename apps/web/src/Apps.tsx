@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LightSwitch } from "./LightSwitch";
+import { LiveLink } from "./LiveLink";
 import { Nav, navigate } from "./Nav";
 import * as appsApi from "./apps";
 import type { AppInstance, AppKind, Field } from "./apps";
@@ -130,7 +131,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
         <div />
         <div className="bar-right">
           <LightSwitch />
-          <a className="ghost" href="/live" target="_blank" rel="noreferrer">Open /live ↗</a>
+          <LiveLink />
         </div>
       </header>
 

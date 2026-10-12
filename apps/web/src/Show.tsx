@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { LightSwitch } from "./LightSwitch";
+import { LiveLink } from "./LiveLink";
 import { Nav, navigate } from "./Nav";
 import { useLiveState } from "./live";
 import * as api from "./slides";
@@ -64,7 +65,7 @@ export function Show() {
         <div />
         <div className="bar-right">
           <LightSwitch />
-          <a className="ghost" href="/live" target="_blank" rel="noreferrer">Open /live ↗</a>
+          <LiveLink />
         </div>
       </header>
 

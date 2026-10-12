@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { LightSwitch } from "./LightSwitch";
+import { LiveLink } from "./LiveLink";
 import { Nav, navigate } from "./Nav";
 import { useLiveState, useNow } from "./live";
 import { NightSettings } from "./NightSettings";
@@ -63,7 +64,7 @@ export function Dashboard() {
         <div />
         <div className="bar-right">
           <LightSwitch />
-          <a className="ghost" href="/live" target="_blank" rel="noreferrer">Open /live ↗</a>
+          <LiveLink />
         </div>
       </header>
 
