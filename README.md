@@ -179,6 +179,19 @@ On the Pi, run the [one line](#2-on-the-pi-install) again, or:
 cd ~/papershow && git pull && deploy/pi/install.sh
 ```
 
+### Uninstalling
+
+On the Pi:
+
+```sh
+~/papershow/deploy/pi/uninstall.sh            # keeps your drawings and shows
+~/papershow/deploy/pi/uninstall.sh --purge    # deletes them too
+```
+
+It stops and removes both services and any `systemctl edit` settings, blanks the panel, and removes the Tailscale address if it serves only Papershow. Your data in `/var/lib/papershow` stays unless you pass `--purge`. Node, the Python libraries, SPI and Tailscale stay installed, because other things on the Pi may use them. The code stays in `~/papershow`; delete it yourself when you're done. The install line puts everything back.
+
+To go back to pi-e-ink after uninstalling, restore its cron jobs: `crontab ~/code/pi-e-ink/e_ink_cron_jobs`.
+
 ### Panel settings
 
 Change these with `sudo systemctl edit papershow-panel`, which keeps them across reinstalls:
@@ -233,7 +246,7 @@ Environment=PANEL_PARTIAL=0
 | `apps/server/src/apps` | One file per app (clock, AI, news, crypto, stocks…). See [AGENTS.md](AGENTS.md) for how to write one. |
 | `apps/panel` | The Pi client: follows `/live.bin` and draws it on the Waveshare panel. Python, not part of the pnpm workspace. |
 | `packages/scene` | Shared by web and server: the drawing's `Scene` type, `dither`, `enhance` and `pack1bpp`. |
-| `deploy/pi` | Install script and systemd units for running everything on a Raspberry Pi 5. |
+| `deploy/pi` | Install and uninstall scripts and systemd units for running everything on a Raspberry Pi 5. |
 | `.env.example` | API keys; copy to `.env` at the repo root. |
 
 The panel client only knows a server URL, so it can follow a server on the same Pi, on your tailnet, or anywhere else. Anything that can fetch `/live.bin` and write 48,000 bytes to a display works (see [The panel's contract](#the-panels-contract)).
