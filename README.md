@@ -30,6 +30,39 @@ It signs in to GitHub if needed (the repo is private), installs everything, offe
 
 On a phone, use the Tailscale address even at home: it's HTTPS, which Draw needs on phones, and it's the same address everywhere. Add it to the home screen and it opens like an app. The device needs the Tailscale app, signed in to the same account. Some Android phones can't resolve `.local` names; use the Pi's IP (`hostname -I` on the Pi) or the Tailscale address.
 
+## Dependencies
+
+**On the Pi**, the install script sets all of this up. You only need the hardware and the OS.
+
+| What | For | How it's installed |
+|---|---|---|
+| Raspberry Pi 5, 64-bit Raspberry Pi OS (Bookworm or later) | Everything | You, with Raspberry Pi Imager |
+| Waveshare 7.5″ e-Paper V2 HAT (800×480, black and white) | The panel | You, on the GPIO header |
+| `git`, `gh` | Getting the code from the private repo | apt, by the one line |
+| Node 24 | The server (needs `node:sqlite`, 22.13 or later) | NodeSource apt repo, only if the Pi's Node is older |
+| pnpm 7 | Installing and building | `npx pnpm@7`, nothing installed globally |
+| `python3-pil`, `python3-spidev`, `python3-gpiozero`, `python3-lgpio` | The panel client and its SPI and GPIO on a Pi 5 | apt |
+| SPI | Talking to the panel | `raspi-config` |
+| Waveshare's `epd7in5_V2` driver | Drawing on the panel | In the repo (`apps/panel/waveshare_epd`) |
+| Tailscale (optional) | Opening Papershow from anywhere, over HTTPS | Its install script, if you say yes |
+
+**On your Mac**, for development: Node 22.5 or later and pnpm 7.
+
+**Libraries**, installed by pnpm from `pnpm-lock.yaml`:
+
+| Package | Used for |
+|---|---|
+| [Hono](https://hono.dev) | The server's HTTP routes |
+| [satori](https://github.com/vercel/satori), [resvg-js](https://github.com/yisibl/resvg-js) | Rendering apps: JSX to SVG to pixels |
+| [fast-png](https://github.com/image-js/fast-png) | Encoding the 1-bit PNGs |
+| tsx | Running the server's TypeScript directly, with no build step |
+| Inter, Source Serif 4, UnifrakturMaguntia (`@expo-google-fonts`) | Fonts on the panel |
+| React 19, Vite | The web app |
+| [drawesome](https://www.npmjs.com/package/drawesome) | Draw's pens, eraser and undo |
+| oxlint, TypeScript | Checking the code |
+
+The panel client uses only Python's standard library and Pillow.
+
 ## Develop on your Mac
 
 Needs Node 22.5 or later (the server uses the built-in `node:sqlite`) and pnpm 7, the version that wrote `pnpm-lock.yaml` (newer ones can't read it; `npx pnpm@7` works too).
