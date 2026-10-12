@@ -22,7 +22,7 @@ On a phone, use the Tailscale address even at home: it's HTTPS, which Draw needs
 
 ## Develop on your Mac
 
-Needs Node 22.5 or later (the server uses the built-in `node:sqlite`) and pnpm.
+Needs Node 22.5 or later (the server uses the built-in `node:sqlite`) and pnpm 7, the version that wrote `pnpm-lock.yaml` (newer ones can't read it; `npx pnpm@7` works too).
 
 ```sh
 pnpm install
@@ -54,6 +54,7 @@ What the install script changes, and what it leaves alone:
 - **Port**: it uses 5194, and stops if something else is already on it. Pick another with `PAPERSHOW_PORT=8080 deploy/pi/install.sh`.
 - **Address**: your Pi keeps its hostname, so Papershow is at `http://<hostname>.local:5194`. The script prints the address when it's done.
 - **Node**: it installs Node 24 only if the Pi's Node is older than 22.13, and that upgrade is system-wide. A newer Node is left alone.
+- **pnpm**: it runs pnpm 7 through `npx`, so a pnpm the Pi already has stays as it is.
 - **SPI** gets turned on. Python libraries come from apt and don't replace anything.
 - **Tailscale**: if the Pi already serves something through `tailscale serve`, that setup is left alone, and the script prints the command to add Papershow on port 8443.
 - **The panel**: nothing else may drive it. Old e-ink scripts on cron get a warning but aren't removed: take them out with `crontab -e`. If you used [pi-e-ink](https://github.com/Diogomartf/pi-e-ink), that's its `clean.py`, `tokens.py`, `stocks.py` and `ai_clock.py` lines. The deep clean, the 180° rotation and the night pause now live in Papershow.

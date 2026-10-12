@@ -53,7 +53,9 @@ if ! node -e 'require("node:sqlite")' 2>/dev/null; then
   curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
   sudo apt-get install -y nodejs
 fi
-command -v pnpm >/dev/null || sudo npm install -g pnpm
+# The pnpm that wrote pnpm-lock.yaml (v7; newer ones can't read it frozen), through npx so a
+# pnpm the Pi already has stays as it is.
+pnpm() { npx --yes pnpm@7 "$@"; }
 
 cd "$repo"
 pnpm install --frozen-lockfile
