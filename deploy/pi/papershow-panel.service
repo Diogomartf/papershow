@@ -7,6 +7,10 @@ Wants=papershow.service network-online.target
 [Service]
 User=@USER@
 SupplementaryGroups=spi gpio
+# lgpio (the Pi 5's GPIO) makes its pipe files in the working directory, which must be writable:
+# without one it's /, and the panel fails with "Unable to load any default pin factory".
+RuntimeDirectory=papershow-panel
+WorkingDirectory=/run/papershow-panel
 Environment=PAPERSHOW_URL=http://localhost:@PORT@
 # The frame holds the panel upside down.
 Environment=PANEL_ROTATE=180
