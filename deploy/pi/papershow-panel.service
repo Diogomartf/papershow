@@ -7,7 +7,7 @@ Wants=papershow.service network-online.target
 [Service]
 User=@USER@
 SupplementaryGroups=spi gpio
-Environment=PAPERSHOW_URL=http://localhost:5194
+Environment=PAPERSHOW_URL=http://localhost:@PORT@
 # The frame holds the panel upside down.
 Environment=PANEL_ROTATE=180
 Environment=PYTHONUNBUFFERED=1

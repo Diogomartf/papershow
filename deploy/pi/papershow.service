@@ -1,4 +1,4 @@
-# The server: API, web app and /live on :5194. install.sh fills in @USER@ and @REPO@.
+# The server: API, web app and /live. install.sh fills in @USER@ and @REPO@.
 [Unit]
 Description=Papershow server
 After=network-online.target
@@ -8,6 +8,7 @@ Wants=network-online.target
 User=@USER@
 WorkingDirectory=@REPO@/apps/server
 Environment=NODE_ENV=production
+Environment=PORT=@PORT@
 # Outside the checkout, so a fresh clone or a reset doesn't touch your drawings and shows.
 Environment=DB=/var/lib/papershow/papershow.db
 StateDirectory=papershow

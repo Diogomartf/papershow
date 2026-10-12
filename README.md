@@ -13,7 +13,7 @@ All the work happens on the server. The panel never renders anything: it downloa
 
 | Where it runs | From | Address |
 |---|---|---|
-| Raspberry Pi | Any device on your home Wi-Fi | `http://papershow.local:5194` |
+| Raspberry Pi | Any device on your home Wi-Fi | `http://papershow.local:5194` (your Pi's hostname, and port if you changed it) |
 | Raspberry Pi | Anywhere, through [Tailscale](#4-on-the-pi-reach-it-from-anywhere) | `https://papershow.<your-tailnet>.ts.net` |
 | Your Mac (`pnpm dev`) | The Mac | http://localhost:5193 |
 | Your Mac (`pnpm dev`) | A phone on the same Wi-Fi | `http://<your-mac's-ip>:5193` |
@@ -44,6 +44,20 @@ pnpm start               # NODE_ENV=production; serves the web app and the API o
 One Raspberry Pi 5 runs both the server and the panel client, with the panel on its GPIO header. You open Papershow from your Mac or phone, at home or away, over Tailscale.
 
 In short: flash Raspberry Pi OS, clone this repo on the Pi, copy your `.env` over, and run `deploy/pi/install.sh`. The steps below say where each command runs: **on your Mac** or **on the Pi** (after `ssh` into it).
+
+### Already have a Pi?
+
+You don't need a fresh card. Papershow installs next to whatever else the Pi runs, as long as it's a **Pi 5 on 64-bit Raspberry Pi OS** (`uname -m` says `aarch64`). Skip step 1, `ssh` in as usual, and start at [step 2](#2-on-the-pi-get-the-code). Clone it anywhere in your home folder.
+
+What the install script changes, and what it leaves alone:
+
+- **Port**: it uses 5194, and stops if something else is already on it. Pick another with `PAPERSHOW_PORT=8080 deploy/pi/install.sh`.
+- **Address**: your Pi keeps its hostname, so Papershow is at `http://<hostname>.local:5194`. The script prints the address when it's done.
+- **Node**: it installs Node 24 only if the Pi's Node is older than 22.13, and that upgrade is system-wide. A newer Node is left alone.
+- **SPI** gets turned on. Python libraries come from apt and don't replace anything.
+- **Tailscale**: if the Pi already serves something through `tailscale serve`, that setup is left alone, and the script prints the command to add Papershow on port 8443.
+- **The panel**: nothing else may drive it. Old e-ink scripts on cron get a warning but aren't removed: take them out with `crontab -e`. If you used [pi-e-ink](https://github.com/Diogomartf/pi-e-ink), that's its `clean.py`, `tokens.py`, `stocks.py` and `ai_clock.py` lines. The deep clean, the 180° rotation and the night pause now live in Papershow.
+- **Data** goes in `/var/lib/papershow`, outside your checkout.
 
 ### You need
 
