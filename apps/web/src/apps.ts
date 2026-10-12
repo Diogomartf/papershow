@@ -2,9 +2,11 @@
 
 export type Field =
   | { key: string; label: string; type: "text"; placeholder?: string; hint?: string }
+  | { key: string; label: string; type: "textarea"; placeholder?: string; hint?: string }
   | { key: string; label: string; type: "toggle"; hint?: string }
   | { key: string; label: string; type: "select"; options: { value: string; label: string }[]; hint?: string }
-  | { key: string; label: string; type: "list"; placeholder?: string; hint?: string };
+  | { key: string; label: string; type: "list"; placeholder?: string; hint?: string }
+  | { key: string; label: string; type: "picks"; options: { value: string; label: string }[]; max?: number; hint?: string };
 
 export type AppKind = {
   kind: string;

@@ -26,12 +26,19 @@ const COUPLETS = [
 ];
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
+const PROMPT =
+  "Write a two-line rhyming poem about the time {time}. Say the time in words near the start. " +
+  "Keep it under 120 characters, calm and a little whimsical. Reply with the poem only.";
+
 export default defineApp({
   kind: "aiclock",
   name: "AI Clock",
   description: "A two-line poem about the time, new every minute.",
-  defaults: { timeZone: "Europe/Lisbon" },
-  fields: [{ key: "timeZone", label: "Time zone", type: "text", placeholder: "Europe/Lisbon", hint: "Any IANA zone" }],
+  defaults: { timeZone: "Europe/Lisbon", prompt: PROMPT },
+  fields: [
+    { key: "timeZone", label: "Time zone", type: "text", placeholder: "Europe/Lisbon", hint: "Any IANA zone" },
+    { key: "prompt", label: "Prompt", type: "textarea", placeholder: PROMPT, hint: "{time} becomes the time in words, like “nine oh five”" },
+  ],
   periodMs: 60_000,
   clipS: 60,
   mock: true,

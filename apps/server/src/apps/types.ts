@@ -4,10 +4,13 @@ import type { JSX } from "#jsx/jsx-runtime";
 /** One setting in an app's form. The Apps page builds its UI from these. */
 export type Field =
   | { key: string; label: string; type: "text"; placeholder?: string; hint?: string }
+  | { key: string; label: string; type: "textarea"; placeholder?: string; hint?: string }
   | { key: string; label: string; type: "toggle"; hint?: string }
   | { key: string; label: string; type: "select"; options: { value: string; label: string }[]; hint?: string }
   /** Comma-separated in the form, an array in the config. */
-  | { key: string; label: string; type: "list"; placeholder?: string; hint?: string };
+  | { key: string; label: string; type: "list"; placeholder?: string; hint?: string }
+  /** Tap to pick several of `options`, kept in the order picked; an array in the config. */
+  | { key: string; label: string; type: "picks"; options: { value: string; label: string }[]; max?: number; hint?: string };
 
 export type AppDef<C extends Record<string, unknown>, D> = {
   kind: string;

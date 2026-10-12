@@ -2,15 +2,17 @@ import { TokenMark } from "./marks.tsx";
 import { defineApp, money, sheet, wobble } from "./types.ts";
 
 // Mock prices until CoinGecko is wired up; ids follow CoinGecko's.
-const KNOWN: Record<string, { symbol: string; usd: number }> = {
-  bitcoin: { symbol: "BTC", usd: 83785 },
-  ethereum: { symbol: "ETH", usd: 2538.94 },
-  solana: { symbol: "SOL", usd: 111.91 },
-  dogecoin: { symbol: "DOGE", usd: 0.1712 },
-  cardano: { symbol: "ADA", usd: 0.6421 },
-  ripple: { symbol: "XRP", usd: 2.13 },
-  chainlink: { symbol: "LINK", usd: 13.87 },
-  polkadot: { symbol: "DOT", usd: 4.12 },
+const KNOWN: Record<string, { name: string; symbol: string; usd: number }> = {
+  bitcoin: { name: "Bitcoin", symbol: "BTC", usd: 83785 },
+  ethereum: { name: "Ethereum", symbol: "ETH", usd: 2538.94 },
+  solana: { name: "Solana", symbol: "SOL", usd: 111.91 },
+  "pudgy-penguins": { name: "Pengu", symbol: "PENGU", usd: 0.0281 },
+  chainlink: { name: "Chainlink", symbol: "LINK", usd: 13.87 },
+  zcash: { name: "Zcash", symbol: "ZEC", usd: 248.6 },
+  hyperliquid: { name: "Hyperliquid", symbol: "HYPE", usd: 41.2 },
+  uniswap: { name: "Uniswap", symbol: "UNI", usd: 7.94 },
+  "jupiter-exchange-solana": { name: "Jupiter", symbol: "JUP", usd: 0.47 },
+  aave: { name: "Aave", symbol: "AAVE", usd: 268.3 },
 };
 
 const EUR_PER_USD = 0.92;
@@ -21,7 +23,14 @@ export default defineApp({
   description: "Prices for a few tokens, with their marks.",
   defaults: { tokens: ["bitcoin", "ethereum", "solana"] as string[], currency: "usd" },
   fields: [
-    { key: "tokens", label: "Tokens", type: "list", placeholder: "bitcoin, ethereum, solana", hint: "CoinGecko ids, up to 4" },
+    {
+      key: "tokens",
+      label: "Tokens",
+      type: "picks",
+      options: Object.entries(KNOWN).map(([value, t]) => ({ value, label: t.name })),
+      max: 4,
+      hint: "Up to 4, in the order you pick them",
+    },
     {
       key: "currency",
       label: "Currency",

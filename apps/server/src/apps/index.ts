@@ -1,8 +1,10 @@
 import type { AppRow } from "../db.ts";
 import { renderFrame, type Frame } from "../render.ts";
+import ai from "./ai.tsx";
 import aiclock from "./aiclock.tsx";
 import clock from "./clock.tsx";
 import crypto from "./crypto.tsx";
+import nytimes from "./nytimes.tsx";
 import stocks from "./stocks.tsx";
 import type { AppDef } from "./types.ts";
 
@@ -10,7 +12,7 @@ import type { AppDef } from "./types.ts";
 type AnyApp = AppDef<any, any>;
 
 export const APPS: Record<string, AnyApp> = Object.fromEntries(
-  [clock, aiclock, crypto, stocks].map((a) => [a.kind, a as AnyApp]),
+  [clock, aiclock, ai, crypto, stocks, nytimes].map((a) => [a.kind, a as AnyApp]),
 );
 
 /** What the Apps page needs to list kinds and build their forms. */
@@ -36,6 +38,10 @@ export function configFor(def: AnyApp, raw: Record<string, unknown> = {}) {
       out[f.key] = (Array.isArray(v) ? v : String(v).split(","))
         .map((x) => String(x).trim().toLowerCase())
         .filter(Boolean);
+    else if (f.type === "picks")
+      out[f.key] = [...new Set(Array.isArray(v) ? v.map(String) : [])]
+        .filter((x) => f.options.some((o) => o.value === x))
+        .slice(0, f.max);
     else if (f.type === "select") out[f.key] = f.options.some((o) => o.value === v) ? v : def.defaults[f.key];
     else out[f.key] = String(v).trim();
   }

@@ -22,13 +22,20 @@ export type Frame = {
 };
 
 const require = createRequire(import.meta.url);
-const inter = (weight: number, file: string) => ({
-  name: "Inter",
+const font = (name: string, pkg: string, prefix: string) => (weight: number, file: string) => ({
+  name,
   weight: weight as 300 | 400 | 500 | 600 | 700,
   style: "normal" as const,
-  data: readFileSync(require.resolve(`@expo-google-fonts/inter/${file}/Inter_${file}.ttf`)),
+  data: readFileSync(require.resolve(`@expo-google-fonts/${pkg}/${file}/${prefix}_${file}.ttf`)),
 });
-const FONTS = [inter(300, "300Light"), inter(400, "400Regular"), inter(500, "500Medium"), inter(600, "600SemiBold"), inter(700, "700Bold")];
+const inter = font("Inter", "inter", "Inter");
+const serif = font("Source Serif", "source-serif-4", "SourceSerif4");
+const FONTS = [
+  inter(300, "300Light"), inter(400, "400Regular"), inter(500, "500Medium"), inter(600, "600SemiBold"), inter(700, "700Bold"),
+  // Newspaper-style apps: a serif for headlines, blackletter for mastheads.
+  serif(400, "400Regular"), serif(600, "600SemiBold"), serif(700, "700Bold"),
+  font("Blackletter", "unifrakturmaguntia", "UnifrakturMaguntia")(400, "400Regular"),
+];
 
 export async function renderFrame(node: JSX.Element, mode: DitherMode = "threshold"): Promise<Frame> {
   const { w, h } = PANEL;

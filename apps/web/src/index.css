@@ -1081,8 +1081,21 @@ a.ghost { display: inline-block; }
   box-shadow: 0 0 0 1px var(--line);
   font-size: 16px; /* no zoom on iOS */
 }
+textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size: 15px; }
 .setting .text:focus { outline: none; box-shadow: 0 0 0 1.5px var(--ink-3); }
 .setting small { font-size: 12px; }
+.picks { display: flex; flex-wrap: wrap; gap: 6px; }
+.picks button {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 11px;
+  border: 0; border-radius: 999px;
+  background: var(--surface); box-shadow: 0 0 0 1px var(--line);
+  color: var(--ink-2); font-weight: 560;
+}
+.picks button:hover:not(:disabled) { color: var(--ink); }
+.picks button[aria-pressed="true"] { background: var(--ink); color: var(--surface); box-shadow: none; }
+.picks button:disabled { opacity: .4; cursor: default; }
+.pick-n { font: 600 10px/1 var(--mono); opacity: .7; }
 .settings-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; padding-top: 18px; border-top: 1px solid var(--line); }
 .settings-actions .primary { padding: 8px 14px; }
 

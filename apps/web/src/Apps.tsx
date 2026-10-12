@@ -265,6 +265,18 @@ function FieldInput({ field, value, onChange }: { field: Field; value: unknown; 
             </button>
           ))}
         </div>
+      ) : field.type === "textarea" ? (
+        <textarea
+          id={id}
+          className="text"
+          rows={5}
+          value={String(value ?? "")}
+          placeholder={field.placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete="off"
+        />
+      ) : field.type === "picks" ? (
+        <Picks id={id} field={field} value={Array.isArray(value) ? value.map(String) : []} onChange={onChange} />
       ) : (
         <input
           id={id}
@@ -277,6 +289,39 @@ function FieldInput({ field, value, onChange }: { field: Field; value: unknown; 
         />
       )}
       {field.hint && <small className="muted">{field.hint}</small>}
+    </div>
+  );
+}
+
+/** Tap to add or remove; the order you pick in is the order they show. Full once `max` are picked. */
+function Picks({
+  id,
+  field,
+  value,
+  onChange,
+}: {
+  id: string;
+  field: Extract<Field, { type: "picks" }>;
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const full = field.max !== undefined && value.length >= field.max;
+  return (
+    <div className="picks" id={id} role="group">
+      {field.options.map((o) => {
+        const on = value.includes(o.value);
+        return (
+          <button
+            key={o.value}
+            aria-pressed={on}
+            disabled={!on && full}
+            onClick={() => onChange(on ? value.filter((v) => v !== o.value) : [...value, o.value])}
+          >
+            {on && <span className="pick-n">{value.indexOf(o.value) + 1}</span>}
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
