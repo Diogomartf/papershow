@@ -120,7 +120,7 @@ The script builds the web app, turns on SPI, installs the panel's Python librari
 | `papershow` | The server: web app, API and `/live` on :5194. Data in `/var/lib/papershow/papershow.db`. |
 | `papershow-panel` | The panel client: shows the logo, then follows `/live` and draws it. |
 
-The panel shows the logo, then the current frame. The script ends by printing Papershow's address, `http://<hostname>.local:5194`, and it all starts again on its own after a reboot or power cut. [What the install changes on your Pi](#what-the-install-changes-on-your-pi) lists what it touches and what it leaves alone. From then on, [`paper:status`, `paper:logs` and `paper:update`](#commands-on-the-pi) check on it and update it.
+The panel shows the logo, then the current frame. The script ends by printing Papershow's address, `http://<hostname>.local:5194`, and it all starts again on its own after a reboot or power cut. [What the install changes on your Pi](#what-the-install-changes-on-your-pi) lists what it touches and what it leaves alone. From then on, [`paper:status`, `paper:logs` and `paper:update`](#commands-on-the-pi) check on it and update it; `paper:help` lists them.
 
 ### 3. On the Pi: stop anything else that draws on the panel
 
@@ -179,7 +179,7 @@ It's safe to run again, and it leaves the rest of your Pi alone:
 - **Tailscale**: if the Pi already serves something through `tailscale serve`, that setup is left alone, and the script prints the command to add Papershow on port 8443.
 - **The panel**: it lists anything else that might draw on it (e-ink lines in your or root's crontab or `/etc/cron.d`, systemd units and timers, programs holding the SPI device) and removes none of them. If you used [pi-e-ink](https://github.com/Diogomartf/pi-e-ink), that's its `clean.py`, `tokens.py`, `stocks.py` and `ai_clock.py` lines. The deep clean, the 180° rotation and the night pause now live in Papershow.
 - **Data** goes in `/var/lib/papershow`, outside your checkout.
-- **Commands**: `paper:update`, `paper:status` and `paper:logs` go in `/usr/local/bin`, as links to `deploy/pi/paper.sh`. A command of the same name that isn't Papershow's is left alone.
+- **Commands**: `paper:update`, `paper:status`, `paper:logs` and `paper:help` go in `/usr/local/bin`, as links to `deploy/pi/paper.sh`. A command of the same name that isn't Papershow's is left alone.
 
 ### Starting from a blank card
 
@@ -187,13 +187,14 @@ If you don't have a Pi running yet: in [Raspberry Pi Imager](https://www.raspber
 
 ### Commands on the Pi
 
-The install adds three commands:
+The install adds these commands:
 
 | Command | What it does |
 |---|---|
 | `paper:update` | Gets the latest `main` and reinstalls. Running the [one line](#2-on-the-pi-install) again does the same. |
 | `paper:status` | Whether the server and panel are running, the version and whether it's behind, where to open Papershow, which keys are set, and what the panel last drew. |
 | `paper:logs` | Follows both services' logs. `paper:logs server` or `paper:logs panel` for one; journalctl options go after, like `paper:logs panel -n 200`. |
+| `paper:help` | Lists these commands. |
 
 Installed before these commands existed? Update once the long way, which adds them:
 

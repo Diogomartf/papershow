@@ -18,11 +18,11 @@ sudo rm -rf /etc/systemd/system/papershow.service.d /etc/systemd/system/papersho
 sudo systemctl daemon-reload
 echo "Removed the papershow and papershow-panel services."
 
-for name in update status logs; do
+for name in update status logs help; do
   link=/usr/local/bin/paper:$name
   if [[ "$(readlink "$link" 2>/dev/null)" == */deploy/pi/paper.sh ]]; then sudo rm -f "$link"; fi
 done
-echo "Removed the paper:update, paper:status and paper:logs commands."
+echo "Removed the paper: commands."
 
 # Leave the panel white rather than showing a frozen Papershow frame.
 if [ -e /dev/spidev0.0 ]; then

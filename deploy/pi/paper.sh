@@ -5,6 +5,7 @@
 #   paper:update           get the latest main and reinstall
 #   paper:status           what's running, which version, where to open it, what the panel last drew
 #   paper:logs [server|panel] [journalctl options]   follow the logs, both services by default
+#   paper:help             list these commands
 #
 # Or call it directly: deploy/pi/paper.sh status
 set -euo pipefail
@@ -16,6 +17,16 @@ if [ "$cmd" = paper.sh ]; then
   cmd=${1:-}
   shift || true
 fi
+
+help() {
+  cat <<'EOF'
+Papershow on this Pi:
+  paper:status            what's running, which version, where to open it, what the panel last drew
+  paper:logs              follow the logs; paper:logs server or paper:logs panel for one
+  paper:update            get the latest main and reinstall
+  paper:help              this list
+EOF
+}
 
 port() {
   local p
@@ -69,8 +80,12 @@ case "$cmd" in
     exec journalctl "${units[@]}" -n 50 -f "$@"
     ;;
 
+  help | -h | --help)
+    help
+    ;;
+
   *)
-    echo "Usage: paper:update | paper:status | paper:logs [server|panel]" >&2
+    help >&2
     exit 1
     ;;
 esac
