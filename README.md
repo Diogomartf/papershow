@@ -142,12 +142,13 @@ The install asks whether to set up Tailscale. Say yes, open the link it prints t
 
 ### 5. On your Mac: add your API keys (optional)
 
-Without keys, the AI apps and Stocks show stand-in content. To use yours, copy your `.env` over from the repo on your Mac and restart the server:
+Without keys, the AI apps and Stocks show stand-in content. To use yours, run this in the repo on your Mac. It copies your `.env` to the Pi, makes it readable only by you, and restarts the server so it reads the keys:
 
 ```sh
-scp .env <user>@<hostname>.local:~/papershow/.env
-ssh <user>@<hostname>.local sudo systemctl restart papershow
+scp .env <user>@<hostname>.local:~/papershow/.env && ssh <user>@<hostname>.local 'chmod 600 ~/papershow/.env && sudo systemctl restart papershow'
 ```
+
+Run it again whenever you change a key. To check, open an AI app or Stocks on the Apps page: it shows real text and prices, not stand-in content. See [Configuration](#configuration) for the keys.
 
 ### 6. On your Mac: bring your drawings and shows (optional)
 
