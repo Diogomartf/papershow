@@ -4,6 +4,16 @@ An e-ink slideshow for an 800×480 black-and-white panel (Waveshare 7.5″). You
 
 All the work happens on the server. The panel never renders anything: it downloads a finished 1-bit frame and redraws only when that frame changes, because e-ink refreshes are slow and flash.
 
+## Install on a Raspberry Pi
+
+On a Pi 5 with 64-bit Raspberry Pi OS and the panel attached, run this one line:
+
+```sh
+command -v gh >/dev/null || { sudo apt-get update && sudo apt-get install -y gh; }; gh auth status >/dev/null 2>&1 || gh auth login; gh api repos/Diogomartf/papershow/contents/deploy/pi/install.sh -H "Accept: application/vnd.github.raw" | bash
+```
+
+It signs in to GitHub if needed (the repo is private), installs everything, offers to set up Tailscale, and starts the panel. Run it again to update. The details are in [On a Raspberry Pi](#on-a-raspberry-pi).
+
 ## Where it runs
 
 - **For real, on a Raspberry Pi 5** with the panel attached. The Pi runs the server and drives the panel, and starts both on boot. You open Papershow from your Mac or phone. See [On a Raspberry Pi](#on-a-raspberry-pi).
