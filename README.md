@@ -1,4 +1,4 @@
-# <img src="apps/web/public/icon-512.png" alt="" width="48" align="center" /> Papershow
+<h1><img src="docs/logo.png" alt="Papershow" width="420" /></h1>
 
 An e-ink slideshow for an 800×480 black-and-white panel (Waveshare 7.5″). You draw pictures and set up apps (clocks, AI text, news, prices) in the browser, arrange them into a show, and the panel fetches whatever is on air from `/live`.
 
