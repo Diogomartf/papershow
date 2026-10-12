@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Takes Papershow off the Pi: stops and removes both services, blanks the panel, and removes its
-# Tailscale address. Your drawings and shows stay in /var/lib/papershow unless you pass --purge.
-# Node, pnpm's cache, the Python libraries, SPI and Tailscale itself stay too: other things on the
+# Takes Papershow off the Pi: stops and removes both services and the paper: commands, blanks the
+# panel, and removes its Tailscale address. Your drawings and shows stay in /var/lib/papershow
+# unless you pass --purge. Node, pnpm's cache, the Python libraries, SPI and Tailscale itself stay too: other things on the
 # Pi may use them. Run deploy/pi/install.sh to put it all back.
 #
 #   deploy/pi/uninstall.sh            # keep the data
@@ -17,6 +17,12 @@ sudo rm -f /etc/systemd/system/papershow.service /etc/systemd/system/papershow-p
 sudo rm -rf /etc/systemd/system/papershow.service.d /etc/systemd/system/papershow-panel.service.d
 sudo systemctl daemon-reload
 echo "Removed the papershow and papershow-panel services."
+
+for name in update status logs; do
+  link=/usr/local/bin/paper:$name
+  if [[ "$(readlink "$link" 2>/dev/null)" == */deploy/pi/paper.sh ]]; then sudo rm -f "$link"; fi
+done
+echo "Removed the paper:update, paper:status and paper:logs commands."
 
 # Leave the panel white rather than showing a frozen Papershow frame.
 if [ -e /dev/spidev0.0 ]; then
