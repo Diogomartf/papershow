@@ -25,26 +25,117 @@ pnpm start               # NODE_ENV=production; serves the web app and the API o
 
 ## On a Raspberry Pi
 
-The usual setup is one Raspberry Pi 5 running both the server and the panel client, with the panel on its GPIO header. You open Papershow from your Mac or phone over Tailscale.
+The usual setup is one Raspberry Pi 5 running both the server and the panel client, with the panel on its GPIO header. You open Papershow from your Mac or phone, at home or away, over Tailscale.
+
+### You need
+
+- A Raspberry Pi 5 with a power supply and a microSD card.
+- A Waveshare 7.5″ e-Paper V2 (800×480, black and white) with its HAT, seated on the GPIO header.
+- A [Tailscale](https://tailscale.com) account, to reach it from outside your home.
+
+### 1. Flash the card
+
+In [Raspberry Pi Imager](https://www.raspberrypi.com/software/), pick **Raspberry Pi OS Lite (64-bit)**. Under *Edit settings*, set the hostname to `papershow`, create your user, add your Wi-Fi, and turn on SSH. Boot the Pi, then from your Mac:
 
 ```sh
-# On the Pi: 64-bit Raspberry Pi OS, Waveshare 7.5" V2 HAT attached
-git clone <this repo> papershow && cd papershow
-cp .env.example .env          # or copy your .env over
+ssh <user>@papershow.local
+```
+
+### 2. Get the code and your keys
+
+The repo is private, so sign in to GitHub on the Pi first:
+
+```sh
+sudo apt-get update && sudo apt-get install -y git gh
+gh auth login
+gh repo clone Diogomartf/papershow ~/papershow && cd ~/papershow
+```
+
+From your Mac, copy your `.env` over (or create one on the Pi from `.env.example`):
+
+```sh
+scp .env <user>@papershow.local:~/papershow/.env
+```
+
+### 3. Install
+
+```sh
 deploy/pi/install.sh
 ```
 
-The script installs Node and pnpm, builds the web app, turns on SPI, and installs two services that start on boot: `papershow` (the server on :5194) and `papershow-panel` (the client). If Tailscale is installed and logged in, it also runs `tailscale serve`, so Papershow is at `https://<pi>.<tailnet>.ts.net` from anywhere. Run it again after a `git pull` to update.
+The script installs Node 24 and pnpm, builds the web app, turns on SPI, installs the panel's Python libraries, and sets up two services that start on boot:
 
-- The database lives in `/var/lib/papershow/papershow.db`. To bring your drawings and shows from another machine, stop `papershow` and copy `apps/server/data/imagegen.db` there.
-- Logs: `journalctl -u papershow -f`, `journalctl -u papershow-panel -f`.
-- The panel client long-polls `/live.bin`, so it redraws as soon as the show changes and never in between. When the same app changes (a clock ticking), it uses a quick partial refresh; a new picture, or every 10th tick (`PANEL_PARTIAL`), gets a full refresh to clear ghosting. Between frames the panel sleeps.
-- Once a day, as night begins (the night hours under **Device** on the Dashboard), it deep-cleans the panel against ghosting: white, black, white, then the picture again. With night mode off it does this at 03:00 (`PANEL_CLEAN_HOUR`).
-- The panel's settings are in `/etc/systemd/system/papershow-panel.service`: `PANEL_ROTATE=180` because the frame holds it upside down, `PAPERSHOW_URL` to follow another server.
-- Only one thing may drive the panel. Remove any old e-ink cron jobs (`crontab -e`); the install script warns if it sees them.
+| Service | What it runs |
+|---|---|
+| `papershow` | The server: web app, API and `/live` on :5194. Data in `/var/lib/papershow/papershow.db`. |
+| `papershow-panel` | The panel client: shows the logo, then follows `/live` and draws it. |
+
+Papershow is now at `http://papershow.local:5194` on your home network, and the logo then the current frame appear on the panel.
+
+### 4. Reach it from anywhere
+
+```sh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up                 # open the link it prints and log in
+deploy/pi/install.sh              # again: this time it also runs `tailscale serve`
+```
+
+It prints the address, `https://papershow.<tailnet>.ts.net`. Open it on any device signed in to your tailnet. `tailscale serve` needs MagicDNS and HTTPS certificates turned on in the Tailscale admin console (DNS page). On a phone, add the page to the home screen.
+
+### 5. Bring your drawings and shows (optional)
+
+Stop the dev server on your Mac, then copy the database across:
+
+```sh
+scp apps/server/data/imagegen.db <user>@papershow.local:/tmp/
+ssh <user>@papershow.local 'sudo systemctl stop papershow &&
+  sudo cp /tmp/imagegen.db /var/lib/papershow/papershow.db &&
+  sudo chown $USER: /var/lib/papershow/papershow.db &&
+  sudo systemctl start papershow'
+```
+
+### 6. Set the night
+
+On the Dashboard, under **Device**, set the night hours (for example 01:00–10:00) and what the panel shows while asleep. The panel also deep-cleans itself as night begins.
+
+If the Pi used to run e-ink scripts from cron, remove them (`crontab -e`). Only one thing may drive the panel, and the install script warns if it finds any.
+
+### Updating
+
+```sh
+cd ~/papershow && git pull && deploy/pi/install.sh
+```
+
+### Panel settings
+
+Change these with `sudo systemctl edit papershow-panel`, which keeps them across reinstalls:
+
+```ini
+[Service]
+Environment=PANEL_PARTIAL=0
+```
+
+| Variable | Default on the Pi | What it does |
+|---|---|---|
+| `PAPERSHOW_URL` | `http://localhost:5194` | The server to follow. |
+| `PANEL_ROTATE` | `180` | Degrees to turn the frame. The frame holds the panel upside down. |
+| `PANEL_PARTIAL` | `10` | Quick partial refreshes in a row before a full one. `0` makes every refresh full, if partials leave ghosts. |
+| `PANEL_CLEAN_HOUR` | `3` | Hour of the daily deep clean when night mode is off. |
+
+### When something's off
+
+- Logs: `journalctl -u papershow -f` and `journalctl -u papershow-panel -f`.
+- The Dashboard's **Device** card shows when the panel last fetched `/live`.
+- Panel blank or stuck: check that SPI is on (`ls /dev/spidev0.0`) and that the HAT is seated, then `sudo systemctl restart papershow-panel`.
+- Try the client without a panel, on any machine: `PANEL_OUT=/tmp/panel.png python3 apps/panel/panel.py`.
+
+### How the panel client works
+
+- It long-polls `/live.bin`, so it redraws as soon as the show changes and never in between. When the same app changes (a clock ticking), it uses a quick partial refresh. A new picture, or every `PANEL_PARTIAL`-th tick, gets a full refresh to clear ghosting. Between frames the panel sleeps.
+- Once a day, as night begins, it deep-cleans the panel against ghosting: white, black, white, then the picture again.
+- On every start it shows the logo until the first frame arrives. That's `apps/panel/splash.png`, drawn by `apps/server/src/splash.tsx` (run `npx tsx src/splash.tsx` in `apps/server` after changing the logo).
+- If the server can't be reached, it keeps the current picture and retries every 30 s.
 - `apps/panel/waveshare_epd` is a copy of Waveshare's driver (MIT) that's known to work on this panel. Upstream has since changed the panel voltages, so update it only after testing.
-- On every start, the panel shows the Papershow logo until the first frame arrives. It's `apps/panel/splash.png`, drawn by `apps/server/src/splash.tsx` (run it with `npx tsx src/splash.tsx` after changing the logo).
-- To try the client without a panel: `PANEL_OUT=/tmp/panel.png python3 apps/panel/panel.py`.
 
 ## Architecture
 
