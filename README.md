@@ -100,7 +100,7 @@ What the install script changes, and what it leaves alone:
 - **pnpm**: it runs pnpm 7 through `npx`, so a pnpm the Pi already has stays as it is.
 - **SPI** gets turned on. Python libraries come from apt and don't replace anything.
 - **Tailscale**: if the Pi already serves something through `tailscale serve`, that setup is left alone, and the script prints the command to add Papershow on port 8443.
-- **The panel**: nothing else may drive it. Old e-ink scripts on cron get a warning but aren't removed: take them out with `crontab -e`. If you used [pi-e-ink](https://github.com/Diogomartf/pi-e-ink), that's its `clean.py`, `tokens.py`, `stocks.py` and `ai_clock.py` lines. The deep clean, the 180° rotation and the night pause now live in Papershow.
+- **The panel**: nothing else may drive it. When it's done, the install lists anything else that might draw on it: e-ink lines in your or root's crontab or `/etc/cron.d`, systemd units and timers, and programs holding the SPI device. It doesn't remove any of them, because they may be yours to keep. Take out the ones that draw, with `crontab -e` for cron. If you used [pi-e-ink](https://github.com/Diogomartf/pi-e-ink), that's its `clean.py`, `tokens.py`, `stocks.py` and `ai_clock.py` lines. The deep clean, the 180° rotation and the night pause now live in Papershow.
 - **Data** goes in `/var/lib/papershow`, outside your checkout.
 
 ### You need
