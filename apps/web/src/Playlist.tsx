@@ -515,7 +515,8 @@ export function Playlist({ id }: { id: string | null }) {
       </main>
 
       {sel && !resizing && !dragging && (
-        <FloatingMenu anchor={clipEls.current.get(sel.id) ?? null} onClose={() => setSelected(null)}>
+        // Clicks in the clip's settings below keep it selected: only clicking elsewhere lets go.
+        <FloatingMenu anchor={clipEls.current.get(sel.id) ?? null} onClose={() => setSelected(null)} keepOpenWithin=".inspector">
           <button role="menuitem" onClick={() => pin(sel.source)}>Show now</button>
           {slides.indexOf(sel) > 0 && (
             <button role="menuitem" onClick={() => move(sel.id, -1)} aria-label="Play earlier">← Earlier</button>

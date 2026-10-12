@@ -36,7 +36,18 @@ export function useUndoToast() {
  * A small menu floating above an element. Fixed-positioned so it escapes
  * scrolling containers; follows the anchor when they scroll.
  */
-export function FloatingMenu({ anchor, children, onClose }: { anchor: HTMLElement | null; children: React.ReactNode; onClose: () => void }) {
+export function FloatingMenu({
+  anchor,
+  children,
+  onClose,
+  keepOpenWithin,
+}: {
+  anchor: HTMLElement | null;
+  children: React.ReactNode;
+  onClose: () => void;
+  /** A selector for other places a click shouldn't close it, such as the selected clip's own settings. */
+  keepOpenWithin?: string;
+}) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const self = useRef<HTMLDivElement>(null);
 
@@ -51,7 +62,9 @@ export function FloatingMenu({ anchor, children, onClose }: { anchor: HTMLElemen
     addEventListener("resize", place);
     const away = (e: PointerEvent) => {
       const t = e.target as Node;
-      if (!self.current?.contains(t) && !anchor.contains(t)) onClose();
+      if (self.current?.contains(t) || anchor.contains(t)) return;
+      if (keepOpenWithin && t instanceof Element && t.closest(keepOpenWithin)) return;
+      onClose();
     };
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     addEventListener("pointerdown", away);
@@ -62,7 +75,7 @@ export function FloatingMenu({ anchor, children, onClose }: { anchor: HTMLElemen
       removeEventListener("pointerdown", away);
       removeEventListener("keydown", esc);
     };
-  }, [anchor, onClose]);
+  }, [anchor, onClose, keepOpenWithin]);
 
   if (!anchor || !pos) return null;
   return (
