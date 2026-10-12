@@ -1,5 +1,21 @@
 import { toSvg } from "drawesome";
-import { dither, pack1bpp, type Scene } from "@papershow/scene";
+import { dither, pack1bpp, TEXT_FONT, TEXT_LINE, type Scene, type TextItem } from "@papershow/scene";
+
+const fontOf = (t: TextItem) => `${t.bold ? 700 : 450} ${t.size}px ${TEXT_FONT}`;
+
+/** Paint text the way the browser lays it out in the editor: the font's ascent and descent centred in each line. */
+async function drawTexts(ctx: CanvasRenderingContext2D, texts: TextItem[]) {
+  await Promise.all(texts.map((t) => document.fonts.load(fontOf(t), t.text)));
+  ctx.textBaseline = "alphabetic";
+  for (const t of texts) {
+    ctx.font = fontOf(t);
+    ctx.fillStyle = t.color;
+    const { fontBoundingBoxAscent: asc, fontBoundingBoxDescent: desc } = ctx.measureText(t.text);
+    const line = t.size * TEXT_LINE;
+    const baseline = (line - (asc + desc)) / 2 + asc;
+    t.text.split("\n").forEach((row, i) => ctx.fillText(row, t.x, t.y + line * i + baseline));
+  }
+}
 
 async function sceneToCanvas(scene: Scene): Promise<HTMLCanvasElement> {
   const svg = toSvg(scene.strokes, scene.width, scene.height, scene.background);
@@ -13,7 +29,9 @@ async function sceneToCanvas(scene: Scene): Promise<HTMLCanvasElement> {
   const canvas = document.createElement("canvas");
   canvas.width = scene.width;
   canvas.height = scene.height;
-  canvas.getContext("2d")!.drawImage(img, 0, 0, scene.width, scene.height);
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(img, 0, 0, scene.width, scene.height);
+  if (scene.texts?.length) await drawTexts(ctx, scene.texts);
   return canvas;
 }
 

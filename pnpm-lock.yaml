@@ -32,6 +32,7 @@ importers:
 
   apps/web:
     specifiers:
+      '@fontsource-variable/inter': ^5.3.0
       '@papershow/scene': workspace:*
       '@types/node': ^24.13.3
       '@types/react': ^19.2.18
@@ -44,6 +45,7 @@ importers:
       typescript: ~6.0.2
       vite: ^8.3.0
     dependencies:
+      '@fontsource-variable/inter': 5.3.0
       '@papershow/scene': link:../../packages/scene
       drawesome: 0.1.2_e3cbrgf6bscnlwawgospfwyoim
       react: 19.3.0
@@ -301,6 +303,10 @@ packages:
 
   /@expo-google-fonts/inter/0.4.2:
     resolution: {integrity: sha512-syfiImMaDmq7cFi0of+waE2M4uSCyd16zgyWxdPOY7fN2VBmSLKEzkfbZgeOjJq61kSqPBNNtXjggiQiSD6gMQ==}
+    dev: false
+
+  /@fontsource-variable/inter/5.3.0:
+    resolution: {integrity: sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA==}
     dev: false
 
   /@hono/node-server/2.1.4_hono@4.13.13:

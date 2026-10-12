@@ -1178,3 +1178,68 @@ a.ghost { display: inline-block; }
 
 /* Drawesome clips its root; let the toolbar hang below the panel onto the shelf. */
 .panel [class*="Draw_root"] { overflow: visible; }
+
+/* ── Text on the drawing ───────────────────────────── */
+
+.text-layer { position: absolute; inset: 0; z-index: 2; container-type: size; pointer-events: none; }
+.text-layer[data-active="true"] { pointer-events: auto; cursor: text; touch-action: none; }
+.text-clip { position: absolute; inset: 0; overflow: clip; }
+
+/* Corner handles: drag one to scale the text */
+.handle {
+  position: absolute; width: 9px; height: 9px; z-index: 2;
+  background: #fff; border: 1.5px solid #e89a3c; border-radius: 2px;
+  touch-action: none;
+}
+.handle::after { content: ""; position: absolute; inset: -9px; } /* a bigger target for fingers */
+.handle.nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.handle.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.handle.ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.handle.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+
+/* Centre guides while dragging a text: a line through the middle when it's centred */
+.guide {
+  position: absolute; z-index: 1; pointer-events: none;
+  background: #ff3b8d;
+  opacity: 0; transition: opacity 120ms var(--ease-out);
+}
+.guide[data-on="true"] { opacity: 1; transition: none; } /* snap on instantly, fade off */
+.guide.v { left: calc(50% - 1px); top: 0; bottom: 0; width: 2px; }
+.guide.h { top: calc(50% - 1px); left: 0; right: 0; height: 2px; }
+.text-item {
+  position: absolute; white-space: pre; user-select: none;
+  /* nudge so the box edge, not the glyphs, sits on the point */
+  padding: 0; margin: 0; letter-spacing: 0;
+}
+.text-layer[data-active="true"] .text-item { cursor: grab; border-radius: 3px; }
+.text-layer[data-active="true"] .text-item:hover { box-shadow: 0 0 0 1px rgba(232,154,60,.55); }
+.text-item[data-selected="true"] { box-shadow: 0 0 0 1.5px #e89a3c !important; }
+.text-item[data-editing="true"] { cursor: text; user-select: text; }
+.text-edit { outline: none; min-width: .5em; caret-color: #e89a3c; }
+.text-edit:empty::before { content: "Type here"; opacity: .35; }
+.panel:has(.eink[data-on="true"]) .text-item { opacity: .3; }
+
+.text-tools {
+  position: absolute; z-index: 3; transform: translateY(calc(-100% - 8px));
+  display: flex; align-items: center; gap: 2px; padding: 3px;
+  border-radius: 9px; background: var(--surface); color: var(--ink);
+  box-shadow: 0 0 0 1px var(--line), 0 8px 20px -8px var(--drop);
+  font-size: 13px; white-space: nowrap; cursor: default;
+}
+.text-tools button {
+  height: 28px; min-width: 30px; padding: 0 8px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--ink-2); font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+.text-tools button:hover:not(:disabled) { background: var(--tint); color: var(--ink); }
+.text-tools button:disabled { opacity: .35; }
+.text-tools button[aria-pressed="true"] { background: var(--tint); color: var(--ink); }
+.text-tools button.danger { color: var(--danger, #c4443a); }
+.text-tools .tabular { min-width: 26px; text-align: center; color: var(--ink-3); font-size: 12px; }
+.text-tools svg { display: block; margin: auto; }
+.text-tools .tools-sep { width: 1px; height: 16px; margin: 0 3px; background: var(--line); }
+.text-tools .swatch-btn span { display: block; width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 1px var(--ink-3); }
+
+.text-toggle { display: inline-flex; align-items: center; gap: 6px; }
+.text-toggle[aria-pressed="true"] { background: var(--tint); color: var(--ink); }
+.text-glyph { font: 700 13px/1 Georgia, serif; }

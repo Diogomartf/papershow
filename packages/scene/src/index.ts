@@ -6,6 +6,22 @@ import type { Stroke } from "drawesome";
 /** The Waveshare 7.5" B/W panel. Every scene is authored at panel resolution. */
 export const PANEL = { w: 800, h: 480 } as const;
 
+/** Typed words on top of the drawing. Panel pixels; `y` is the top of the first line. */
+export type TextItem = {
+  id: string;
+  x: number;
+  y: number;
+  text: string;
+  /** Font size in panel pixels. */
+  size: number;
+  bold: boolean;
+  color: string;
+};
+
+/** Line height as a multiple of the font size, the same on screen and in the saved image. */
+export const TEXT_LINE = 1.2;
+export const TEXT_FONT = '"Inter Variable", Inter, sans-serif';
+
 export type Scene = {
   id: string;
   name: string;
@@ -13,6 +29,8 @@ export type Scene = {
   height: number;
   background: string;
   strokes: Stroke[];
+  /** Drawn above the strokes. Older scenes have none. */
+  texts?: TextItem[];
   createdAt: number;
   updatedAt: number;
 };
