@@ -43,6 +43,7 @@ The script installs Node and pnpm, builds the web app, turns on SPI, and install
 - The panel's settings are in `/etc/systemd/system/papershow-panel.service`: `PANEL_ROTATE=180` because the frame holds it upside down, `PAPERSHOW_URL` to follow another server.
 - Only one thing may drive the panel. Remove any old e-ink cron jobs (`crontab -e`); the install script warns if it sees them.
 - `apps/panel/waveshare_epd` is a copy of Waveshare's driver (MIT) that's known to work on this panel. Upstream has since changed the panel voltages, so update it only after testing.
+- On every start, the panel shows the Papershow logo until the first frame arrives. It's `apps/panel/splash.png`, drawn by `apps/server/src/splash.tsx` (run it with `npx tsx src/splash.tsx` after changing the logo).
 - To try the client without a panel: `PANEL_OUT=/tmp/panel.png python3 apps/panel/panel.py`.
 
 ## Architecture

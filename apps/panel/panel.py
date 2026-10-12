@@ -94,6 +94,9 @@ class FilePanel:
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     panel = FilePanel(OUT) if OUT else Panel()
+    # The logo while the server starts up (apps/server/src/splash.tsx draws it).
+    splash = os.path.join(os.path.dirname(os.path.abspath(__file__)), "splash.png")
+    panel.show(Image.open(splash).convert("1").rotate(ROTATE), True)
     log.info("following %s", URL)
     etag = source = img = was_asleep = None
     partials = PARTIAL  # the first frame after a start is a full refresh
