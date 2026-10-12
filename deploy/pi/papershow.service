@@ -1,0 +1,20 @@
+# The server: API, web app and /live. install.sh fills in @USER@ and @REPO@.
+[Unit]
+Description=Papershow server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=@USER@
+WorkingDirectory=@REPO@/apps/server
+Environment=NODE_ENV=production
+Environment=PORT=@PORT@
+# Outside the checkout, so a fresh clone or a reset doesn't touch your drawings and shows.
+Environment=DB=/var/lib/papershow/papershow.db
+StateDirectory=papershow
+ExecStart=@REPO@/apps/server/node_modules/.bin/tsx src/index.ts
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

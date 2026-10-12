@@ -8,6 +8,7 @@ Read [README.md](README.md) first for how the pieces fit. This file covers the d
 pnpm dev                                   # web :5193 + server :5194, both reload on save
 cd apps/server && pnpm typecheck           # server types
 cd apps/web && npx tsc -b && pnpm lint     # web types + oxlint
+PANEL_OUT=/tmp/panel.png python3 apps/panel/panel.py   # the panel client, drawing to a PNG
 ```
 
 There are no unit tests yet. Check your work by rendering frames and looking at them (see [Check it](#4-check-it)).
@@ -19,6 +20,21 @@ There are no unit tests yet. Check your work by rendering frames and looking at 
 - Server code reads `process.env` when it needs a value, not at import time: `.env` is loaded after modules are imported.
 - Secrets go in `.env` at the repo root, never in code. Document every new key in `.env.example` and in the README's Configuration table.
 - When you add or change an app, update the README's apps table: data source, key, refresh.
+
+## The panel and the Pi
+
+`apps/panel/panel.py` drives the e-ink panel; `deploy/pi/` installs the server and the client on a Raspberry Pi 5. The README's [On a Raspberry Pi](README.md#on-a-raspberry-pi) section covers using them; this covers changing them.
+
+- **The client knows only the contract.** It follows [The panel's contract](README.md#the-panels-contract) and nothing else, so it can follow any server. Anything the panel needs to know (night, what changed, when) goes in `/live`'s headers, not in client settings. If you change the contract, change the client in the same commit.
+- **Keep the client small.** Python standard library plus Pillow, which comes from apt on the Pi. No pip installs: Waveshare's pip package pulls in `RPi.GPIO`, which doesn't work on a Pi 5.
+- **Don't update `apps/panel/waveshare_epd`.** It's the copy known to work on this panel. Upstream changed the panel voltages since. Replace it only after trying the new one on the real panel.
+- **Refreshes cost flashes.** Full refreshes for a new source, partials for the same source, a deep clean once a day as night begins. Don't add redraws the server didn't ask for.
+- **Check client changes** with `PANEL_OUT`, against `pnpm dev` and with the server stopped. You can't run the real panel off the Pi, so say in the PR what still needs a test on it.
+- **The splash** (`apps/panel/splash.png`) is rendered by `apps/server/src/splash.tsx`. Run `npx tsx src/splash.tsx` in `apps/server` after changing the logo, and commit the PNG.
+- **`install.sh` is also the one-line install.** Piped into `bash` (README step 2), it clones or updates `~/papershow` and runs the checkout's copy with `exec`. Until that `exec`, bash is still reading the script from stdin, so every command there takes `</dev/null`. Prompts (Tailscale) read from `/dev/tty`, and are skipped when there's none. Keep the one line in the README, the PR and the script's header comment the same.
+- **pnpm is pinned to 7**, the version that wrote `pnpm-lock.yaml`; newer ones refuse it. The install runs it through `npx pnpm@7`. Upgrading pnpm means regenerating the lockfile and changing both.
+- **`install.sh` runs on Pis that are also used for other things.** Keep it safe to rerun, and don't take over what's already there: ports, Tailscale serve, cron, the system Node. Check and warn, or stop with a clear message. The units in `deploy/pi/*.service` are templates: `@USER@`, `@REPO@` and `@PORT@` are filled in on install, and personal settings go in `systemctl edit` drop-ins, which survive reinstalls.
+- New client settings are environment variables: document them in `panel.py`'s docstring and in the README's Panel settings table.
 
 ## Building an e-ink app
 

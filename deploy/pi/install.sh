@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Sets up Papershow on a Raspberry Pi 5 with 64-bit Raspberry Pi OS (Bookworm or later):
+# the server and the panel client, both as systemd services that start on boot.
+# It's safe to run again, and it leaves the rest of a Pi you already use alone.
+#
+# From a checkout:   deploy/pi/install.sh
+# Or in one line, without one: it clones the repo to ~/papershow (or updates it) and carries on.
+#   gh api repos/Diogomartf/papershow/contents/deploy/pi/install.sh -H "Accept: application/vnd.github.raw" | bash
+#
+#   PAPERSHOW_PORT=8080     if something else already uses 5194
+#   PAPERSHOW_DIR=~/x       where the one-line install puts the checkout (~/papershow)
+#   PAPERSHOW_BRANCH=main   which branch it checks out (main)
+set -euo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)
+if [ ! -f "$here/install.sh" ] || [ ! -f "$here/../../package.json" ]; then
+  # Piped in, not run from a checkout: get the code, then run the checkout's copy of this script.
+  # Everything here reads from /dev/null, because the rest of this script is still waiting on stdin.
+  dir=${PAPERSHOW_DIR:-$HOME/papershow}
+  branch=${PAPERSHOW_BRANCH:-main}
+  command -v git >/dev/null || sudo apt-get install -y git </dev/null
+  if [ -d "$dir/.git" ]; then
+    git -C "$dir" fetch --quiet origin </dev/null
+    git -C "$dir" switch --quiet "$branch" </dev/null
+    git -C "$dir" pull --quiet --ff-only </dev/null
+  elif command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
+    gh repo clone Diogomartf/papershow "$dir" -- --branch "$branch" </dev/null
+  else
+    # Works once the repo is public; until then, `gh auth login` first.
+    git clone --branch "$branch" https://github.com/Diogomartf/papershow.git "$dir" </dev/null
+  fi
+  exec bash "$dir/deploy/pi/install.sh" </dev/null
+fi
+
+repo=$(cd "$here/../.." && pwd)
+user=$(id -un)
+port=${PAPERSHOW_PORT:-5194}
+
+if [ "$(uname -m)" != aarch64 ]; then
+  echo "Papershow needs 64-bit Raspberry Pi OS (this is $(uname -m))." >&2
+  exit 1
+fi
+# The port must be free, unless it's Papershow itself from an earlier install.
+if ss -ltn "sport = :$port" | grep -q LISTEN && ! systemctl is-active --quiet papershow; then
+  echo "Port $port is taken. Pick another: PAPERSHOW_PORT=8080 deploy/pi/install.sh" >&2
+  exit 1
+fi
+
+# Node with node:sqlite unflagged (22.13+). Node 24 is the current LTS. This replaces an older
+# system Node, which other things on the Pi may use; a newer one is left as it is.
+if ! node -e 'require("node:sqlite")' 2>/dev/null; then
+  command -v node >/dev/null && echo "Upgrading Node $(node -v) to 24 (Papershow needs node:sqlite)."
+  curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+  sudo apt-get install -y nodejs
+fi
+# The pnpm that wrote pnpm-lock.yaml (v7; newer ones can't read it frozen), through npx so a
+# pnpm the Pi already has stays as it is.
+pnpm() { npx --yes pnpm@7 "$@"; }
+
+cd "$repo"
+pnpm install --frozen-lockfile
+pnpm build
+
+# The panel: SPI on, and Python libraries from apt (Pi 5 GPIO goes through gpiozero and lgpio).
+# Waveshare's driver is in apps/panel/waveshare_epd.
+sudo raspi-config nonint do_spi 0
+sudo apt-get install -y python3-pil python3-spidev python3-gpiozero python3-lgpio
+
+# Only one thing can drive the panel. Old scripts on a cron would fight the client over SPI.
+if crontab -l 2>/dev/null | grep -qE 'epd|e-ink|e_ink'; then
+  echo "Warning: your crontab still has e-ink jobs. Remove them (crontab -e) so they don't draw over Papershow." >&2
+fi
+
+for unit in papershow papershow-panel; do
+  sed -e "s|@USER@|$user|g" -e "s|@REPO@|$repo|g" -e "s|@PORT@|$port|g" "deploy/pi/$unit.service" |
+    sudo tee "/etc/systemd/system/$unit.service" >/dev/null
+done
+sudo systemctl daemon-reload
+sudo systemctl enable papershow papershow-panel
+sudo systemctl restart papershow papershow-panel
+
+echo "Papershow: http://$(hostname).local:$port"
+
+# Reach it from your Mac and phone, at home or away, over HTTPS. Tailscale is a VPN, so ask before
+# installing it; with no one at the keyboard, skip it. A Pi you already use may serve other things
+# through Tailscale; that setup is left alone.
+if ! command -v tailscale >/dev/null && [ -r /dev/tty ]; then
+  read -rp "Install Tailscale, to open Papershow from anywhere? [Y/n] " answer </dev/tty || answer=n
+  if [[ ! "$answer" =~ ^[Nn] ]]; then
+    curl -fsSL https://tailscale.com/install.sh | sh
+  fi
+fi
+if command -v tailscale >/dev/null && ! tailscale status >/dev/null 2>&1 && [ -r /dev/tty ]; then
+  echo "Log in to Tailscale: open the link below."
+  sudo tailscale up </dev/tty || true
+fi
+if command -v tailscale >/dev/null && tailscale status >/dev/null 2>&1; then
+  name=$(tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')
+  serving=$(sudo tailscale serve status 2>/dev/null || true)
+  if grep -q "127.0.0.1:$port" <<<"$serving"; then
+    echo "Tailscale: already serving Papershow (sudo tailscale serve status shows where)"
+  elif [ -z "$serving" ] || grep -q "No serve config" <<<"$serving"; then
+    sudo tailscale serve --bg "$port"
+    echo "Tailscale: https://$name"
+  else
+    echo "Tailscale already serves something else on this Pi, so it was left alone. To add Papershow on its own port:"
+    echo "  sudo tailscale serve --bg --https=8443 $port    # then https://$name:8443"
+  fi
+else
+  echo "Without Tailscale, Papershow is only reachable at home. Run this again to set it up."
+fi
