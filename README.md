@@ -10,7 +10,7 @@ Needs Node 22.5 or later (the server uses the built-in `node:sqlite`) and pnpm.
 
 ```sh
 pnpm install
-cp .env.example .env     # optional: API keys for the AI and Stocks apps
+cp .env.example .env     # optional: API keys for the AI apps, Stocks and stock logos
 pnpm dev                 # web on :5193, server on :5194
 ```
 
@@ -88,22 +88,24 @@ The nav runs Dashboard, Show, Apps, Draw. Every page has the light switch (the p
 
 ### Dashboard (`/`)
 
-What's on the panel now: the frame, its name, which playlist it's from, and a progress bar for the current clip. Below it:
+What's on the panel now: the frame, its name, which playlist it's from, and a progress bar for the current clip. When the panel changes picture, the frame plays a full e-ink refresh (old picture inverted, black, white, black, new picture inverted, then settled) instead of cutting. Below it:
 - **Up next**: the next clip and how it will look when it airs. It's rendered ahead, so a clock shows the right time.
 - **Device**: night hours and what the panel shows while asleep, plus when a display last fetched `/live`.
 - **Sequence**: the next hour or so of the loop, with what plays when.
 
 ### Show (`/show`)
 
-The running order. Add playlists, or single drawings and apps, then reorder them, set durations, switch entries on or off, or set a single entry to repeat on the clock. The header shows how long one pass of the loop takes.
+The running order. Add playlists, or single drawings and apps, then reorder them, set durations, switch entries on or off, or set a single entry to repeat on the clock. The header shows how long one pass of the loop takes. Under **Add to the show**, each playlist is a card with a glimpse of its first three clips stacked like a deck, its item count and its length.
 
 ### Playlists (`/playlist/:id`)
 
-One playlist as a timeline. Drag drawings and apps from the strip into it (on phones: tap to add, tap to reorder). Select a clip to set its duration in minutes, its weekdays and time window, show it now, move it earlier or later, or remove it. Tabs across the top switch between playlists. Double-click a tab to rename it. Zoom with the buttons, pinch, or ⌘/Ctrl + wheel. While dragging, a glowing gap shows where the clip will land.
+One playlist as a timeline, with the live picture on top. Drag drawings and apps from the strip into it (on phones: tap to add, tap to reorder). Select a clip and two things open: a small menu above it (**Show now**, **Earlier**, **Later**, **Remove**) and its settings below the timeline (duration in minutes, weekdays, time window, in the loop or not). Clicking anywhere else, or Esc, lets go of it. Tabs across the top switch between playlists. Double-click a tab to rename it. Zoom with the buttons, pinch, or ⌘/Ctrl + wheel. While dragging, a glowing gap shows where the clip will land.
 
 ### Apps (`/apps`)
 
 Your app instances on the left, with live thumbnails, and **New app** grouped by category. The middle shows a preview that updates as you type. Switch it between **E-ink** (exactly what the panel shows) and **Original** (the full-colour render at 2×, before it's reduced to 1 bit). On the right are the app's settings, with **Show now**, **Add to the show**, **Duplicate** and **Delete**. Each app's settings name where its data comes from, and show a **Mock data** chip while it's running on stand-in content.
+
+Some apps take a few seconds the first time, because they fetch before they can draw: Stocks asks Massive for movers, closes and company names and logo.dev for logos; Crypto asks CoinGecko and Trust Wallet. While a preview renders, the panel shows an e-ink loader with "Loading Stocks…" (or a small "Updating…" pill over the current picture when you change a setting). The loader only appears after a moment, so fast renders don't flicker. If a render fails, the panel says so instead of staying blank. Everything that doesn't change is cached after the first render.
 
 | App | Category | Data from | Key | New frame |
 |---|---|---|---|---|
@@ -142,6 +144,19 @@ A saved drawing on its own, to look at, drag out or download.
 ### `/live`
 
 What the panel shows right now, as a 1-bit PNG. Open it in a tab to watch it.
+
+## The interface, e-ink first
+
+The web app looks like the device it drives: the panel sits in a wooden frame on a shelf, and the page dims after sunset. A few pieces carry the e-ink feel and are shared:
+
+| Piece | Where | What it does |
+|---|---|---|
+| `EinkImage` | Dashboard, Playlist | Swaps the live picture with a full e-ink refresh, in hard steps. The new picture is decoded first, so the flash never lands on a blank frame. Reduced motion: a plain swap. |
+| `Blocks` | Apps preview | The loader: a 3×3 grid of rounded "pixels" flipping out of step between paper, ink and a dithered ghost, in hard steps. |
+| `LiveLink` | Every page | A live thumbnail of the panel with "Open /live" under it. All live views in a tab share one long-poll. |
+| `FloatingMenu`, `MenuItem` | Playlist clips, Dashboard sequence | Small action menus on the theme's surface, with icons and a separate, red **Remove**. |
+| `LightSwitch` | Every page | Light and dark follow the sun; a flip holds until the next sunrise or sunset. |
+| E-ink / Original | Apps preview, Draw (Ink / E-ink) | See exactly what the panel will show, or the full-colour version. |
 
 ## The panel's contract
 
