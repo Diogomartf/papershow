@@ -22,6 +22,9 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
   const [apps, setApps] = useState<AppInstance[] | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  // Rendering can take a few seconds (prices, names, logos fetched first): say so, and say if it failed.
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
   // The preview as the panel shows it, or the full-resolution render before it's reduced to 1 bit.
   const [view, setView] = useState<"eink" | "original">(() => (localStorage.getItem("apps-view") === "original" ? "original" : "eink"));
   useEffect(() => localStorage.setItem("apps-view", view), [view]);
@@ -52,6 +55,12 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
   // Load the selected app into the form.
   const lastSaved = useRef("");
   useEffect(() => {
+    // Another app: don't leave the last one's picture up while this one renders.
+    setPreview((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return null;
+    });
+    setFailed(false);
     if (current && kind) {
       const d = { id: current.id, name: current.name, config: toForm(kind.fields, current.config) };
       lastSaved.current = body(d);
@@ -69,14 +78,26 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
     if (!draft || !kind) return;
     const ctrl = new AbortController();
     let url: string | null = null;
-    const run = () =>
-      appsApi.previewApp(kind.kind, draft.config, ctrl.signal, view === "original").then((u) => {
-        url = u;
-        setPreview((old) => {
-          if (old) URL.revokeObjectURL(old);
-          return u;
-        });
-      }, () => {});
+    const run = () => {
+      setLoading(true);
+      return appsApi.previewApp(kind.kind, draft.config, ctrl.signal, view === "original").then(
+        (u) => {
+          url = u;
+          setPreview((old) => {
+            if (old) URL.revokeObjectURL(old);
+            return u;
+          });
+          setLoading(false);
+          setFailed(false);
+        },
+        () => {
+          // Aborted: a newer render took over, and it owns the loading state.
+          if (ctrl.signal.aborted) return;
+          setLoading(false);
+          setFailed(true);
+        },
+      );
+    };
     const t = setTimeout(run, 180);
     const tick = kind.periodMs <= 60_000 ? setInterval(run, 15_000) : undefined;
     return () => {
@@ -200,6 +221,17 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
                 <img className="live-img" data-view={view} key={preview} src={preview} alt="" />
               ) : (
                 <p className="panel-empty">{apps?.length === 0 ? "Pick an app on the left to set it up." : ""}</p>
+              )}
+              {(current || isNew) && loading && (
+                <div className="panel-loading" data-over={!!preview} role="status">
+                  <span className="spinner" aria-hidden />
+                  {preview ? "Updating…" : `Loading ${kind?.name ?? "app"}…`}
+                </div>
+              )}
+              {(current || isNew) && failed && !loading && (
+                <div className="panel-loading failed" role="alert">
+                  Couldn’t load {kind?.name ?? "this app"}. Its data source may be down; it will try again as you change settings.
+                </div>
               )}
             </div>
             <span className="ribbon" aria-hidden />

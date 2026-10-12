@@ -517,6 +517,32 @@ a.live-link:hover .live-link-text { color: var(--ink); }
   50% { filter: invert(0) brightness(1.4); }
   100% { filter: var(--dim); }
 }
+/* Rendering an app: waits a beat before showing, so quick renders (a ticking clock) don't flicker. */
+.panel-loading {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 24px; text-align: center;
+  color: var(--ink-2); font-size: 14px; font-weight: 520;
+  opacity: 0; animation: loadingIn 200ms 300ms var(--ease-out) forwards;
+}
+/* Over an older picture: a quiet pill in the corner, the picture stays readable. */
+.panel-loading[data-over="true"] {
+  inset: auto 12px 12px auto;
+  padding: 6px 12px; border-radius: 999px;
+  background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 4px 12px -6px var(--drop);
+  font-size: 12px;
+}
+.panel-loading.failed { color: var(--danger); animation-delay: 0ms; max-width: 46ch; margin: auto; }
+@keyframes loadingIn { to { opacity: 1; } }
+.spinner {
+  width: 14px; height: 14px; flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: var(--ink-2);
+  animation: spin 700ms linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+
 .panel-empty {
   position: absolute; inset: 0;
   display: grid; place-items: center;
