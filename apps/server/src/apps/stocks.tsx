@@ -1,3 +1,4 @@
+import { ditheredImage, isOriginal } from "../render.ts";
 import { Badge, Trend } from "./marks.tsx";
 import { defineApp, money, sheet, wobble } from "./types.ts";
 
@@ -16,6 +17,33 @@ const MOVERS = {
 };
 
 type Mover = { ticker: string; name: string; close: number; change: number };
+
+/** The badge's size and corner, so a logo takes exactly its place. */
+const MARK = 104;
+const MARK_RADIUS = MARK * 0.22;
+
+// Company logos from logo.dev, by ticker. They don't change: each is fetched once, then dithered once.
+const logos = new Map<string, Promise<string | null>>();
+
+/** A ticker's logo as a 1-bit data URL, or null to keep the drawn badge (no LOGO_DEV_TOKEN, or logo.dev has none). */
+function logoOf(ticker: string): Promise<string | null> {
+  const token = process.env.LOGO_DEV_TOKEN;
+  if (!token) return Promise.resolve(null);
+  const key = `${ticker}${isOriginal() ? ":original" : ""}`;
+  let logo = logos.get(key);
+  if (!logo) {
+    // fallback=404: no made-up monogram; our own badge is the fallback.
+    const url = `https://img.logo.dev/ticker/${encodeURIComponent(ticker)}?token=${token}&size=256&format=png&fallback=404`;
+    logo = fetch(url, { signal: AbortSignal.timeout(10_000) }).then(
+      async (res) => (res.ok ? ditheredImage(new Uint8Array(await res.arrayBuffer()), MARK, MARK, { radius: MARK_RADIUS }) : null),
+      () => (logos.delete(key), null),
+    );
+    logos.set(key, logo);
+  }
+  return logo;
+}
+
+const withLogos = (movers: Mover[]) => Promise.all(movers.map(async (m) => ({ ...m, logo: await logoOf(m.ticker) })));
 
 const MASSIVE = "https://api.massive.com";
 const key = () => process.env.MASSIVE_API_KEY;
@@ -128,7 +156,7 @@ const last = new Map<string, Mover[]>();
 export default defineApp({
   kind: "stocks",
   category: "markets",
-  source: "Massive",
+  source: "Massive, logos from logo.dev",
   name: "Stocks",
   description: "Today's biggest movers in the US stock market, from Massive.",
   defaults: { list: "gainers" },
@@ -154,24 +182,26 @@ export default defineApp({
         const found = await movers(list, now);
         if (!found.length) throw new Error("massive: no movers yet today");
         last.set(list, found);
-        return found;
+        return withLogos(found);
       } catch (err) {
         const old = last.get(list);
-        if (old) return old;
+        if (old) return withLogos(old);
         throw err;
       }
     }
     const t = now.getTime() / (15 * 60_000);
-    return MOVERS[list].map((s) => {
-      const drift = 0.006 * wobble(s.ticker, t);
-      return { ...s, close: s.close * (1 + drift), change: s.change + drift * 100 };
-    });
+    return withLogos(
+      MOVERS[list].map((s) => {
+        const drift = 0.006 * wobble(s.ticker, t);
+        return { ...s, close: s.close * (1 + drift), change: s.change + drift * 100 };
+      }),
+    );
   },
   view: ({ data }) => (
     <div style={{ ...sheet, flexDirection: "column", justifyContent: "center", padding: "0 44px", gap: 30 }}>
       {data.map((s) => (
         <div key={s.ticker} style={{ display: "flex", alignItems: "center", width: "100%" }}>
-          <Badge text={s.ticker} size={104} />
+          {s.logo ? <img src={s.logo} width={MARK} height={MARK} /> : <Badge text={s.ticker} size={MARK} />}
           <div style={{ display: "flex", flexDirection: "column", marginLeft: 24, flex: 1, minWidth: 0, overflow: "hidden" }}>
             <span style={{ fontSize: 40, fontWeight: 500, letterSpacing: -0.8, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
               {s.name}

@@ -74,6 +74,13 @@ export const renderingOriginal = <T>(fn: () => T) => originals.run(true, fn);
 /** True inside `renderingOriginal`: anything caching pictures should keep the two apart. */
 export const isOriginal = () => originals.getStore() === true;
 
+/** Signed distance from a point (relative to the centre) to a rounded rectangle's edge: negative inside. */
+function roundedRectDistance(px: number, py: number, halfW: number, halfH: number, r: number) {
+  const qx = Math.abs(px) - (halfW - r);
+  const qy = Math.abs(py) - (halfH - r);
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
+}
+
 /**
  * A picture already reduced to 1 bit at the size it will be drawn, as a data URL for <img>.
  * Cropped to fill the box, then levels, contrast and edges are tuned for e-ink before dithering.
@@ -83,13 +90,14 @@ export function ditheredImage(
   bytes: Uint8Array,
   width: number,
   height = width,
-  { round = false, type = "image/png", ...tune }: { round?: boolean; type?: string } & Enhance = {},
+  { round = false, radius, type = "image/png", ...tune }: { round?: boolean; radius?: number; type?: string } & Enhance = {},
 ) {
+  // A circle is a rounded square whose corners meet: one shape covers both.
+  const corner = round ? Math.min(width, height) / 2 : radius;
   const href = `data:${type};base64,${Buffer.from(bytes).toString("base64")}`;
-  const r = Math.min(width, height) / 2;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-    <clipPath id="c"><circle cx="${width / 2}" cy="${height / 2}" r="${r}"/></clipPath>
-    <image href="${href}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice" ${round ? 'clip-path="url(#c)"' : ""}/>
+    <clipPath id="c"><rect width="${width}" height="${height}" rx="${corner ?? 0}"/></clipPath>
+    <image href="${href}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice" ${corner ? 'clip-path="url(#c)"' : ""}/>
   </svg>`;
   // The original view: cropped and clipped the same, but in full colour and at 2× for the sharp preview.
   if (isOriginal())
@@ -100,13 +108,13 @@ export function ditheredImage(
   dither(rgba, width, height, "atkinson");
   const gray = new Uint8Array(width * height);
   for (let i = 0; i < gray.length; i++) gray[i] = rgba[i * 4];
-  // A crisp ring after dithering, so round marks keep a clean edge.
-  if (round)
+  // A crisp outline after dithering, so shaped marks keep a clean edge.
+  if (corner)
     for (let y = 0; y < height; y++)
       for (let x = 0; x < width; x++) {
-        const d = Math.hypot(x + 0.5 - width / 2, y + 0.5 - height / 2);
-        if (d > r) gray[y * width + x] = 255;
-        else if (d > r - 3) gray[y * width + x] = 0;
+        const d = roundedRectDistance(x + 0.5 - width / 2, y + 0.5 - height / 2, width / 2, height / 2, corner);
+        if (d > 0) gray[y * width + x] = 255;
+        else if (d > -3) gray[y * width + x] = 0;
       }
   return `data:image/png;base64,${Buffer.from(encode({ width, height, data: gray, channels: 1, depth: 8 })).toString("base64")}`;
 }

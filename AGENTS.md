@@ -134,6 +134,7 @@ import { ditheredImage } from "../render.ts";
 
 const src = ditheredImage(bytes, 330, 330, { type: "image/jpeg" });   // data URL, already 1-bit
 // round logos: ditheredImage(png, 110, 110, { round: true })
+// rounded squares: ditheredImage(png, 104, 104, { radius: 23 })
 ```
 
 It crops to fill the box, tunes the picture for e-ink with `enhance()` from `@papershow/scene` (levels stretch, S-curve contrast, unsharp mask; adjustable with `{ levels, contrast, sharpen }`), and Atkinson-dithers it. Give the `<img>` the same width and height, and leave the app's `dither` at `"threshold"`.

@@ -118,7 +118,7 @@ Your app instances on the left, with live thumbnails, and **New app** grouped by
 | Wall Street Journal (latest story and photo, 7 sections) | News | WSJ RSS feeds (Dow Jones) | — | 15 min |
 | Techmeme (top story, or top 3) | News | techmeme.com "Top News" column | — | 15 min |
 | Crypto (up to 4 of 10 tokens, USD/EUR) | Stocks & tokens | CoinGecko prices, Trust Wallet logos | — | 5 min |
-| Stocks (top gainers or losers) | Stocks & tokens | Massive | `MASSIVE_API_KEY` | 15 min |
+| Stocks (top gainers or losers) | Stocks & tokens | Massive, logos from logo.dev | `MASSIVE_API_KEY`, `LOGO_DEV_TOKEN` (logos) | 15 min |
 
 Details per source:
 - **Groq**: `openai/gpt-oss-20b` by default (`GROQ_MODEL` to change it). Each AI app has a model picker filled from Groq's live model list. The same prompt in the same period is asked once. A key Groq rejects counts as missing until the server restarts.
@@ -126,6 +126,7 @@ Details per source:
 - **WSJ**: `feeds.content.dowjones.io/public/rss/<Feed>`. There's no front-page feed, so it shows the newest item in the section.
 - **Techmeme**: parses the homepage's "Top News" column, because the RSS feed is newest-first rather than ranked.
 - **CoinGecko**: the free `simple/price` endpoint, one call for all tokens and both currencies, shared for a minute. Logos come from `assets-cdn.trustwallet.com/blockchains/<chain>/info/logo.png` for a chain's own coin, or `/<chain>/assets/<address>/logo.png` for a token on it.
+- **logo.dev**: company logos by ticker (`img.logo.dev/ticker/<SYMBOL>`), fetched once each and dithered into the badge's rounded square. Without `LOGO_DEV_TOKEN`, or for a ticker logo.dev doesn't know, Stocks shows the drawn ticker badge.
 - **Massive**: live top movers on the Starter plan and above. On the free plan, it works out the previous session's movers from daily closes (stocks over $5 that traded over a million shares).
 
 Every source keeps its last good result if a fetch fails. The news apps read unofficial public feeds and pages, and only ever use the headline, summary, byline and photo.
@@ -187,6 +188,7 @@ Edits answer with the whole new state, so the UI never drifts from the server.
 | `GROQ_API_KEY` | AI apps and AI Clock. Without it they show stand-in text. |
 | `GROQ_MODEL` | Default model for AI apps (`openai/gpt-oss-20b`). |
 | `MASSIVE_API_KEY` | Stocks. Without it the app shows stand-in movers. |
+| `LOGO_DEV_TOKEN` | logo.dev publishable key (`pk_…`) for company logos in Stocks. Without it, ticker badges. |
 | `PORT` | Server port (5194). |
 | `DB` | SQLite file (`apps/server/data/imagegen.db`). |
 
