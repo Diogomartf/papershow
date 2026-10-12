@@ -1,4 +1,4 @@
-import { defineApp, sheet } from "./types.ts";
+import { decode, defineApp, sheet } from "./types.ts";
 
 const FEEDS = {
   home: "HomePage",
@@ -11,17 +11,6 @@ const FEEDS = {
 } as const;
 
 type Story = { title: string; summary: string; byline: string; credit: string; image: string | null };
-
-const decode = (s: string) =>
-  s
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;|&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .trim();
 
 const tag = (xml: string, name: string) => decode(xml.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`))?.[1] ?? "");
 

@@ -5,9 +5,18 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type Context } from "hono";
 import type { Scene } from "@papershow/scene";
 import { APPS, appFrame, appFrameAt, catalog, configFor, forgetApp, previewFrame } from "./apps/index.ts";
+import { watchModels } from "./ai.ts";
 import * as store from "./db.ts";
 import { sequence, showing, sleepUntil, upcoming, type Live, type Showing, type Source } from "./schedule.ts";
 import { sleepFrame } from "./sleep.tsx";
+
+// Secrets such as GROQ_API_KEY and MASSIVE_API_KEY live in .env at the repo root (not committed).
+try {
+  process.loadEnvFile(new URL("../../../.env", import.meta.url).pathname);
+} catch {
+  /* no .env: the AI apps fall back to stand-in text */
+}
+watchModels();
 
 const app = new Hono();
 

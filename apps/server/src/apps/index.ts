@@ -6,13 +6,14 @@ import clock from "./clock.tsx";
 import crypto from "./crypto.tsx";
 import nytimes from "./nytimes.tsx";
 import stocks from "./stocks.tsx";
+import techmeme from "./techmeme.tsx";
 import type { AppDef } from "./types.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyApp = AppDef<any, any>;
 
 export const APPS: Record<string, AnyApp> = Object.fromEntries(
-  [clock, aiclock, ai, crypto, stocks, nytimes].map((a) => [a.kind, a as AnyApp]),
+  [clock, aiclock, ai, crypto, stocks, nytimes, techmeme].map((a) => [a.kind, a as AnyApp]),
 );
 
 /** What the Apps page needs to list kinds and build their forms. */
