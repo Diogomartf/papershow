@@ -536,32 +536,45 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .panel-loading.failed { color: var(--danger); animation-delay: 0ms; max-width: 46ch; margin: auto; }
 @keyframes loadingIn { to { opacity: 1; } }
 /*
- * Blocks: an e-ink loader. Nine rounded "pixels" redraw out of step in hard steps, the way a panel does:
- * empty paper → ink → a dithered ghost (e-ink's leftover half-tone) → ink → paper. No easing, no motion.
+ * Blocks: an e-ink loader. A tiny panel (paper, black ink, dimmed at night like the real one) where nine
+ * rounded "pixels" redraw out of step in hard steps: paper → ink → 50% dither → 25% dither → paper.
+ * Every other cycle the whole panel does a full refresh: inverted, black, back.
  */
 .blocks {
+  --ink-e: #141310;
   display: grid; grid-template-columns: repeat(3, var(--b)); gap: calc(var(--b) * .28);
   flex: none;
+  padding: calc(var(--b) * .55);
+  border-radius: calc(var(--b) * .35);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.18), inset 0 1px 2px rgba(0,0,0,.12), 0 0 0 1px var(--line);
+  filter: var(--dim);
+  animation: einkPanel 3.2s step-end infinite;
 }
 .blocks span {
   width: var(--b); height: var(--b);
-  border-radius: calc(var(--b) * .26);
-  --empty: color-mix(in srgb, var(--ink) 12%, transparent);
-  --edge: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 45%, transparent);
-  background: var(--empty); box-shadow: var(--edge);
+  border-radius: calc(var(--b) * .2);
   animation: blockInk 1.6s step-end infinite;
 }
 @keyframes blockInk {
-  0% { background: var(--empty); box-shadow: var(--edge); }
-  18% { background: var(--ink); box-shadow: none; }
-  36% {
-    background: repeating-conic-gradient(var(--ink) 0 25%, transparent 0 50%) 0 0 / 2px 2px;
-    box-shadow: inset 0 0 0 1.5px var(--ink);
-  }
-  54% { background: var(--ink); box-shadow: none; }
-  72%, 100% { background: var(--empty); box-shadow: var(--edge); }
+  0% { background: transparent; }
+  16% { background: var(--ink-e); }
+  34% { background: repeating-conic-gradient(var(--ink-e) 0 25%, transparent 0 50%) 0 0 / 2px 2px; }
+  50% { background: repeating-conic-gradient(var(--ink-e) 0 25%, transparent 0 100%) 0 0 / 2px 2px; }
+  66% { background: var(--ink-e); }
+  82%, 100% { background: transparent; }
 }
-@media (prefers-reduced-motion: reduce) { .blocks span { animation-duration: 4s; } }
+/* The full refresh, once every two cycles. */
+@keyframes einkPanel {
+  0%, 88% { filter: var(--dim); }
+  90% { filter: invert(1); }
+  93% { filter: brightness(0); }
+  96%, 100% { filter: var(--dim); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .blocks { animation: none; }
+  .blocks span { animation-duration: 4s; }
+}
 
 /*
  * A full e-ink refresh when the live picture changes, in hard steps like the panel:
