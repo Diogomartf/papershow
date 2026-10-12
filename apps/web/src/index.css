@@ -27,6 +27,8 @@
   --engrave-hi: rgba(255,235,200,.4);
   --scrim: rgba(70,50,20,.16);
   --signal: #c8692e;
+  --danger: #b4231b;
+  --danger-tint: rgba(180,35,27,.08);
   --track: #efe8d6;
   --tick: #cfc3a6;
   --fade: rgba(250,246,234,.95);
@@ -83,6 +85,8 @@
   --engrave-hi: rgba(0,0,0,.3);
   --scrim: rgba(0,0,0,.45);
   --signal: #e8873f;
+  --danger: #ec7b6c;
+  --danger-tint: rgba(236,123,108,.12);
   --track: #1f1a15;
   --tick: #4a3f33;
   --fade: rgba(38,32,26,.95);
@@ -147,18 +151,12 @@ button { cursor: pointer; }
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 16px;
-  padding: 14px 20px;
+  padding: 20px 20px 14px;
 }
 .bar-left, .bar-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .bar-right { justify-content: flex-end; }
 
-.mark {
-  width: 22px; height: 22px; flex: none;
-  border-radius: 6px;
-  background:
-    linear-gradient(135deg, transparent 48%, var(--paper) 48% 56%, transparent 56%),
-    var(--ink);
-}
+.mark { width: 39px; height: 32px; flex: none; }
 
 .name {
   min-width: 0;
@@ -439,12 +437,13 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
 /* ── Nav ───────────────────────────────────────────── */
 
 .nav { display: flex; align-items: center; gap: 2px; }
-.nav .mark { margin-right: 8px; }
+.nav .mark { margin-right: 5px; }
+/* The lettering logo as a mask, so it takes the ink colour in either light. */
 .wordmark {
+  width: 91px; height: 22px; flex: none;
   margin-right: 14px;
-  font-weight: 680;
-  font-size: 15px;
-  letter-spacing: -0.02em;
+  background: var(--ink);
+  mask: url(/wordmark.svg) center / contain no-repeat;
 }
 .nav a {
   padding: 6px 9px;
@@ -462,6 +461,24 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
 .tabular { font-variant-numeric: tabular-nums; }
 button.link { border: 0; background: none; padding: 0; color: var(--ink); font-weight: 560; text-decoration: underline; text-underline-offset: 3px; }
 a.ghost { display: inline-block; }
+/* Takes the light switch's height in the bar, top-aligned with it; the rest hangs below so the bar keeps its spacing. */
+a.live-link {
+  position: relative; z-index: 2;
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px;
+  height: 34px; white-space: nowrap; text-decoration: none;
+}
+.live-link-text { font-size: 9px; line-height: 1; letter-spacing: .02em; color: var(--ink-3); }
+a.live-link:hover .live-link-text { color: var(--ink); }
+/* What the panel shows, at about 1/10 scale. */
+.live-thumb {
+  display: block; flex: none;
+  width: 82px; height: 49px;
+  border-radius: 4px; overflow: hidden;
+  background: var(--paper);
+  box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgba(0,0,0,.08);
+}
+.live-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.live-thumb[data-on="false"] { opacity: .5; }
 .ghost.danger:hover { color: #b4231b; background: rgba(180,35,27,.08); }
 
 /* ── SlideGen ──────────────────────────────────────── */
@@ -500,6 +517,94 @@ a.ghost { display: inline-block; }
   50% { filter: invert(0) brightness(1.4); }
   100% { filter: var(--dim); }
 }
+/* Rendering an app: waits a beat before showing, so quick renders (a ticking clock) don't flicker. */
+.panel-loading {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  padding: 24px; text-align: center;
+  color: var(--ink); font-size: 14px; font-weight: 540;
+  opacity: 0; animation: loadingIn 200ms 300ms var(--ease-out) forwards;
+}
+/* Over an older picture: a quiet pill in the corner, the picture stays readable. */
+.panel-loading[data-over="true"] {
+  inset: auto 12px 12px auto;
+  flex-direction: row; gap: 8px;
+  padding: 6px 12px; border-radius: 999px;
+  background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 4px 12px -6px var(--drop);
+  font-size: 12px;
+}
+.panel-loading.failed { color: var(--danger); animation-delay: 0ms; max-width: 46ch; margin: auto; }
+@keyframes loadingIn { to { opacity: 1; } }
+/*
+ * Blocks: an e-ink loader. A tiny panel (paper, black ink, dimmed at night like the real one) where nine
+ * rounded "pixels" redraw out of step in hard steps: paper → ink → 50% dither → 25% dither → paper.
+ * Every other cycle the whole panel does a full refresh: inverted, black, back.
+ */
+.blocks {
+  --ink-e: #141310;
+  display: grid; grid-template-columns: repeat(3, var(--b)); gap: calc(var(--b) * .28);
+  flex: none;
+  padding: calc(var(--b) * .55);
+  border-radius: calc(var(--b) * .35);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.18), inset 0 1px 2px rgba(0,0,0,.12), 0 0 0 1px var(--line);
+  filter: var(--dim);
+  animation: einkPanel 3.2s step-end infinite;
+}
+.blocks span {
+  width: var(--b); height: var(--b);
+  border-radius: calc(var(--b) * .2);
+  animation: blockInk 1.6s step-end infinite;
+}
+@keyframes blockInk {
+  0% { background: transparent; }
+  16% { background: var(--ink-e); }
+  34% { background: repeating-conic-gradient(var(--ink-e) 0 25%, transparent 0 50%) 0 0 / 2px 2px; }
+  50% { background: repeating-conic-gradient(var(--ink-e) 0 25%, transparent 0 100%) 0 0 / 2px 2px; }
+  66% { background: var(--ink-e); }
+  82%, 100% { background: transparent; }
+}
+/* The full refresh, once every two cycles. */
+@keyframes einkPanel {
+  0%, 88% { filter: var(--dim); }
+  90% { filter: invert(1); }
+  93% { filter: brightness(0); }
+  96%, 100% { filter: var(--dim); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .blocks { animation: none; }
+  .blocks span { animation-duration: 4s; }
+}
+
+/*
+ * A full e-ink refresh when the live picture changes, in hard steps like the panel:
+ * old picture inverted → black → white → black → new picture inverted → new picture.
+ */
+.eink-swap, .eink-layer, .eink-ink { position: absolute; inset: 0; }
+/* The layer blends with the paper instead of the picture: a filtered layer would otherwise blend only with itself. */
+.eink-layer { display: block; mix-blend-mode: multiply; opacity: .92; }
+.eink-swap .live-img { animation: none; mix-blend-mode: normal; opacity: 1; }
+.eink-swap[data-refreshing="true"] .old { animation: einkOld 1100ms step-end forwards; }
+.eink-layer.new { opacity: 0; animation: einkNew 1100ms step-end forwards; }
+.eink-ink { animation: einkInk 1100ms step-end forwards; filter: var(--dim); }
+@keyframes einkOld {
+  0% { filter: none; opacity: .92; }
+  12% { filter: invert(1); opacity: .92; }
+  24%, 100% { opacity: 0; }
+}
+@keyframes einkInk {
+  0% { background: transparent; }
+  24% { background: #111; }
+  36% { background: var(--paper); }
+  48% { background: #111; }
+  60%, 100% { background: transparent; }
+}
+@keyframes einkNew {
+  0% { opacity: 0; }
+  60% { opacity: .92; filter: invert(1); }
+  72%, 100% { opacity: .92; filter: none; }
+}
+
 .panel-empty {
   position: absolute; inset: 0;
   display: grid; place-items: center;
@@ -875,31 +980,41 @@ a.ghost { display: inline-block; }
 
 /* ── Floating menu, remove, undo ─────────────────── */
 
+/* Sits on the theme's surface with a hairline, like the cards: no inverted slab. */
 .float-menu {
   position: fixed;
-  transform: translate(-50%, calc(-100% - 8px));
-  display: flex; gap: 2px;
-  padding: 4px;
+  transform: translate(-50%, calc(-100% - 10px));
+  display: flex; align-items: center; gap: 1px;
+  padding: 3px;
   border-radius: 10px;
-  background: var(--ink);
-  box-shadow: 0 10px 30px -8px var(--drop), 0 0 0 1px rgba(0,0,0,.2);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line), 0 2px 6px -2px var(--drop-near), 0 14px 28px -12px var(--drop);
   z-index: 60;
   animation: menuIn 140ms var(--ease-out);
 }
-@keyframes menuIn { from { opacity: 0; transform: translate(-50%, calc(-100% - 4px)) scale(.96); } }
+@keyframes menuIn { from { opacity: 0; transform: translate(-50%, calc(-100% - 6px)) scale(.97); } }
+/* The pointer: a turned square showing only its lower edges, so the hairline runs around it. */
 .float-menu::after {
   content: ""; position: absolute; left: 50%; bottom: -5px;
-  width: 10px; height: 10px; margin-left: -5px;
-  background: var(--ink); transform: rotate(45deg); border-radius: 2px;
+  width: 9px; height: 9px; margin-left: -4.5px;
+  background: var(--surface);
+  box-shadow: 1px 1px 0 0 var(--line);
+  transform: rotate(45deg); border-radius: 0 0 2px 0;
 }
 .float-menu button {
   position: relative; z-index: 1;
-  border: 0; background: transparent;
-  height: 30px; padding: 0 12px; border-radius: 7px;
-  color: var(--wall); font-size: 13px; font-weight: 560; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 10px 0 8px;
+  border: 0; border-radius: 7px; background: transparent;
+  color: var(--ink-2); font-size: 13px; font-weight: 540; white-space: nowrap;
+  transition: background-color 120ms, color 120ms;
 }
-.float-menu button:hover { background: color-mix(in srgb, var(--wall) 14%, transparent); }
-.float-menu button.danger { color: #ff8a80; }
+.float-menu button svg { flex: none; opacity: .8; }
+.float-menu button:hover { background: var(--tint); color: var(--ink); }
+.float-menu button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.float-menu button.danger { color: var(--danger); }
+.float-menu button.danger:hover { background: var(--danger-tint); color: var(--danger); }
+.float-menu-divider { width: 1px; height: 16px; margin: 0 3px; background: var(--line); }
 
 .clip-x {
   position: absolute; top: 5px; right: 13px;
@@ -976,14 +1091,29 @@ a.ghost { display: inline-block; }
 .show-add h2 { margin: 0; font-size: 15px; font-weight: 620; }
 .add-group h3 { margin: 0 0 8px; font: 600 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 .add-playlists, .add-items { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+/* Playlists to add: a card with a glimpse of the first clips, stacked like a deck. */
 .add-playlists button {
-  display: inline-flex; align-items: center; gap: 6px;
-  height: 32px; padding: 0 12px; border: 0; border-radius: 9px;
-  background: var(--surface); box-shadow: 0 0 0 1px var(--line);
-  font-weight: 560;
+  width: 132px; display: grid; gap: 3px; justify-items: start; text-align: left;
+  padding: 6px; border: 0; border-radius: 10px; background: transparent;
+  font-size: 13px; font-weight: 560;
 }
-.add-playlists button:hover { box-shadow: 0 0 0 1px var(--ink-3); }
-.add-playlists button.new { background: transparent; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-2); border-style: dashed; }
+.add-playlists button:hover { background: var(--tint); }
+.pl-deck { position: relative; width: 100%; aspect-ratio: 5 / 3; margin-bottom: 2px; }
+/* The first clip in front at bottom left; the next ones peek out behind, up and to the right. */
+.pl-deck img {
+  position: absolute; inset: 8px 8px 0 0;
+  width: calc(100% - 8px); height: calc(100% - 8px);
+  border-radius: 4px; background: var(--paper); box-shadow: 0 0 0 1px var(--line), 0 1px 3px rgba(0,0,0,.12);
+  filter: var(--dim);
+  transform: translate(calc(var(--i) * 4px), calc(var(--i) * -4px));
+}
+.pl-deck-empty {
+  position: absolute; inset: 8px 8px 0 0;
+  display: grid; place-items: center;
+  border-radius: 4px; border: 1px dashed var(--line);
+  color: var(--ink-3); font-size: 12px; font-weight: 500;
+}
+.add-playlists button.new .pl-deck-empty { font-size: 22px; font-weight: 400; }
 .add-items button {
   width: 132px; display: grid; gap: 3px; justify-items: start; text-align: left;
   padding: 6px; border: 0; border-radius: 10px; background: transparent;
@@ -993,7 +1123,7 @@ a.ghost { display: inline-block; }
 .add-items img { width: 100%; aspect-ratio: 5 / 3; border-radius: 4px; background: var(--paper); box-shadow: 0 0 0 1px var(--line); filter: var(--dim); }
 .add-items small { font-size: 11px; }
 .plus { color: var(--ink-3); }
-.add-playlists small { font-weight: 450; }
+.add-playlists small { font-size: 11px; font-weight: 450; }
 
 /* Repeat: a single item can interrupt the loop on the clock */
 .repeat button { padding: 5px 9px; font-size: 13px; white-space: nowrap; }
@@ -1044,6 +1174,8 @@ a.ghost { display: inline-block; }
   transition: background-color 120ms;
 }
 .kinds button:hover { background: var(--tint); }
+/* "New app" grouped by category: a small heading over each group. */
+.kind-group h3 { margin: 12px 8px 2px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
 .kinds button[aria-current="true"] { background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
 .kinds strong { font-weight: 560; }
 .kinds strong::before { content: "+ "; color: var(--ink-3); }
@@ -1055,6 +1187,12 @@ a.ghost { display: inline-block; }
   justify-items: center;
 }
 .app-stage .device { align-self: end; }
+.app-stage { position: relative; }
+/* E-ink or Original, on the shelf under the preview. */
+.view-switch { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); }
+.view-switch button { padding: 4px 12px; font-size: 13px; }
+/* The original is a full-resolution colour render: smooth, not pixel-doubled. */
+.live-img[data-view="original"] { image-rendering: auto; }
 .app-stage .device.small .panel { width: min(680px, calc(100vw - 660px), calc((100dvh - 230px) * 5 / 3)); }
 .shelf.thin { height: 64px; }
 .shelf.thin::after { height: 0; border: 0; }
@@ -1081,8 +1219,24 @@ a.ghost { display: inline-block; }
   box-shadow: 0 0 0 1px var(--line);
   font-size: 16px; /* no zoom on iOS */
 }
+textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size: 15px; }
 .setting .text:focus { outline: none; box-shadow: 0 0 0 1.5px var(--ink-3); }
 .setting small { font-size: 12px; }
+/* Settings can have many options: wrap them instead of running off the panel. */
+.setting .segmented { display: flex; flex-wrap: wrap; max-width: 100%; }
+.setting .segmented button { white-space: nowrap; }
+.picks { display: flex; flex-wrap: wrap; gap: 6px; }
+.picks button {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 11px;
+  border: 0; border-radius: 999px;
+  background: var(--surface); box-shadow: 0 0 0 1px var(--line);
+  color: var(--ink-2); font-weight: 560;
+}
+.picks button:hover:not(:disabled) { color: var(--ink); }
+.picks button[aria-pressed="true"] { background: var(--ink); color: var(--surface); box-shadow: none; }
+.picks button:disabled { opacity: .4; cursor: default; }
+.pick-n { font: 600 10px/1 var(--mono); opacity: .7; }
 .settings-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; padding-top: 18px; border-top: 1px solid var(--line); }
 .settings-actions .primary { padding: 8px 14px; }
 
@@ -1100,7 +1254,7 @@ a.ghost { display: inline-block; }
   .bar-left { flex: 1 1 auto; flex-wrap: wrap; row-gap: 8px; }
   .bar-right { flex: 0 0 auto; }
   .bar > div:empty { display: none; }
-  .wordmark, .divider, .bar-right a.ghost[href="/live"], .primary kbd { display: none; }
+  .wordmark, .divider, .live-link-text, .primary kbd { display: none; }
   .nav .mark { margin-right: 4px; }
   .nav a { padding: 8px 8px; }
   .lightswitch { margin-right: 0; }
@@ -1178,3 +1332,68 @@ a.ghost { display: inline-block; }
 
 /* Drawesome clips its root; let the toolbar hang below the panel onto the shelf. */
 .panel [class*="Draw_root"] { overflow: visible; }
+
+/* ── Text on the drawing ───────────────────────────── */
+
+.text-layer { position: absolute; inset: 0; z-index: 2; container-type: size; pointer-events: none; }
+.text-layer[data-active="true"] { pointer-events: auto; cursor: text; touch-action: none; }
+.text-clip { position: absolute; inset: 0; overflow: clip; }
+
+/* Corner handles: drag one to scale the text */
+.handle {
+  position: absolute; width: 9px; height: 9px; z-index: 2;
+  background: #fff; border: 1.5px solid #e89a3c; border-radius: 2px;
+  touch-action: none;
+}
+.handle::after { content: ""; position: absolute; inset: -9px; } /* a bigger target for fingers */
+.handle.nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.handle.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.handle.ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.handle.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+
+/* Centre guides while dragging a text: a line through the middle when it's centred */
+.guide {
+  position: absolute; z-index: 1; pointer-events: none;
+  background: #ff3b8d;
+  opacity: 0; transition: opacity 120ms var(--ease-out);
+}
+.guide[data-on="true"] { opacity: 1; transition: none; } /* snap on instantly, fade off */
+.guide.v { left: calc(50% - 1px); top: 0; bottom: 0; width: 2px; }
+.guide.h { top: calc(50% - 1px); left: 0; right: 0; height: 2px; }
+.text-item {
+  position: absolute; white-space: pre; user-select: none;
+  /* nudge so the box edge, not the glyphs, sits on the point */
+  padding: 0; margin: 0; letter-spacing: 0;
+}
+.text-layer[data-active="true"] .text-item { cursor: grab; border-radius: 3px; }
+.text-layer[data-active="true"] .text-item:hover { box-shadow: 0 0 0 1px rgba(232,154,60,.55); }
+.text-item[data-selected="true"] { box-shadow: 0 0 0 1.5px #e89a3c !important; }
+.text-item[data-editing="true"] { cursor: text; user-select: text; }
+.text-edit { outline: none; min-width: .5em; caret-color: #e89a3c; }
+.text-edit:empty::before { content: "Type here"; opacity: .35; }
+.panel:has(.eink[data-on="true"]) .text-item { opacity: .3; }
+
+.text-tools {
+  position: absolute; z-index: 3; transform: translateY(calc(-100% - 8px));
+  display: flex; align-items: center; gap: 2px; padding: 3px;
+  border-radius: 9px; background: var(--surface); color: var(--ink);
+  box-shadow: 0 0 0 1px var(--line), 0 8px 20px -8px var(--drop);
+  font-size: 13px; white-space: nowrap; cursor: default;
+}
+.text-tools button {
+  height: 28px; min-width: 30px; padding: 0 8px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--ink-2); font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+.text-tools button:hover:not(:disabled) { background: var(--tint); color: var(--ink); }
+.text-tools button:disabled { opacity: .35; }
+.text-tools button[aria-pressed="true"] { background: var(--tint); color: var(--ink); }
+.text-tools button.danger { color: var(--danger, #c4443a); }
+.text-tools .tabular { min-width: 26px; text-align: center; color: var(--ink-3); font-size: 12px; }
+.text-tools svg { display: block; margin: auto; }
+.text-tools .tools-sep { width: 1px; height: 16px; margin: 0 3px; background: var(--line); }
+.text-tools .swatch-btn span { display: block; width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 1px var(--ink-3); }
+
+.text-toggle { display: inline-flex; align-items: center; gap: 6px; }
+.text-toggle[aria-pressed="true"] { background: var(--tint); color: var(--ink); }
+.text-glyph { font: 700 13px/1 Georgia, serif; }

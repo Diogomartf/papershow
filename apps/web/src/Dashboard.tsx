@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { EinkImage } from "./EinkImage";
 import { LightSwitch } from "./LightSwitch";
+import { LiveLink } from "./LiveLink";
 import { Nav, navigate } from "./Nav";
 import { useLiveState, useNow } from "./live";
 import { NightSettings } from "./NightSettings";
 import * as api from "./slides";
 import { frameAt, setLive } from "./slides";
-import { FloatingMenu, useUndoToast } from "./Undo";
+import { FloatingMenu, MenuDivider, MenuItem, useUndoToast } from "./Undo";
 import { useItems } from "./sources";
 
 const hhmm = (t: number) => {
@@ -63,7 +65,7 @@ export function Dashboard() {
         <div />
         <div className="bar-right">
           <LightSwitch />
-          <a className="ghost" href="/live" target="_blank" rel="noreferrer">Open /live ↗</a>
+          <LiveLink />
         </div>
       </header>
 
@@ -74,7 +76,7 @@ export function Dashboard() {
             <div className="device small">
               <div className="panel">
                 {showing && !showing.blank ? (
-                  <img className="live-img" src={`/live.png?e=${encodeURIComponent(showing.etag)}`} alt="" />
+                  <EinkImage src={`/live.png?e=${encodeURIComponent(showing.etag)}`} />
                 ) : (
                   <p className="panel-empty">
                     {asleep ? `Asleep. The panel keeps its last picture until ${hhmm(asleep)}.` : "Nothing on /live yet. Build a playlist to start."}
@@ -198,15 +200,16 @@ export function Dashboard() {
           const entry = state.show.find((e) => e.id === turn.entryId);
           return (
             <FloatingMenu anchor={menu.el} onClose={closeMenu}>
-              <button role="menuitem" onClick={() => (setMenu(null), setLive({ mode: "pin", source: turn.source }).then(accept))}>
+              <MenuItem icon="show" onClick={() => (setMenu(null), setLive({ mode: "pin", source: turn.source }).then(accept))}>
                 Show now
-              </button>
+              </MenuItem>
               {turn.playlistId && (
-                <button role="menuitem" onClick={() => navigate(`/playlist/${turn.playlistId}`)}>Open playlist</button>
+                <MenuItem icon="open" onClick={() => navigate(`/playlist/${turn.playlistId}`)}>Open playlist</MenuItem>
               )}
-              <button
-                role="menuitem"
-                className="danger"
+              <MenuDivider />
+              <MenuItem
+                icon="remove"
+                danger
                 title={clip ? "Remove from its playlist" : "Remove from the show"}
                 onClick={async () => {
                   setMenu(null);
@@ -224,7 +227,7 @@ export function Dashboard() {
                 }}
               >
                 Remove
-              </button>
+              </MenuItem>
             </FloatingMenu>
           );
         })()}

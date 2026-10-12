@@ -9,6 +9,8 @@
   },
   "dependencies": {
     "@expo-google-fonts/inter": "0.4.2",
+    "@expo-google-fonts/source-serif-4": "0.4.2",
+    "@expo-google-fonts/unifrakturmaguntia": "0.4.1",
     "@hono/node-server": "2.1.4",
     "@papershow/scene": "workspace:*",
     "@resvg/resvg-js": "2.6.2",
@@ -18,7 +20,7 @@
     "tsx": "4.23.15"
   },
   "devDependencies": {
-    "@types/node": "^24",
+    "@types/node": "24",
     "typescript": "~6.0.2"
   },
   "imports": {

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { LightSwitch } from "./LightSwitch";
+import { LiveLink } from "./LiveLink";
 import { Nav, navigate } from "./Nav";
 import { useLiveState } from "./live";
 import * as api from "./slides";
@@ -64,7 +65,7 @@ export function Show() {
         <div />
         <div className="bar-right">
           <LightSwitch />
-          <a className="ghost" href="/live" target="_blank" rel="noreferrer">Open /live ↗</a>
+          <LiveLink />
         </div>
       </header>
 
@@ -193,14 +194,36 @@ export function Show() {
           <div className="add-group">
             <h3>Playlists</h3>
             <ul className="add-playlists">
-              {playlists.map((p) => (
-                <li key={p.id}>
-                  <button onClick={() => add({ playlistId: p.id }, p.name)}>
-                    <span className="plus">+</span> {p.name}
-                    <small className="muted">{clipsOf(p.id).length} items</small>
-                  </button>
-                </li>
-              ))}
+              {playlists.map((p) => {
+                const clips = clipsOf(p.id);
+                const minutes = clips.filter((c) => c.enabled).reduce((n, c) => n + c.durationS / 60, 0);
+                return (
+                  <li key={p.id}>
+                    <button onClick={() => add({ playlistId: p.id }, p.name)} title={`Add ${p.name} to the show`}>
+                      {/* A glimpse of what's in it: the first few clips, stacked like a deck. */}
+                      <span className="pl-deck" aria-hidden>
+                        {clips.length ? (
+                          clips
+                            .slice(0, 3)
+                            .map((c, i) => {
+                              const it = itemOf(c.source);
+                              return it ? <img key={c.id} src={it.thumb} alt="" style={{ ["--i" as string]: i }} /> : null;
+                            })
+                            .reverse()
+                        ) : (
+                          <span className="pl-deck-empty">Empty</span>
+                        )}
+                      </span>
+                      <span>
+                        <span className="plus">+</span> {p.name}
+                      </span>
+                      <small className="muted">
+                        {clips.length ? `${clips.length} ${clips.length === 1 ? "item" : "items"} · ${fmt(minutes)}` : "No items yet"}
+                      </small>
+                    </button>
+                  </li>
+                );
+              })}
               <li>
                 <button
                   className="new"
@@ -211,7 +234,10 @@ export function Show() {
                     })
                   }
                 >
-                  New playlist
+                  <span className="pl-deck" aria-hidden>
+                    <span className="pl-deck-empty">+</span>
+                  </span>
+                  <span>New playlist</span>
                 </button>
               </li>
             </ul>

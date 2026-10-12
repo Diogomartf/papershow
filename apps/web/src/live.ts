@@ -1,39 +1,50 @@
 // Live state from the server, kept fresh by long-polling. Shared by the dashboard and playlists.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import * as api from "./slides";
 import type { State } from "./slides";
 
+// One long-poll per tab, shared by every component that wants live state. Browsers allow only
+// six connections per host across all tabs, so a second poll per page soon starves the site.
+type Snapshot = { state: State | null; skew: number };
+let snap: Snapshot = { state: null, skew: 0 };
+const listeners = new Set<() => void>();
+let polling = false;
+
+function publish(s: State | null) {
+  snap = { state: s, skew: s ? s.now - Date.now() : snap.skew };
+  for (const l of listeners) l();
+}
+
+async function poll() {
+  polling = true;
+  try {
+    publish(await api.getState());
+  } catch {
+    /* the loop below retries */
+  }
+  while (listeners.size) {
+    try {
+      const s = await api.waitState();
+      if (listeners.size) publish(s);
+    } catch {
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  }
+  polling = false;
+}
+
+function subscribe(l: () => void) {
+  listeners.add(l);
+  if (!polling) void poll();
+  return () => listeners.delete(l);
+}
+
 /** Server state, kept fresh by long-polling; `skew` lines our clock up with the server's. */
 export function useLiveState() {
-  const [state, setState] = useState<State | null>(null);
-  const [skew, setSkew] = useState(0);
-  const accept = useCallback((s: State) => {
-    setState(s);
-    setSkew(s.now - Date.now());
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        accept(await api.getState());
-      } catch {
-        /* the loop below retries */
-      }
-      while (alive) {
-        try {
-          const s = await api.waitState();
-          if (alive) accept(s);
-        } catch {
-          await new Promise((r) => setTimeout(r, 3000));
-        }
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [accept]);
-
+  const { state, skew } = useSyncExternalStore(subscribe, () => snap);
+  const accept = useCallback((s: State) => publish(s), []);
+  /** Show a local change before the server answers. */
+  const setState = useCallback((s: State | null) => publish(s), []);
   return { state, setState, accept, skew };
 }
 

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent, type PointerEvent } from "react";
 import { Nav } from "./Nav";
+import { EinkImage } from "./EinkImage";
 import { LightSwitch } from "./LightSwitch";
+import { LiveLink } from "./LiveLink";
 import { useSideScroll } from "./scroll";
 import { keyOf, parseKey, useItems, type Item, type Source } from "./sources";
 import * as api from "./slides";
 import { useLiveState, useNow } from "./live";
-import { FloatingMenu, useUndoToast } from "./Undo";
+import { FloatingMenu, MenuDivider, MenuItem, useUndoToast } from "./Undo";
 import type { Playlist as PlaylistT, Slide, State } from "./slides";
 import { navigate } from "./Nav";
 
@@ -269,7 +271,7 @@ export function Playlist({ id }: { id: string | null }) {
         <div />
         <div className="bar-right">
           <LightSwitch />
-          <a className="ghost" href="/live" target="_blank" rel="noreferrer">Open /live ↗</a>
+          <LiveLink />
         </div>
       </header>
 
@@ -278,7 +280,7 @@ export function Playlist({ id }: { id: string | null }) {
           <div className="device small">
             <div className="panel">
               {showing && !showing.blank ? (
-                <img className="live-img" src={`/live.png?e=${encodeURIComponent(showing.etag)}`} alt="" />
+                <EinkImage src={`/live.png?e=${encodeURIComponent(showing.etag)}`} />
               ) : showing?.asleep ? (
                 <p className="panel-empty">Asleep. The panel keeps its last picture until {clock(showing.asleep)}.</p>
               ) : (
@@ -514,15 +516,17 @@ export function Playlist({ id }: { id: string | null }) {
       </main>
 
       {sel && !resizing && !dragging && (
-        <FloatingMenu anchor={clipEls.current.get(sel.id) ?? null} onClose={() => setSelected(null)}>
-          <button role="menuitem" onClick={() => pin(sel.source)}>Show now</button>
+        // Clicks in the clip's settings below keep it selected: only clicking elsewhere lets go.
+        <FloatingMenu anchor={clipEls.current.get(sel.id) ?? null} onClose={() => setSelected(null)} keepOpenWithin=".inspector">
+          <MenuItem icon="show" onClick={() => pin(sel.source)}>Show now</MenuItem>
           {slides.indexOf(sel) > 0 && (
-            <button role="menuitem" onClick={() => move(sel.id, -1)} aria-label="Play earlier">← Earlier</button>
+            <MenuItem icon="earlier" onClick={() => move(sel.id, -1)} aria-label="Play earlier">Earlier</MenuItem>
           )}
           {slides.indexOf(sel) < slides.length - 1 && (
-            <button role="menuitem" onClick={() => move(sel.id, 1)} aria-label="Play later">Later →</button>
+            <MenuItem icon="later" onClick={() => move(sel.id, 1)} aria-label="Play later">Later</MenuItem>
           )}
-          <button role="menuitem" className="danger" onClick={() => remove(sel.id)}>Remove</button>
+          <MenuDivider />
+          <MenuItem icon="remove" danger onClick={() => remove(sel.id)}>Remove</MenuItem>
         </FloatingMenu>
       )}
       {toast.node}

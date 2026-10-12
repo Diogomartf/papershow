@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Draw, type DrawHandle, type Stroke } from "drawesome";
 import "drawesome/styles.css";
-import { PANEL, type Scene } from "@papershow/scene";
+import "@fontsource-variable/inter";
+import { PANEL, type Scene, type TextItem } from "@papershow/scene";
 import { paintMono, renderScene } from "./render";
 import { getDraft, imageUrl, putDraft, putImage } from "./store";
 import { Gallery } from "./Gallery";
 import { Nav } from "./Nav";
 import { useNarrow } from "./media";
 import { LightSwitch } from "./LightSwitch";
+import { TextLayer } from "./TextLayer";
+import { shortId } from "./id";
 
 // Ink mode: greys dither, colours become greys.
 const SWATCHES = ["#111111", "#555555", "#999999", "#d4d4d4", "#ffffff", "#e5484d", "#f5a524", "#3e63dd", "#30a46c"];
@@ -17,12 +20,13 @@ const SWATCHES_EINK = ["#000000", "#ffffff"];
 const newScene = (): Scene => {
   const now = Date.now();
   return {
-    id: crypto.randomUUID().slice(0, 8),
+    id: shortId(),
     name: "Untitled",
     width: PANEL.w,
     height: PANEL.h,
     background: "#ffffff",
     strokes: [],
+    texts: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -39,6 +43,9 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryKey, setGalleryKey] = useState(0);
+  // Text mode: clicks on the panel type instead of draw.
+  const [typing, setTyping] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
   const narrow = useNarrow();
 
   useEffect(() => {
@@ -56,6 +63,22 @@ export default function App() {
   const onStrokes = useCallback((strokes: Stroke[]) => {
     setScene((s) => (s ? { ...s, strokes, updatedAt: Date.now() } : s));
   }, []);
+
+  const onTexts = useCallback((texts: TextItem[]) => {
+    setScene((s) => (s ? { ...s, texts, updatedAt: Date.now() } : s));
+  }, []);
+
+  // Picking a pen from the drawing toolbar goes back to drawing.
+  const loaded = scene !== null;
+  useEffect(() => {
+    const el = panel.current;
+    if (!el) return;
+    const onDown = (e: PointerEvent) => {
+      if ((e.target as HTMLElement).closest('[class*="Draw_toolbar"]')) setTyping(false);
+    };
+    el.addEventListener("pointerdown", onDown, true);
+    return () => el.removeEventListener("pointerdown", onDown, true);
+  }, [loaded]);
 
   const flash = (msg: string) => {
     setToast(msg);
@@ -93,6 +116,7 @@ export default function App() {
   const startNew = () => {
     const s = newScene();
     setScene(s);
+    setTyping(false);
     draw.current?.setStrokes([]);
   };
 
@@ -102,6 +126,10 @@ export default function App() {
         e.preventDefault();
         save();
       }
+      // T for text, Escape back to drawing, unless you're typing somewhere.
+      if ((e.target as HTMLElement).closest("input, textarea, [contenteditable]") || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key.toLowerCase() === "t") setTyping((t) => !t);
+      if (e.key === "Escape") setTyping(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -135,6 +163,14 @@ export default function App() {
 
         <div className="bar-right">
           <LightSwitch />
+          <button
+            className="ghost text-toggle"
+            aria-pressed={typing}
+            onClick={() => setTyping((t) => !t)}
+            title={typing ? "Back to drawing (Esc)" : "Type on the panel (T)"}
+          >
+            <span aria-hidden className="text-glyph">T</span> Text
+          </button>
           <button className="ghost" onClick={startNew}>New</button>
           <button className="ghost" onClick={() => setGalleryOpen(true)}>Gallery</button>
           <button className="primary" onClick={save} disabled={saving}>
@@ -146,7 +182,7 @@ export default function App() {
 
       <main className="stage">
         <div className="device">
-          <div className="panel">
+          <div className="panel" ref={panel} data-typing={typing}>
             <Draw
               ref={draw}
               board={{ w: scene.width, h: scene.height }}
@@ -161,12 +197,15 @@ export default function App() {
               theme="light"
               inset={narrow ? -88 : -102}
             />
+            <TextLayer texts={scene.texts ?? []} onChange={onTexts} active={typing} />
             <canvas ref={preview} className="eink" data-on={view === "eink"} aria-hidden />
           </div>
           <span className="ribbon" aria-hidden />
         </div>
         <div className="shelf" aria-hidden>
-          <span className="engraving">Waveshare 7.5″ · {scene.width}×{scene.height} · 1-bit</span>
+          <span className="engraving">
+            {typing ? "Click to type · drag to move · Esc to draw" : `Waveshare 7.5″ · ${scene.width}×${scene.height} · 1-bit`}
+          </span>
         </div>
       </main>
 

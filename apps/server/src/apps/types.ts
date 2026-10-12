@@ -4,19 +4,30 @@ import type { JSX } from "#jsx/jsx-runtime";
 /** One setting in an app's form. The Apps page builds its UI from these. */
 export type Field =
   | { key: string; label: string; type: "text"; placeholder?: string; hint?: string }
+  | { key: string; label: string; type: "textarea"; placeholder?: string; hint?: string }
   | { key: string; label: string; type: "toggle"; hint?: string }
   | { key: string; label: string; type: "select"; options: { value: string; label: string }[]; hint?: string }
   /** Comma-separated in the form, an array in the config. */
-  | { key: string; label: string; type: "list"; placeholder?: string; hint?: string };
+  | { key: string; label: string; type: "list"; placeholder?: string; hint?: string }
+  /** Tap to pick several of `options`, kept in the order picked; an array in the config. */
+  | { key: string; label: string; type: "picks"; options: { value: string; label: string }[]; max?: number; hint?: string };
+
+/** Where an app is listed when you add one. */
+export type Category = "clock" | "ai" | "news" | "markets";
 
 export type AppDef<C extends Record<string, unknown>, D> = {
   kind: string;
   name: string;
+  category: Category;
   description: string;
+  /** Where its data comes from, shown next to the app's type, e.g. "CoinGecko". */
+  source: string;
   defaults: C;
   fields: Field[];
   /** The frame can change at most this often; renders are cached per period, aligned to the clock. */
   periodMs: number;
+  /** When an instance's settings choose how often it changes; otherwise `periodMs`. */
+  periodFor?: (config: C) => number;
   /** How long it stays on when added, if not the usual 15 minutes. A clock only needs a minute. */
   clipS?: number;
   /** True while `data` returns made-up numbers instead of calling a real source. */
@@ -90,3 +101,19 @@ export function wobble(seed: string, t: number) {
 
 export const money = (n: number, currency = "USD") =>
   n.toLocaleString("en-US", { style: "currency", currency, maximumFractionDigits: n < 1 ? 4 : 2 });
+
+const ENTITIES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
+  ldquo: "“", rdquo: "”", lsquo: "‘", rsquo: "’", mdash: "—", ndash: "–", hellip: "…",
+};
+
+/** Text out of feed or page markup: CDATA unwrapped, tags dropped, entities decoded. */
+export const decode = (s: string) =>
+  s
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&([a-z]+);/gi, (m, name) => ENTITIES[name.toLowerCase()] ?? m)
+    .replace(/\s+/g, " ")
+    .trim();

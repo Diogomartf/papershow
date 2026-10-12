@@ -24,8 +24,8 @@ export type Section = (typeof SECTIONS)[number]["id"];
 export function Nav({ current }: { current: Section }) {
   return (
     <nav className="nav">
-      <span className="mark" aria-hidden />
-      <span className="wordmark">Papershow</span>
+      <img className="mark" src="/icon-nav.png" alt="" />
+      <span className="wordmark" role="img" aria-label="Papershow" />
       {SECTIONS.map((s) => (
         <a key={s.id} href={s.href} aria-current={current === s.id ? "page" : undefined} onClick={go(s.href)}>
           {s.label}

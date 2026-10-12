@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Papershow screen glyph</title>
+  <!-- Bold monochrome display box, optimized for small sizes. Transparent exterior. -->
+  <path fill="#111" d="M57.1 171.6A27.6 27.6 0 0 1 81.2 145.8L384.3 106.4A27.6 27.6 0 0 1 404.1 111.5L447.8 143.2A27.6 27.6 0 0 1 459.2 164.7L465.5 354.4A27.6 27.6 0 0 1 449.9 380.2L402.5 403.1A27.6 27.6 0 0 1 388.5 405.7L72.1 381.8A27.6 27.6 0 0 1 46.5 352.6Z"/>
+  <!-- E-ink screen -->
+  <path fill="#fff" d="M84 186.1Q84.7 173.2 97.6 172.1L354.3 151Q367.1 150 367.1 162.9L366.2 346.3Q366.1 359.2 353.2 359L87 354.5Q74.1 354.2 74.9 341.4Z"/>
+  <!-- Visible side of the paper-box enclosure -->
+  <path fill="#fff" d="M387.9 133.8L427.1 162.3Q431.6 165.6 431.8 171.1L437.7 349.8Q437.9 355.3 432.9 357.7L390.5 378.2Z"/>
+</svg>

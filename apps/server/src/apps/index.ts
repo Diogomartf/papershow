@@ -1,23 +1,28 @@
 import type { AppRow } from "../db.ts";
-import { renderFrame, type Frame } from "../render.ts";
+import { renderFrame, renderingOriginal, type Frame } from "../render.ts";
+import ai, { funFact, haiku, quoteOfTheDay, wordOfTheDay } from "./ai.tsx";
 import aiclock from "./aiclock.tsx";
 import clock from "./clock.tsx";
 import crypto from "./crypto.tsx";
+import { nytimes, wsj } from "./news.tsx";
 import stocks from "./stocks.tsx";
+import techmeme from "./techmeme.tsx";
 import type { AppDef } from "./types.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyApp = AppDef<any, any>;
 
 export const APPS: Record<string, AnyApp> = Object.fromEntries(
-  [clock, aiclock, crypto, stocks].map((a) => [a.kind, a as AnyApp]),
+  [clock, aiclock, wordOfTheDay, funFact, haiku, quoteOfTheDay, ai, nytimes, wsj, techmeme, crypto, stocks].map((a) => [a.kind, a as AnyApp]),
 );
 
 /** What the Apps page needs to list kinds and build their forms. */
 export const catalog = () =>
-  Object.values(APPS).map(({ kind, name, description, defaults, fields, mock, periodMs }) => ({
+  Object.values(APPS).map(({ kind, name, category, description, source, defaults, fields, mock, periodMs }) => ({
     kind,
     name,
+    category,
+    source,
     description,
     defaults,
     fields,
@@ -36,16 +41,23 @@ export function configFor(def: AnyApp, raw: Record<string, unknown> = {}) {
       out[f.key] = (Array.isArray(v) ? v : String(v).split(","))
         .map((x) => String(x).trim().toLowerCase())
         .filter(Boolean);
+    else if (f.type === "picks")
+      out[f.key] = [...new Set(Array.isArray(v) ? v.map(String) : [])]
+        .filter((x) => f.options.some((o) => o.value === x))
+        .slice(0, f.max);
     else if (f.type === "select") out[f.key] = f.options.some((o) => o.value === v) ? v : def.defaults[f.key];
     else out[f.key] = String(v).trim();
   }
   return out;
 }
 
-async function render(def: AnyApp, config: Record<string, unknown>, at: Date): Promise<Frame> {
+async function render(def: AnyApp, config: Record<string, unknown>, at: Date, pngScale = 1): Promise<Frame> {
   const data = await def.data(config, at);
-  return renderFrame(def.view({ config, data, now: at }), def.dither);
+  return renderFrame(def.view({ config, data, now: at }), def.dither, { pngScale });
 }
+
+/** How often an instance's frame can change: its settings may choose. */
+const periodOf = (def: AnyApp, config: Record<string, unknown>): number => def.periodFor?.(config) ?? def.periodMs;
 
 // One frame per app instance per period. Concurrent requests share the same render.
 const cache = new Map<string, { key: string; frame: Promise<Frame> }>();
@@ -54,24 +66,28 @@ const cache = new Map<string, { key: string; frame: Promise<Frame> }>();
 export async function appFrame(app: AppRow, now = Date.now()): Promise<{ frame: Frame; nextAt: number }> {
   const def = APPS[app.kind];
   if (!def) throw new Error(`unknown app kind: ${app.kind}`);
-  const bucket = Math.floor(now / def.periodMs);
-  const key = `${bucket}:${app.updatedAt}`;
+  const config = configFor(def, app.config);
+  const period = periodOf(def, config);
+  const bucket = Math.floor(now / period);
+  const key = `${bucket}:${period}:${app.updatedAt}`;
   let entry = cache.get(app.id);
   if (entry?.key !== key) {
     // Render as of the start of the period, so every request in it agrees.
-    entry = { key, frame: render(def, configFor(def, app.config), new Date(bucket * def.periodMs)) };
+    entry = { key, frame: render(def, config, new Date(bucket * period)) };
     cache.set(app.id, entry);
     entry.frame.catch(() => cache.get(app.id) === entry && cache.delete(app.id));
   }
-  return { frame: await entry.frame, nextAt: (bucket + 1) * def.periodMs };
+  return { frame: await entry.frame, nextAt: (bucket + 1) * period };
 }
 
-/** Render unsaved settings, for the Apps page preview. */
-export function previewFrame(kind: string, config: Record<string, unknown>) {
+/** Render unsaved settings, for the Apps page preview. `original`: pictures in full colour, for the full-resolution view. */
+export function previewFrame(kind: string, raw: Record<string, unknown>, { original = false } = {}) {
   const def = APPS[kind];
   if (!def) throw new Error(`unknown app kind: ${kind}`);
-  const bucket = Math.floor(Date.now() / def.periodMs);
-  return render(def, configFor(def, config), new Date(bucket * def.periodMs));
+  const config = configFor(def, raw);
+  const period = periodOf(def, config);
+  const at = new Date(Math.floor(Date.now() / period) * period);
+  return original ? renderingOriginal(() => render(def, config, at, 2)) : render(def, config, at);
 }
 
 // Frames for other moments (the dashboard's "up next"), kept apart from the live cache.
@@ -81,11 +97,13 @@ const ahead = new Map<string, Promise<Frame>>();
 export function appFrameAt(app: AppRow, at: number): Promise<Frame> {
   const def = APPS[app.kind];
   if (!def) throw new Error(`unknown app kind: ${app.kind}`);
-  const bucket = Math.floor(at / def.periodMs);
-  const key = `${app.id}:${bucket}:${app.updatedAt}`;
+  const config = configFor(def, app.config);
+  const period = periodOf(def, config);
+  const bucket = Math.floor(at / period);
+  const key = `${app.id}:${bucket}:${period}:${app.updatedAt}`;
   let frame = ahead.get(key);
   if (!frame) {
-    frame = render(def, configFor(def, app.config), new Date(bucket * def.periodMs));
+    frame = render(def, config, new Date(bucket * period));
     ahead.set(key, frame);
     frame.catch(() => ahead.delete(key));
     if (ahead.size > 64) ahead.delete(ahead.keys().next().value!);

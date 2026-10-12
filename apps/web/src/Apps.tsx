@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Blocks } from "./Blocks";
 import { LightSwitch } from "./LightSwitch";
+import { LiveLink } from "./LiveLink";
 import { Nav, navigate } from "./Nav";
 import * as appsApi from "./apps";
 import type { AppInstance, AppKind, Field } from "./apps";
@@ -21,6 +23,12 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
   const [apps, setApps] = useState<AppInstance[] | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  // Rendering can take a few seconds (prices, names, logos fetched first): say so, and say if it failed.
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  // The preview as the panel shows it, or the full-resolution render before it's reduced to 1 bit.
+  const [view, setView] = useState<"eink" | "original">(() => (localStorage.getItem("apps-view") === "original" ? "original" : "eink"));
+  useEffect(() => localStorage.setItem("apps-view", view), [view]);
   const [saved, setSaved] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -48,6 +56,12 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
   // Load the selected app into the form.
   const lastSaved = useRef("");
   useEffect(() => {
+    // Another app: don't leave the last one's picture up while this one renders.
+    setPreview((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return null;
+    });
+    setFailed(false);
     if (current && kind) {
       const d = { id: current.id, name: current.name, config: toForm(kind.fields, current.config) };
       lastSaved.current = body(d);
@@ -65,14 +79,26 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
     if (!draft || !kind) return;
     const ctrl = new AbortController();
     let url: string | null = null;
-    const run = () =>
-      appsApi.previewApp(kind.kind, draft.config, ctrl.signal).then((u) => {
-        url = u;
-        setPreview((old) => {
-          if (old) URL.revokeObjectURL(old);
-          return u;
-        });
-      }, () => {});
+    const run = () => {
+      setLoading(true);
+      return appsApi.previewApp(kind.kind, draft.config, ctrl.signal, view === "original").then(
+        (u) => {
+          url = u;
+          setPreview((old) => {
+            if (old) URL.revokeObjectURL(old);
+            return u;
+          });
+          setLoading(false);
+          setFailed(false);
+        },
+        () => {
+          // Aborted: a newer render took over, and it owns the loading state.
+          if (ctrl.signal.aborted) return;
+          setLoading(false);
+          setFailed(true);
+        },
+      );
+    };
     const t = setTimeout(run, 180);
     const tick = kind.periodMs <= 60_000 ? setInterval(run, 15_000) : undefined;
     return () => {
@@ -81,7 +107,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
       clearInterval(tick);
       void url;
     };
-  }, [draft, kind]);
+  }, [draft, kind, view]);
 
   // Save shortly after you stop typing.
   useEffect(() => {
@@ -111,6 +137,15 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
     flash(`Created ${app.name}`);
   };
 
+  /** A copy of this app with the same settings, to tweak from there. */
+  const duplicate = async () => {
+    if (!current || !kind || !draft) return;
+    const app = await appsApi.createApp(kind.kind, { name: `${draft.name} copy`, config: draft.config });
+    setApps((list) => [app, ...(list ?? [])]);
+    navigate(`/apps/${app.id}`);
+    flash(`Duplicated ${draft.name}`);
+  };
+
   const remove = async () => {
     if (!current) return;
     await appsApi.deleteApp(current.id);
@@ -130,7 +165,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
         <div />
         <div className="bar-right">
           <LightSwitch />
-          <a className="ghost" href="/live" target="_blank" rel="noreferrer">Open /live ↗</a>
+          <LiveLink />
         </div>
       </header>
 
@@ -160,30 +195,55 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
           </ul>
 
           <h2>New app</h2>
-          <ul className="kinds">
-            {catalog.map((k) => (
-              <li key={k.kind}>
-                <button onClick={() => navigate(`/apps/new/${k.kind}`)} aria-current={newKind === k.kind ? "true" : undefined}>
-                  <strong>{k.name}</strong>
-                  <small>{k.description}</small>
-                </button>
-              </li>
-            ))}
-          </ul>
+          {appsApi.CATEGORIES.map((cat) => {
+            const kinds = catalog.filter((k) => k.category === cat.id);
+            return kinds.length ? (
+              <section key={cat.id} className="kind-group">
+                <h3>{cat.label}</h3>
+                <ul className="kinds">
+                  {kinds.map((k) => (
+                    <li key={k.kind}>
+                      <button onClick={() => navigate(`/apps/new/${k.kind}`)} aria-current={newKind === k.kind ? "true" : undefined}>
+                        <strong>{k.name}</strong>
+                        <small>{k.description}</small>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null;
+          })}
         </aside>
 
         <section className="app-stage">
           <div className="device small">
             <div className="panel">
               {preview && (current || isNew) ? (
-                <img className="live-img" key={preview} src={preview} alt="" />
+                <img className="live-img" data-view={view} key={preview} src={preview} alt="" />
               ) : (
                 <p className="panel-empty">{apps?.length === 0 ? "Pick an app on the left to set it up." : ""}</p>
+              )}
+              {(current || isNew) && loading && (
+                <div className="panel-loading" data-over={!!preview} role="status">
+                  <Blocks size={preview ? 5 : 18} />
+                  <span>{preview ? "Updating…" : `Loading ${kind?.name ?? "app"}…`}</span>
+                </div>
+              )}
+              {(current || isNew) && failed && !loading && (
+                <div className="panel-loading failed" role="alert">
+                  Couldn’t load {kind?.name ?? "this app"}. Its data source may be down; it will try again as you change settings.
+                </div>
               )}
             </div>
             <span className="ribbon" aria-hidden />
           </div>
           <div className="shelf thin" aria-hidden />
+          {(current || isNew) && (
+            <div className="segmented view-switch" role="radiogroup" aria-label="Preview">
+              <button role="radio" aria-checked={view === "eink"} onClick={() => setView("eink")}>E-ink</button>
+              <button role="radio" aria-checked={view === "original"} onClick={() => setView("original")}>Original</button>
+            </div>
+          )}
         </section>
 
         <aside className="settings">
@@ -201,6 +261,8 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
               </div>
               <p className="muted kind-line">
                 {kind.name}
+                <span aria-hidden>·</span>
+                <span>from {kind.source}</span>
                 {kind.mock && <span className="chip">Mock data</span>}
               </p>
 
@@ -233,6 +295,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
                   >
                     Add to show
                   </button>
+                  <button className="ghost" onClick={duplicate}>Duplicate</button>
                   <button className="ghost danger" onClick={remove}>Delete</button>
                 </div>
               )}
@@ -265,6 +328,18 @@ function FieldInput({ field, value, onChange }: { field: Field; value: unknown; 
             </button>
           ))}
         </div>
+      ) : field.type === "textarea" ? (
+        <textarea
+          id={id}
+          className="text"
+          rows={5}
+          value={String(value ?? "")}
+          placeholder={field.placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete="off"
+        />
+      ) : field.type === "picks" ? (
+        <Picks id={id} field={field} value={Array.isArray(value) ? value.map(String) : []} onChange={onChange} />
       ) : (
         <input
           id={id}
@@ -277,6 +352,39 @@ function FieldInput({ field, value, onChange }: { field: Field; value: unknown; 
         />
       )}
       {field.hint && <small className="muted">{field.hint}</small>}
+    </div>
+  );
+}
+
+/** Tap to add or remove; the order you pick in is the order they show. Full once `max` are picked. */
+function Picks({
+  id,
+  field,
+  value,
+  onChange,
+}: {
+  id: string;
+  field: Extract<Field, { type: "picks" }>;
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const full = field.max !== undefined && value.length >= field.max;
+  return (
+    <div className="picks" id={id} role="group">
+      {field.options.map((o) => {
+        const on = value.includes(o.value);
+        return (
+          <button
+            key={o.value}
+            aria-pressed={on}
+            disabled={!on && full}
+            onClick={() => onChange(on ? value.filter((v) => v !== o.value) : [...value, o.value])}
+          >
+            {on && <span className="pick-n">{value.indexOf(o.value) + 1}</span>}
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
