@@ -11,6 +11,14 @@ cd apps/web && npx tsc -b && pnpm lint     # web types + oxlint
 PANEL_OUT=/tmp/panel.png python3 apps/panel/panel.py   # the panel client, drawing to a PNG
 ```
 
+On the Pi:
+
+```sh
+paper:status                               # services, version, addresses, keys, last frame
+paper:logs [server|panel]                  # follow the logs
+paper:update                               # pull main and reinstall
+```
+
 There are no unit tests yet. Check your work by rendering frames and looking at them (see [Check it](#4-check-it)).
 
 ## Conventions

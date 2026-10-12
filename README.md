@@ -120,7 +120,7 @@ The script builds the web app, turns on SPI, installs the panel's Python librari
 | `papershow` | The server: web app, API and `/live` on :5194. Data in `/var/lib/papershow/papershow.db`. |
 | `papershow-panel` | The panel client: shows the logo, then follows `/live` and draws it. |
 
-The panel shows the logo, then the current frame. The script ends by printing Papershow's address, `http://<hostname>.local:5194`, and it all starts again on its own after a reboot or power cut. [What the install changes on your Pi](#what-the-install-changes-on-your-pi) lists what it touches and what it leaves alone.
+The panel shows the logo, then the current frame. The script ends by printing Papershow's address, `http://<hostname>.local:5194`, and it all starts again on its own after a reboot or power cut. [What the install changes on your Pi](#what-the-install-changes-on-your-pi) lists what it touches and what it leaves alone. From then on, [`paper:status`, `paper:logs` and `paper:update`](#commands-on-the-pi) check on it and update it.
 
 ### 3. On the Pi: stop anything else that draws on the panel
 
@@ -194,6 +194,12 @@ The install adds three commands:
 | `paper:update` | Gets the latest `main` and reinstalls. Running the [one line](#2-on-the-pi-install) again does the same. |
 | `paper:status` | Whether the server and panel are running, the version and whether it's behind, where to open Papershow, which keys are set, and what the panel last drew. |
 | `paper:logs` | Follows both services' logs. `paper:logs server` or `paper:logs panel` for one; journalctl options go after, like `paper:logs panel -n 200`. |
+
+Installed before these commands existed? Update once the long way, which adds them:
+
+```sh
+cd ~/papershow && git pull && deploy/pi/install.sh
+```
 
 ### Uninstalling
 
