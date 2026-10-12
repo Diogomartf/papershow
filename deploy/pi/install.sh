@@ -75,7 +75,20 @@ sudo systemctl daemon-reload
 sudo systemctl enable papershow papershow-panel
 sudo systemctl restart papershow papershow-panel
 
+# paper:update, paper:status, paper:logs and paper:help, as links to the checkout's script so they update
+# with it. A command of the same name that isn't ours is left alone.
+chmod +x deploy/pi/paper.sh
+for name in update status logs help; do
+  link=/usr/local/bin/paper:$name
+  if { [ -e "$link" ] || [ -L "$link" ]; } && [[ "$(readlink "$link")" != */deploy/pi/paper.sh ]]; then
+    echo "$link already exists and isn't Papershow's, so it was left alone." >&2
+  else
+    sudo ln -sfn "$repo/deploy/pi/paper.sh" "$link"
+  fi
+done
+
 echo "Papershow: http://$(hostname).local:$port"
+echo "Commands:  paper:help lists them"
 
 # Reach it from your Mac and phone, at home or away, over HTTPS. Tailscale is a VPN, so ask before
 # installing it; with no one at the keyboard, skip it. A Pi you already use may serve other things
