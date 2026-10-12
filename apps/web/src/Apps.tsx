@@ -225,7 +225,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
               )}
               {(current || isNew) && loading && (
                 <div className="panel-loading" data-over={!!preview} role="status">
-                  <Blocks size={preview ? 4 : 13} />
+                  <Blocks size={preview ? 5 : 18} />
                   <span>{preview ? "Updating…" : `Loading ${kind?.name ?? "app"}…`}</span>
                 </div>
               )}
