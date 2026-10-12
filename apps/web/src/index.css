@@ -520,7 +520,7 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 /* Rendering an app: waits a beat before showing, so quick renders (a ticking clock) don't flicker. */
 .panel-loading {
   position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center; gap: 10px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
   padding: 24px; text-align: center;
   color: var(--ink-2); font-size: 14px; font-weight: 520;
   opacity: 0; animation: loadingIn 200ms 300ms var(--ease-out) forwards;
@@ -528,20 +528,29 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 /* Over an older picture: a quiet pill in the corner, the picture stays readable. */
 .panel-loading[data-over="true"] {
   inset: auto 12px 12px auto;
+  flex-direction: row; gap: 8px;
   padding: 6px 12px; border-radius: 999px;
   background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 4px 12px -6px var(--drop);
   font-size: 12px;
 }
 .panel-loading.failed { color: var(--danger); animation-delay: 0ms; max-width: 46ch; margin: auto; }
 @keyframes loadingIn { to { opacity: 1; } }
-.spinner {
-  width: 14px; height: 14px; flex: none;
-  border-radius: 50%;
-  border: 2px solid var(--line); border-top-color: var(--ink-2);
-  animation: spin 700ms linear infinite;
+/* Blocks: nine rounded squares swelling and shrinking out of step. */
+.blocks {
+  display: grid; grid-template-columns: repeat(3, var(--b)); gap: calc(var(--b) * .28);
+  flex: none;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+.blocks span {
+  width: var(--b); height: var(--b);
+  border-radius: calc(var(--b) * .26);
+  background: var(--ink);
+  animation: blockPulse 1.4s cubic-bezier(.45, 0, .55, 1) infinite;
+}
+@keyframes blockPulse {
+  0%, 100% { transform: scale(.12); opacity: .55; }
+  50% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .blocks span { animation-duration: 3s; } }
 
 /*
  * A full e-ink refresh when the live picture changes, in hard steps like the panel:

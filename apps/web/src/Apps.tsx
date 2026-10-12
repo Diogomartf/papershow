@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Blocks } from "./Blocks";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
 import { Nav, navigate } from "./Nav";
@@ -224,8 +225,8 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
               )}
               {(current || isNew) && loading && (
                 <div className="panel-loading" data-over={!!preview} role="status">
-                  <span className="spinner" aria-hidden />
-                  {preview ? "Updating…" : `Loading ${kind?.name ?? "app"}…`}
+                  <Blocks size={preview ? 4 : 13} />
+                  <span>{preview ? "Updating…" : `Loading ${kind?.name ?? "app"}…`}</span>
                 </div>
               )}
               {(current || isNew) && failed && !loading && (
