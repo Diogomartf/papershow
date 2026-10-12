@@ -4,7 +4,23 @@ An e-ink slideshow for an 800×480 black-and-white panel (Waveshare 7.5″). You
 
 All the work happens on the server. The panel never renders anything: it downloads a finished 1-bit frame and redraws only when that frame changes, because e-ink refreshes are slow and flash.
 
-## Quick start
+## Where it runs
+
+- **For real, on a Raspberry Pi 5** with the panel attached. The Pi runs the server and drives the panel, and starts both on boot. You open Papershow from your Mac or phone. See [On a Raspberry Pi](#on-a-raspberry-pi).
+- **For development, on your Mac.** See [Develop on your Mac](#develop-on-your-mac). There's no panel there: `/live` in a browser tab shows what it would show.
+
+## Open Papershow
+
+| Where it runs | From | Address |
+|---|---|---|
+| Raspberry Pi | Any device on your home Wi-Fi | `http://papershow.local:5194` |
+| Raspberry Pi | Anywhere, through [Tailscale](#4-on-the-pi-reach-it-from-anywhere) | `https://papershow.<your-tailnet>.ts.net` |
+| Your Mac (`pnpm dev`) | The Mac | http://localhost:5193 |
+| Your Mac (`pnpm dev`) | A phone on the same Wi-Fi | `http://<your-mac's-ip>:5193` |
+
+On a phone, use the Tailscale address even at home: it's HTTPS, which Draw needs on phones, and it's the same address everywhere. Add it to the home screen and it opens like an app. The device needs the Tailscale app, signed in to the same account. Some Android phones can't resolve `.local` names; use the Pi's IP (`hostname -I` on the Pi) or the Tailscale address.
+
+## Develop on your Mac
 
 Needs Node 22.5 or later (the server uses the built-in `node:sqlite`) and pnpm.
 
@@ -25,7 +41,9 @@ pnpm start               # NODE_ENV=production; serves the web app and the API o
 
 ## On a Raspberry Pi
 
-The usual setup is one Raspberry Pi 5 running both the server and the panel client, with the panel on its GPIO header. You open Papershow from your Mac or phone, at home or away, over Tailscale.
+One Raspberry Pi 5 runs both the server and the panel client, with the panel on its GPIO header. You open Papershow from your Mac or phone, at home or away, over Tailscale.
+
+In short: flash Raspberry Pi OS, clone this repo on the Pi, copy your `.env` over, and run `deploy/pi/install.sh`. The steps below say where each command runs: **on your Mac** or **on the Pi** (after `ssh` into it).
 
 ### You need
 
@@ -33,17 +51,19 @@ The usual setup is one Raspberry Pi 5 running both the server and the panel clie
 - A Waveshare 7.5″ e-Paper V2 (800×480, black and white) with its HAT, seated on the GPIO header.
 - A [Tailscale](https://tailscale.com) account, to reach it from outside your home.
 
-### 1. Flash the card
+### 1. On your Mac: flash the card
 
-In [Raspberry Pi Imager](https://www.raspberrypi.com/software/), pick **Raspberry Pi OS Lite (64-bit)**. Under *Edit settings*, set the hostname to `papershow`, create your user, add your Wi-Fi, and turn on SSH. Boot the Pi, then from your Mac:
+In [Raspberry Pi Imager](https://www.raspberrypi.com/software/), pick **Raspberry Pi OS Lite (64-bit)**. Under *Edit settings*, set the hostname to `papershow`, create your user, add your Wi-Fi, and turn on SSH. Put the card in the Pi, seat the panel's HAT, and power it on. A minute later, log in to it from your Mac:
 
 ```sh
 ssh <user>@papershow.local
 ```
 
-### 2. Get the code and your keys
+Every "On the Pi" step runs in this session.
 
-The repo is private, so sign in to GitHub on the Pi first:
+### 2. On the Pi: get the code
+
+The repo is private, so sign in to GitHub first:
 
 ```sh
 sudo apt-get update && sudo apt-get install -y git gh
@@ -51,13 +71,13 @@ gh auth login
 gh repo clone Diogomartf/papershow ~/papershow && cd ~/papershow
 ```
 
-From your Mac, copy your `.env` over (or create one on the Pi from `.env.example`):
+Then, **on your Mac** in the repo, copy your API keys over (or, on the Pi, `cp .env.example .env` and fill it in):
 
 ```sh
 scp .env <user>@papershow.local:~/papershow/.env
 ```
 
-### 3. Install
+### 3. On the Pi: install
 
 ```sh
 deploy/pi/install.sh
@@ -70,9 +90,9 @@ The script installs Node 24 and pnpm, builds the web app, turns on SPI, installs
 | `papershow` | The server: web app, API and `/live` on :5194. Data in `/var/lib/papershow/papershow.db`. |
 | `papershow-panel` | The panel client: shows the logo, then follows `/live` and draws it. |
 
-Papershow is now at `http://papershow.local:5194` on your home network, and the logo then the current frame appear on the panel.
+The panel shows the logo, then the current frame. Papershow is now at `http://papershow.local:5194` on your home network, and it all starts again on its own after a reboot or power cut.
 
-### 4. Reach it from anywhere
+### 4. On the Pi: reach it from anywhere
 
 ```sh
 curl -fsSL https://tailscale.com/install.sh | sh
@@ -82,9 +102,9 @@ deploy/pi/install.sh              # again: this time it also runs `tailscale ser
 
 It prints the address, `https://papershow.<tailnet>.ts.net`. Open it on any device signed in to your tailnet. `tailscale serve` needs MagicDNS and HTTPS certificates turned on in the Tailscale admin console (DNS page). On a phone, add the page to the home screen.
 
-### 5. Bring your drawings and shows (optional)
+### 5. On your Mac: bring your drawings and shows (optional)
 
-Stop the dev server on your Mac, then copy the database across:
+Stop the dev server, then copy the database across:
 
 ```sh
 scp apps/server/data/imagegen.db <user>@papershow.local:/tmp/
@@ -94,13 +114,15 @@ ssh <user>@papershow.local 'sudo systemctl stop papershow &&
   sudo systemctl start papershow'
 ```
 
-### 6. Set the night
+### 6. In the browser: set the night
 
-On the Dashboard, under **Device**, set the night hours (for example 01:00–10:00) and what the panel shows while asleep. The panel also deep-cleans itself as night begins.
+Open Papershow. On the Dashboard, under **Device**, set the night hours (for example 01:00–10:00) and what the panel shows while asleep. The panel also deep-cleans itself as night begins.
 
 If the Pi used to run e-ink scripts from cron, remove them (`crontab -e`). Only one thing may drive the panel, and the install script warns if it finds any.
 
 ### Updating
+
+On the Pi:
 
 ```sh
 cd ~/papershow && git pull && deploy/pi/install.sh
