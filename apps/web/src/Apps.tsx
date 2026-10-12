@@ -22,6 +22,9 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
   const [apps, setApps] = useState<AppInstance[] | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  // The preview as the panel shows it, or the full-resolution render before it's reduced to 1 bit.
+  const [view, setView] = useState<"eink" | "original">(() => (localStorage.getItem("apps-view") === "original" ? "original" : "eink"));
+  useEffect(() => localStorage.setItem("apps-view", view), [view]);
   const [saved, setSaved] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -67,7 +70,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
     const ctrl = new AbortController();
     let url: string | null = null;
     const run = () =>
-      appsApi.previewApp(kind.kind, draft.config, ctrl.signal).then((u) => {
+      appsApi.previewApp(kind.kind, draft.config, ctrl.signal, view === "original").then((u) => {
         url = u;
         setPreview((old) => {
           if (old) URL.revokeObjectURL(old);
@@ -82,7 +85,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
       clearInterval(tick);
       void url;
     };
-  }, [draft, kind]);
+  }, [draft, kind, view]);
 
   // Save shortly after you stop typing.
   useEffect(() => {
@@ -110,6 +113,15 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
     setApps((list) => [app, ...(list ?? [])]);
     navigate(`/apps/${app.id}`);
     flash(`Created ${app.name}`);
+  };
+
+  /** A copy of this app with the same settings, to tweak from there. */
+  const duplicate = async () => {
+    if (!current || !kind || !draft) return;
+    const app = await appsApi.createApp(kind.kind, { name: `${draft.name} copy`, config: draft.config });
+    setApps((list) => [app, ...(list ?? [])]);
+    navigate(`/apps/${app.id}`);
+    flash(`Duplicated ${draft.name}`);
   };
 
   const remove = async () => {
@@ -161,23 +173,31 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
           </ul>
 
           <h2>New app</h2>
-          <ul className="kinds">
-            {catalog.map((k) => (
-              <li key={k.kind}>
-                <button onClick={() => navigate(`/apps/new/${k.kind}`)} aria-current={newKind === k.kind ? "true" : undefined}>
-                  <strong>{k.name}</strong>
-                  <small>{k.description}</small>
-                </button>
-              </li>
-            ))}
-          </ul>
+          {appsApi.CATEGORIES.map((cat) => {
+            const kinds = catalog.filter((k) => k.category === cat.id);
+            return kinds.length ? (
+              <section key={cat.id} className="kind-group">
+                <h3>{cat.label}</h3>
+                <ul className="kinds">
+                  {kinds.map((k) => (
+                    <li key={k.kind}>
+                      <button onClick={() => navigate(`/apps/new/${k.kind}`)} aria-current={newKind === k.kind ? "true" : undefined}>
+                        <strong>{k.name}</strong>
+                        <small>{k.description}</small>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null;
+          })}
         </aside>
 
         <section className="app-stage">
           <div className="device small">
             <div className="panel">
               {preview && (current || isNew) ? (
-                <img className="live-img" key={preview} src={preview} alt="" />
+                <img className="live-img" data-view={view} key={preview} src={preview} alt="" />
               ) : (
                 <p className="panel-empty">{apps?.length === 0 ? "Pick an app on the left to set it up." : ""}</p>
               )}
@@ -185,6 +205,12 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
             <span className="ribbon" aria-hidden />
           </div>
           <div className="shelf thin" aria-hidden />
+          {(current || isNew) && (
+            <div className="segmented view-switch" role="radiogroup" aria-label="Preview">
+              <button role="radio" aria-checked={view === "eink"} onClick={() => setView("eink")}>E-ink</button>
+              <button role="radio" aria-checked={view === "original"} onClick={() => setView("original")}>Original</button>
+            </div>
+          )}
         </section>
 
         <aside className="settings">
@@ -234,6 +260,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
                   >
                     Add to show
                   </button>
+                  <button className="ghost" onClick={duplicate}>Duplicate</button>
                   <button className="ghost danger" onClick={remove}>Delete</button>
                 </div>
               )}

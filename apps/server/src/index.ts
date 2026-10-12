@@ -238,12 +238,13 @@ app.get("/api/apps/:id/:kind", async (c) => {
 
 /** Render settings that aren't saved yet, so the form previews as you type. */
 app.post("/api/apps/preview", async (c) => {
-  const { kind, config } = await c.req.json<{ kind: string; config: Record<string, unknown> }>();
+  const { kind, config, original } = await c.req.json<{ kind: string; config: Record<string, unknown>; original?: boolean }>();
   if (!APPS[kind]) return c.json({ error: "no such app" }, 404);
-  const frame = await previewFrame(kind, config ?? {});
+  const frame = await previewFrame(kind, config ?? {}, { original: !!original });
   c.header("Content-Type", "image/png");
   c.header("Cache-Control", "no-store");
-  return c.body(frame.mono);
+  // Original: the full-resolution render in colour, before it's reduced to the panel's 1 bit.
+  return c.body(original ? frame.png : frame.mono);
 });
 
 /** Any image or app as it will look at `at` (ms), for the dashboard's sequence. 1-bit PNG. */

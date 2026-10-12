@@ -12,14 +12,20 @@ export type Field =
   /** Tap to pick several of `options`, kept in the order picked; an array in the config. */
   | { key: string; label: string; type: "picks"; options: { value: string; label: string }[]; max?: number; hint?: string };
 
+/** Where an app is listed when you add one. */
+export type Category = "clock" | "ai" | "news" | "markets";
+
 export type AppDef<C extends Record<string, unknown>, D> = {
   kind: string;
   name: string;
+  category: Category;
   description: string;
   defaults: C;
   fields: Field[];
   /** The frame can change at most this often; renders are cached per period, aligned to the clock. */
   periodMs: number;
+  /** When an instance's settings choose how often it changes; otherwise `periodMs`. */
+  periodFor?: (config: C) => number;
   /** How long it stays on when added, if not the usual 15 minutes. A clock only needs a minute. */
   clipS?: number;
   /** True while `data` returns made-up numbers instead of calling a real source. */

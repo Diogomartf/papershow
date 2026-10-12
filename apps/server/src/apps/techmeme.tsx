@@ -30,6 +30,7 @@ const serif = { fontFamily: "Source Serif" };
 
 export default defineApp({
   kind: "techmeme",
+  category: "news",
   name: "Techmeme",
   description: "What tech is talking about: the top story, or the first few.",
   defaults: { layout: "lead" as "lead" | "list" },

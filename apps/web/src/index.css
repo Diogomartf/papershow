@@ -1057,6 +1057,8 @@ a.live-link:hover .live-link-text { color: var(--ink); }
   transition: background-color 120ms;
 }
 .kinds button:hover { background: var(--tint); }
+/* "New app" grouped by category: a small heading over each group. */
+.kind-group h3 { margin: 12px 8px 2px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
 .kinds button[aria-current="true"] { background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
 .kinds strong { font-weight: 560; }
 .kinds strong::before { content: "+ "; color: var(--ink-3); }
@@ -1068,6 +1070,12 @@ a.live-link:hover .live-link-text { color: var(--ink); }
   justify-items: center;
 }
 .app-stage .device { align-self: end; }
+.app-stage { position: relative; }
+/* E-ink or Original, on the shelf under the preview. */
+.view-switch { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); }
+.view-switch button { padding: 4px 12px; font-size: 13px; }
+/* The original is a full-resolution colour render: smooth, not pixel-doubled. */
+.live-img[data-view="original"] { image-rendering: auto; }
 .app-stage .device.small .panel { width: min(680px, calc(100vw - 660px), calc((100dvh - 230px) * 5 / 3)); }
 .shelf.thin { height: 64px; }
 .shelf.thin::after { height: 0; border: 0; }

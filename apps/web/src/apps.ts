@@ -8,9 +8,20 @@ export type Field =
   | { key: string; label: string; type: "list"; placeholder?: string; hint?: string }
   | { key: string; label: string; type: "picks"; options: { value: string; label: string }[]; max?: number; hint?: string };
 
+export type Category = "clock" | "ai" | "news" | "markets";
+
+/** Category headings, in the order the "New app" list shows them. */
+export const CATEGORIES: { id: Category; label: string }[] = [
+  { id: "clock", label: "Clocks" },
+  { id: "ai", label: "AI" },
+  { id: "news", label: "News" },
+  { id: "markets", label: "Stocks & tokens" },
+];
+
 export type AppKind = {
   kind: string;
   name: string;
+  category: Category;
   description: string;
   defaults: Record<string, unknown>;
   fields: Field[];
@@ -41,12 +52,12 @@ export const deleteApp = (id: string) => api<void>(`/api/apps/${id}`, "DELETE");
 /** The app's current frame. `v` busts the cache when its settings change. */
 export const appFrameUrl = (app: AppInstance) => `/api/apps/${app.id}/mono.png?v=${app.updatedAt}`;
 
-/** Render settings that aren't saved yet; resolves to an object URL for an <img>. */
-export async function previewApp(kind: string, config: Record<string, unknown>, signal?: AbortSignal) {
+/** Render settings that aren't saved yet; resolves to an object URL for an <img>. `original`: full resolution, in colour. */
+export async function previewApp(kind: string, config: Record<string, unknown>, signal?: AbortSignal, original = false) {
   const res = await fetch("/api/apps/preview", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ kind, config }),
+    body: JSON.stringify({ kind, config, original }),
     signal,
   });
   if (!res.ok) throw new Error(`preview → ${res.status}`);

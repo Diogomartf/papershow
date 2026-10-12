@@ -66,8 +66,11 @@ export function dither(
     lum[y * width + x] += err;
   };
 
+  // Serpentine: every other row runs right to left, so error doesn't pile up into diagonal "worms".
   for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
+    const d = y % 2 ? -1 : 1;
+    for (let i = 0; i < width; i++) {
+      const x = d === 1 ? i : width - 1 - i;
       const p = y * width + x;
       const old = lum[p];
       const next = old < threshold ? 0 : 255;
@@ -75,17 +78,17 @@ export function dither(
       const err = old - next;
       if (mode === "atkinson") {
         const e = err / 8;
-        spread(x + 1, y, e);
-        spread(x + 2, y, e);
-        spread(x - 1, y + 1, e);
+        spread(x + d, y, e);
+        spread(x + 2 * d, y, e);
+        spread(x - d, y + 1, e);
         spread(x, y + 1, e);
-        spread(x + 1, y + 1, e);
+        spread(x + d, y + 1, e);
         spread(x, y + 2, e);
       } else if (mode === "floyd") {
-        spread(x + 1, y, (err * 7) / 16);
-        spread(x - 1, y + 1, (err * 3) / 16);
+        spread(x + d, y, (err * 7) / 16);
+        spread(x - d, y + 1, (err * 3) / 16);
         spread(x, y + 1, (err * 5) / 16);
-        spread(x + 1, y + 1, err / 16);
+        spread(x + d, y + 1, err / 16);
       }
     }
   }
@@ -93,6 +96,85 @@ export function dither(
   for (let i = 0, p = 0; p < lum.length; i += 4, p++) {
     const v = lum[p];
     rgba[i] = rgba[i + 1] = rgba[i + 2] = v;
+    rgba[i + 3] = 255;
+  }
+  return rgba;
+}
+
+export type Enhance = {
+  /** Stretch the darkest and brightest 1% to black and white, so dull pictures use the full range. */
+  levels?: boolean;
+  /** S-curve strength: 0 leaves mid-tones alone, 1 pushes them hard towards black or white. */
+  contrast?: number;
+  /** Unsharp mask amount: edges and thin lines survive dithering instead of dissolving into dots. */
+  sharpen?: number;
+};
+
+/**
+ * Get a picture ready for 1 bit, in place, before `dither`: grey levels stretched,
+ * contrast raised, edges sharpened. Meant for photos and logos, not for text or line art,
+ * which already threshold cleanly.
+ */
+export function enhance(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+  { levels = true, contrast = 0.5, sharpen = 1 }: Enhance = {},
+): Uint8ClampedArray {
+  const n = width * height;
+  let lum = new Float32Array(n);
+  for (let i = 0, p = 0; p < n; i += 4, p++) {
+    const a = rgba[i + 3] / 255;
+    lum[p] = (0.2126 * rgba[i] + 0.7152 * rgba[i + 1] + 0.0722 * rgba[i + 2]) * a + 255 * (1 - a);
+  }
+
+  if (levels) {
+    const hist = new Uint32Array(256);
+    for (const v of lum) hist[Math.round(v)]++;
+    const at = (q: number) => {
+      for (let v = 0, seen = 0; v < 256; v++) if ((seen += hist[v]) >= q * n) return v;
+      return 255;
+    };
+    const lo = at(0.01);
+    const hi = at(0.99);
+    // A nearly flat picture (a blank card) has nothing to stretch.
+    if (hi - lo > 24) for (let p = 0; p < n; p++) lum[p] = ((lum[p] - lo) / (hi - lo)) * 255;
+  }
+
+  if (contrast > 0) {
+    for (let p = 0; p < n; p++) {
+      const t = Math.min(1, Math.max(0, lum[p] / 255));
+      const s = t * t * (3 - 2 * t); // smoothstep: the S-curve
+      lum[p] = (t + (s - t) * contrast * 2) * 255;
+    }
+  }
+
+  if (sharpen > 0) {
+    // Unsharp mask over a 3×3 blur: push each pixel away from its neighbourhood.
+    const out = new Float32Array(n);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let sum = 0;
+        let count = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= height) continue;
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx;
+            if (xx < 0 || xx >= width) continue;
+            sum += lum[yy * width + xx];
+            count++;
+          }
+        }
+        const p = y * width + x;
+        out[p] = lum[p] + sharpen * (lum[p] - sum / count);
+      }
+    }
+    lum = out;
+  }
+
+  for (let i = 0, p = 0; p < n; i += 4, p++) {
+    rgba[i] = rgba[i + 1] = rgba[i + 2] = lum[p];
     rgba[i + 3] = 255;
   }
   return rgba;
