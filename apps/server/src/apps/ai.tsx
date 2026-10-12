@@ -167,8 +167,10 @@ function Reply({ text, layout }: { text: string; layout: Layout }) {
     );
   }
   const flat = rows.join(" ");
+  // Fill the frame: the block's area grows with characters × size², so size goes as 1/√length.
+  const size = Math.min(80, Math.floor(Math.sqrt(360_000 / Math.max(flat.length, 1))));
   return (
-    <div style={{ display: "flex", fontSize: fit(flat.length, [68, 56, 46, 38]), fontWeight: 500, lineHeight: 1.2, letterSpacing: -1 }}>
+    <div style={{ display: "flex", fontSize: size, fontWeight: 500, lineHeight: 1.15, letterSpacing: size > 60 ? -2 : -1 }}>
       {flat}
     </div>
   );
@@ -181,8 +183,8 @@ export default promptApp({
   kind: "ai",
   name: "Custom AI",
   description: "Anything you can ask for in a prompt, from a model on Groq. New every hour.",
-  title: "Did you know",
-  prompt: "Give me one surprising fact about nature, in a single sentence under 140 characters. " + ONE_LINE,
+  title: "",
+  prompt: "Give me one surprising fact about nature, in a single short sentence under 90 characters. " + ONE_LINE,
   layout: "text",
   refresh: "hour",
   sample: "Octopuses have three hearts, and two of them stop beating when they swim.",
@@ -204,12 +206,12 @@ export const funFact = promptApp({
   kind: "ai-fact",
   name: "Fun fact",
   description: "A surprising fact about science, history or nature. New every hour.",
-  title: "Did you know",
+  title: "",
   prompt:
-    "Tell me one surprising, true fact about science, history or nature, in a single sentence under 140 characters. " + ONE_LINE,
+    "Tell me one surprising, true fact about science, history or nature, in a single short sentence under 90 characters. " + ONE_LINE,
   layout: "text",
   refresh: "hour",
-  sample: "Honey never spoils: pots of it found in ancient Egyptian tombs were still good to eat.",
+  sample: "Honey never spoils: pots from Egyptian tombs were still good to eat.",
 });
 
 export const haiku = promptApp({
