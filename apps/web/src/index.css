@@ -533,7 +533,8 @@ a.live-link:hover .live-link-text { color: var(--ink); }
   background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 4px 12px -6px var(--drop);
   font-size: 12px;
 }
-.panel-loading.failed { color: var(--danger); animation-delay: 0ms; max-width: 46ch; margin: auto; }
+/* Brown, not red: on the panel's paper in both themes, a source being down is news, not an alarm. */
+.panel-loading.failed { color: #6b4a2b; animation-delay: 0ms; max-width: 46ch; margin: auto; }
 @keyframes loadingIn { to { opacity: 1; } }
 /*
  * Blocks: an e-ink loader. A tiny panel (paper, black ink, dimmed at night like the real one) where nine

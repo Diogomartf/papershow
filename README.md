@@ -1,4 +1,4 @@
-# Papershow
+# <img src="apps/web/public/icon-512.png" alt="" width="48" align="center" /> Papershow
 
 An e-ink slideshow for an 800×480 black-and-white panel (Waveshare 7.5″). You draw pictures and set up apps (clocks, AI text, news, prices) in the browser, arrange them into a show, and the panel fetches whatever is on air from `/live`.
 
@@ -23,6 +23,28 @@ pnpm build               # builds apps/web into apps/web/dist
 pnpm start               # NODE_ENV=production; serves the web app and the API on :5194
 ```
 
+## On a Raspberry Pi
+
+The usual setup is one Raspberry Pi 5 running both the server and the panel client, with the panel on its GPIO header. You open Papershow from your Mac or phone over Tailscale.
+
+```sh
+# On the Pi: 64-bit Raspberry Pi OS, Waveshare 7.5" V2 HAT attached
+git clone <this repo> papershow && cd papershow
+cp .env.example .env          # or copy your .env over
+deploy/pi/install.sh
+```
+
+The script installs Node and pnpm, builds the web app, turns on SPI, and installs two services that start on boot: `papershow` (the server on :5194) and `papershow-panel` (the client). If Tailscale is installed and logged in, it also runs `tailscale serve`, so Papershow is at `https://<pi>.<tailnet>.ts.net` from anywhere. Run it again after a `git pull` to update.
+
+- The database lives in `/var/lib/papershow/papershow.db`. To bring your drawings and shows from another machine, stop `papershow` and copy `apps/server/data/imagegen.db` there.
+- Logs: `journalctl -u papershow -f`, `journalctl -u papershow-panel -f`.
+- The panel client long-polls `/live.bin`, so it redraws as soon as the show changes and never in between. When the same app changes (a clock ticking), it uses a quick partial refresh; a new picture, or every 10th tick (`PANEL_PARTIAL`), gets a full refresh to clear ghosting. Between frames the panel sleeps.
+- Once a day, as night begins (the night hours under **Device** on the Dashboard), it deep-cleans the panel against ghosting: white, black, white, then the picture again. With night mode off it does this at 03:00 (`PANEL_CLEAN_HOUR`).
+- The panel's settings are in `/etc/systemd/system/papershow-panel.service`: `PANEL_ROTATE=180` because the frame holds it upside down, `PAPERSHOW_URL` to follow another server.
+- Only one thing may drive the panel. Remove any old e-ink cron jobs (`crontab -e`); the install script warns if it sees them.
+- `apps/panel/waveshare_epd` is a copy of Waveshare's driver (MIT) that's known to work on this panel. Upstream has since changed the panel voltages, so update it only after testing.
+- To try the client without a panel: `PANEL_OUT=/tmp/panel.png python3 apps/panel/panel.py`.
+
 ## Architecture
 
 ```
@@ -44,10 +66,12 @@ pnpm start               # NODE_ENV=production; serves the web app and the API o
 | `apps/web` | Vite + React front end: Dashboard, Show, Playlists, Apps, Draw. |
 | `apps/server` | Hono on Node: API, SQLite store, scheduler, app renderer, `/live`. |
 | `apps/server/src/apps` | One file per app (clock, AI, news, crypto, stocks…). See [AGENTS.md](AGENTS.md) for how to write one. |
+| `apps/panel` | The Pi client: follows `/live.bin` and draws it on the Waveshare panel. Python, not part of the pnpm workspace. |
 | `packages/scene` | Shared by web and server: the drawing's `Scene` type, `dither`, `enhance` and `pack1bpp`. |
+| `deploy/pi` | Install script and systemd units for running everything on a Raspberry Pi 5. |
 | `.env.example` | API keys; copy to `.env` at the repo root. |
 
-The Pi client that drives the panel isn't in this repo yet. Anything that can fetch `/live.bin` and write 48,000 bytes to the display works (see [The panel's contract](#the-panels-contract)).
+The panel client only knows a server URL, so it can follow a server on the same Pi, on your tailnet, or anywhere else. Anything that can fetch `/live.bin` and write 48,000 bytes to a display works (see [The panel's contract](#the-panels-contract)).
 
 ### Two ways a frame gets made
 

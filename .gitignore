@@ -3,3 +3,4 @@ dist
 .DS_Store
 data
 .env
+__pycache__
