@@ -12,7 +12,7 @@ On a Pi 5 with 64-bit Raspberry Pi OS and the panel attached, run this one line:
 command -v gh >/dev/null || { sudo apt-get update && sudo apt-get install -y gh; }; gh auth status >/dev/null 2>&1 || gh auth login; gh api repos/Diogomartf/papershow/contents/deploy/pi/install.sh -H "Accept: application/vnd.github.raw" | bash
 ```
 
-It signs in to GitHub if needed (the repo is private), installs everything, offers to set up Tailscale, and starts the panel. Run it again to update. The details are in [On a Raspberry Pi](#on-a-raspberry-pi).
+It signs in to GitHub if needed (the repo is private), installs everything, offers to set up Tailscale, and starts the panel. Run it again to update. It works on a fresh Pi and on one you already use for other things: see [Already have a Pi, or want it on your own Pi?](#already-have-a-pi-or-want-it-on-your-own-pi) for what it changes and what it leaves alone. The step-by-step is in [On a Raspberry Pi](#on-a-raspberry-pi).
 
 ## Where it runs
 
@@ -88,9 +88,9 @@ One Raspberry Pi 5 runs both the server and the panel client, with the panel on 
 
 In short: flash Raspberry Pi OS and run one line on the Pi. It installs everything, sets up Tailscale if you want it, and starts the panel. Copying your `.env` over is optional. The steps below say where each command runs: **on your Mac** or **on the Pi** (after `ssh` into it).
 
-### Already have a Pi?
+### Already have a Pi, or want it on your own Pi?
 
-You don't need a fresh card. Papershow installs next to whatever else the Pi runs, as long as it's a **Pi 5 on 64-bit Raspberry Pi OS** (`uname -m` says `aarch64`). Skip step 1, `ssh` in as usual, and start at [step 2](#2-on-the-pi-install). The one line puts the checkout in `~/papershow` (`PAPERSHOW_DIR` to change it), or clone it yourself anywhere and run `deploy/pi/install.sh`.
+You don't need a fresh card or a Pi just for Papershow. It installs next to whatever else your Pi runs (other services, cron jobs, a Tailscale setup), as long as it's a **Pi 5 on 64-bit Raspberry Pi OS**. To check, `uname -m` on the Pi should say `aarch64`. Skip step 1, `ssh` in as usual, and start at [step 2](#2-on-the-pi-install): it's the same one line. The one line puts the checkout in `~/papershow` (`PAPERSHOW_DIR` to change it), or clone it yourself anywhere and run `deploy/pi/install.sh`.
 
 What the install script changes, and what it leaves alone:
 
