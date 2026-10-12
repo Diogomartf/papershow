@@ -34,6 +34,7 @@ There are no unit tests yet. Check your work by rendering frames and looking at 
 - **`install.sh` is also the one-line install.** Piped into `bash` (README step 2), it clones or updates `~/papershow` and runs the checkout's copy with `exec`. Until that `exec`, bash is still reading the script from stdin, so every command there takes `</dev/null`. Prompts (Tailscale) read from `/dev/tty`, and are skipped when there's none. Keep the one line in the README, the PR and the script's header comment the same.
 - **pnpm is pinned to 7**, the version that wrote `pnpm-lock.yaml`; newer ones refuse it. The install runs it through `npx pnpm@7`. Upgrading pnpm means regenerating the lockfile and changing both.
 - **`install.sh` runs on Pis that are also used for other things.** Keep it safe to rerun, and don't take over what's already there: ports, Tailscale serve, cron, the system Node. Check and warn, or stop with a clear message. The units in `deploy/pi/*.service` are templates: `@USER@`, `@REPO@` and `@PORT@` are filled in on install, and personal settings go in `systemctl edit` drop-ins, which survive reinstalls.
+- **`uninstall.sh` undoes what `install.sh` adds**, and nothing more. When the install gains a step (a unit, a file, a Tailscale route), add its undo. Data is deleted only with `--purge`, and shared things (Node, apt packages, SPI, Tailscale itself) stay.
 - New client settings are environment variables: document them in `panel.py`'s docstring and in the README's Panel settings table.
 
 ## Building an e-ink app

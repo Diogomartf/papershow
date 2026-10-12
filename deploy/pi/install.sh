@@ -66,10 +66,6 @@ pnpm build
 sudo raspi-config nonint do_spi 0
 sudo apt-get install -y python3-pil python3-spidev python3-gpiozero python3-lgpio
 
-# Only one thing can drive the panel. Old scripts on a cron would fight the client over SPI.
-if crontab -l 2>/dev/null | grep -qE 'epd|e-ink|e_ink'; then
-  echo "Warning: your crontab still has e-ink jobs. Remove them (crontab -e) so they don't draw over Papershow." >&2
-fi
 
 for unit in papershow papershow-panel; do
   sed -e "s|@USER@|$user|g" -e "s|@REPO@|$repo|g" -e "s|@PORT@|$port|g" "deploy/pi/$unit.service" |
@@ -108,4 +104,29 @@ if command -v tailscale >/dev/null && tailscale status >/dev/null 2>&1; then
   fi
 else
   echo "Without Tailscale, Papershow is only reachable at home. Run this again to set it up."
+fi
+
+# Only one thing can drive the panel: anything else that draws on it (old scripts on a cron, a
+# timer, another program) fights the client over SPI and puts its own pictures up. Look everywhere
+# such a thing could live, and say what to do. Nothing is removed: these may be yours to keep.
+panel='epd|e-ink|e_ink|eink|waveshare|spidev|pi-e-ink'
+others=()
+while read -r line; do others+=("your crontab:   $line"); done < <(crontab -l 2>/dev/null | grep -v '^\s*#' | grep -iE "$panel" || true)
+while read -r line; do others+=("root's crontab: $line"); done < <(sudo crontab -l 2>/dev/null | grep -v '^\s*#' | grep -iE "$panel" || true)
+while read -r line; do others+=("$line"); done < <(sudo grep -iEs "$panel" /etc/crontab /etc/cron.d/* 2>/dev/null | grep -v ':\s*#' || true)
+while read -r unit; do
+  others+=("systemd unit:   $unit (sudo systemctl disable --now $unit)")
+done < <(grep -liE "$panel" /etc/systemd/system/*.service /etc/systemd/system/*.timer ~/.config/systemd/user/*.service ~/.config/systemd/user/*.timer 2>/dev/null |
+  xargs -r -n1 basename | grep -v '^papershow' || true)
+for fd in $(sudo find /proc/[0-9]*/fd -lname '/dev/spidev*' 2>/dev/null); do
+  pid=$(cut -d/ -f3 <<<"$fd")
+  cmd=$(tr '\0' ' ' </proc/"$pid"/cmdline 2>/dev/null || true)
+  grep -q 'apps/panel/panel.py' <<<"$cmd" || others+=("running now:    pid $pid: $cmd")
+done
+if [ ${#others[@]} -gt 0 ]; then
+  echo
+  echo "Heads up: these may also draw on the panel and fight Papershow over it:"
+  printf '  %s\n' "${others[@]}" | sort -u
+  echo "Remove the ones that do. For cron: crontab -l > ~/crontab.backup, then crontab -e (sudo crontab -e for root's)."
+  echo "If you used pi-e-ink: crontab -l | grep -v pi-e-ink | crontab -"
 fi
