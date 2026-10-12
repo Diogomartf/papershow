@@ -6,6 +6,7 @@ const SCALE = { small: 0.55, medium: 0.78, large: 1 } as const;
 export default defineApp({
   kind: "clock",
   category: "clock",
+  source: "This device’s clock",
   name: "Clock",
   description: "The time, large enough to read across the room.",
   defaults: { timeZone: "Europe/Lisbon", hour12: false, showDate: true, size: "large" as keyof typeof SCALE },

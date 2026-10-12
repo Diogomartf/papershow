@@ -11,6 +11,8 @@ type Paper = {
   kind: string;
   name: string;
   description: string;
+  /** Where the stories come from, shown in the app's settings. */
+  source: string;
   /** Section ids, their labels, and the RSS feed for each. */
   sections: { value: string; label: string; feed: string }[];
   masthead: JSX.Element;
@@ -50,6 +52,7 @@ function newspaper(paper: Paper) {
     kind: paper.kind,
     name: paper.name,
     category: "news",
+    source: paper.source,
     description: paper.description,
     defaults: { section: first, photo: true },
     fields: [
@@ -119,6 +122,7 @@ const nyt = (feed: string) => `https://rss.nytimes.com/services/xml/rss/nyt/${fe
 export const nytimes = newspaper({
   kind: "nytimes",
   name: "New York Times",
+  source: "NYT RSS feeds",
   description: "The story leading the front page, with its photo.",
   sections: [
     { value: "home", label: "Front page", feed: nyt("HomePage") },
@@ -139,6 +143,7 @@ const wsjFeed = (feed: string) => `https://feeds.content.dowjones.io/public/rss/
 export const wsj = newspaper({
   kind: "wsj",
   name: "Wall Street Journal",
+  source: "WSJ RSS feeds (Dow Jones)",
   description: "The latest story in a section of the Journal, with its photo.",
   sections: [
     { value: "world", label: "World", feed: wsjFeed("RSSWorldNews") },

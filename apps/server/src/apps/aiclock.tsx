@@ -34,6 +34,7 @@ const PROMPT =
 export default defineApp({
   kind: "aiclock",
   category: "clock",
+  source: "Groq",
   name: "AI Clock",
   description: "A two-line poem about the time, new every minute.",
   get defaults() {

@@ -73,6 +73,7 @@ function prices(): Promise<Prices> {
 export default defineApp({
   kind: "crypto",
   category: "markets",
+  source: "CoinGecko prices, Trust Wallet logos",
   name: "Crypto",
   description: "Prices for a few tokens, with their marks, from CoinGecko.",
   defaults: { tokens: ["bitcoin", "ethereum", "solana"] as string[], currency: "usd" },

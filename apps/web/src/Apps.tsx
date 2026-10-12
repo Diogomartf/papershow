@@ -228,6 +228,8 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
               </div>
               <p className="muted kind-line">
                 {kind.name}
+                <span aria-hidden>·</span>
+                <span>from {kind.source}</span>
                 {kind.mock && <span className="chip">Mock data</span>}
               </p>
 

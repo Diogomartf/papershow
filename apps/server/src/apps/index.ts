@@ -18,10 +18,11 @@ export const APPS: Record<string, AnyApp> = Object.fromEntries(
 
 /** What the Apps page needs to list kinds and build their forms. */
 export const catalog = () =>
-  Object.values(APPS).map(({ kind, name, category, description, defaults, fields, mock, periodMs }) => ({
+  Object.values(APPS).map(({ kind, name, category, description, source, defaults, fields, mock, periodMs }) => ({
     kind,
     name,
     category,
+    source,
     description,
     defaults,
     fields,

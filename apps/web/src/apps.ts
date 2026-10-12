@@ -23,6 +23,8 @@ export type AppKind = {
   name: string;
   category: Category;
   description: string;
+  /** Where its data comes from. */
+  source: string;
   defaults: Record<string, unknown>;
   fields: Field[];
   mock: boolean;

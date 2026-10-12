@@ -128,6 +128,7 @@ const last = new Map<string, Mover[]>();
 export default defineApp({
   kind: "stocks",
   category: "markets",
+  source: "Massive",
   name: "Stocks",
   description: "Today's biggest movers in the US stock market, from Massive.",
   defaults: { list: "gainers" },

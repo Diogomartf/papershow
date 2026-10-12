@@ -36,6 +36,7 @@ function promptApp(p: Preset) {
     kind: p.kind,
     name: p.name,
     category: "ai",
+    source: "Groq",
     description: p.description,
     get defaults() {
       return { title: p.title, prompt: p.prompt, layout: p.layout as Layout, refresh: p.refresh as Refresh, model: defaultModel() };

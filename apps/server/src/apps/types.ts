@@ -20,6 +20,8 @@ export type AppDef<C extends Record<string, unknown>, D> = {
   name: string;
   category: Category;
   description: string;
+  /** Where its data comes from, shown next to the app's type, e.g. "CoinGecko". */
+  source: string;
   defaults: C;
   fields: Field[];
   /** The frame can change at most this often; renders are cached per period, aligned to the clock. */
