@@ -522,7 +522,7 @@ a.live-link:hover .live-link-text { color: var(--ink); }
   position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
   padding: 24px; text-align: center;
-  color: var(--ink-2); font-size: 14px; font-weight: 520;
+  color: var(--ink); font-size: 14px; font-weight: 540;
   opacity: 0; animation: loadingIn 200ms 300ms var(--ease-out) forwards;
 }
 /* Over an older picture: a quiet pill in the corner, the picture stays readable. */
@@ -546,18 +546,20 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .blocks span {
   width: var(--b); height: var(--b);
   border-radius: calc(var(--b) * .26);
-  box-shadow: inset 0 0 0 1px var(--line);
+  --empty: color-mix(in srgb, var(--ink) 12%, transparent);
+  --edge: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 45%, transparent);
+  background: var(--empty); box-shadow: var(--edge);
   animation: blockInk 1.6s step-end infinite;
 }
 @keyframes blockInk {
-  0% { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+  0% { background: var(--empty); box-shadow: var(--edge); }
   18% { background: var(--ink); box-shadow: none; }
   36% {
     background: repeating-conic-gradient(var(--ink) 0 25%, transparent 0 50%) 0 0 / 2px 2px;
-    box-shadow: inset 0 0 0 1px var(--ink-3);
+    box-shadow: inset 0 0 0 1.5px var(--ink);
   }
   54% { background: var(--ink); box-shadow: none; }
-  72%, 100% { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+  72%, 100% { background: var(--empty); box-shadow: var(--edge); }
 }
 @media (prefers-reduced-motion: reduce) { .blocks span { animation-duration: 4s; } }
 
