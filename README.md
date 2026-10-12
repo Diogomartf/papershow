@@ -14,7 +14,7 @@ All the work happens on the server. The panel never renders anything: it downloa
 | Where it runs | From | Address |
 |---|---|---|
 | Raspberry Pi | Any device on your home Wi-Fi | `http://papershow.local:5194` (your Pi's hostname, and port if you changed it) |
-| Raspberry Pi | Anywhere, through [Tailscale](#4-on-the-pi-reach-it-from-anywhere) | `https://papershow.<your-tailnet>.ts.net` |
+| Raspberry Pi | Anywhere, through [Tailscale](#4-reach-it-from-anywhere) | `https://papershow.<your-tailnet>.ts.net` |
 | Your Mac (`pnpm dev`) | The Mac | http://localhost:5193 |
 | Your Mac (`pnpm dev`) | A phone on the same Wi-Fi | `http://<your-mac's-ip>:5193` |
 
@@ -43,11 +43,11 @@ pnpm start               # NODE_ENV=production; serves the web app and the API o
 
 One Raspberry Pi 5 runs both the server and the panel client, with the panel on its GPIO header. You open Papershow from your Mac or phone, at home or away, over Tailscale.
 
-In short: flash Raspberry Pi OS, clone this repo on the Pi, copy your `.env` over, and run `deploy/pi/install.sh`. The steps below say where each command runs: **on your Mac** or **on the Pi** (after `ssh` into it).
+In short: flash Raspberry Pi OS and run one line on the Pi. It installs everything, sets up Tailscale if you want it, and starts the panel. Copying your `.env` over is optional. The steps below say where each command runs: **on your Mac** or **on the Pi** (after `ssh` into it).
 
 ### Already have a Pi?
 
-You don't need a fresh card. Papershow installs next to whatever else the Pi runs, as long as it's a **Pi 5 on 64-bit Raspberry Pi OS** (`uname -m` says `aarch64`). Skip step 1, `ssh` in as usual, and start at [step 2](#2-on-the-pi-get-the-code). Clone it anywhere in your home folder.
+You don't need a fresh card. Papershow installs next to whatever else the Pi runs, as long as it's a **Pi 5 on 64-bit Raspberry Pi OS** (`uname -m` says `aarch64`). Skip step 1, `ssh` in as usual, and start at [step 2](#2-on-the-pi-install). The one line puts the checkout in `~/papershow` (`PAPERSHOW_DIR` to change it), or clone it yourself anywhere and run `deploy/pi/install.sh`.
 
 What the install script changes, and what it leaves alone:
 
@@ -75,27 +75,15 @@ ssh <user>@papershow.local
 
 Every "On the Pi" step runs in this session.
 
-### 2. On the Pi: get the code
+### 2. On the Pi: install
 
-The repo is private, so sign in to GitHub first:
-
-```sh
-sudo apt-get update && sudo apt-get install -y git gh
-gh auth login
-gh repo clone Diogomartf/papershow ~/papershow && cd ~/papershow
-```
-
-Then, **on your Mac** in the repo, copy your API keys over (or, on the Pi, `cp .env.example .env` and fill it in):
+One line. It installs GitHub's `gh` if it's missing and asks you to sign in if you aren't yet (the repo is private). Then it clones the repo to `~/papershow`, installs, and offers to set up Tailscale:
 
 ```sh
-scp .env <user>@papershow.local:~/papershow/.env
+command -v gh >/dev/null || { sudo apt-get update && sudo apt-get install -y gh; }; gh auth status >/dev/null 2>&1 || gh auth login; gh api repos/Diogomartf/papershow/contents/deploy/pi/install.sh -H "Accept: application/vnd.github.raw" | bash
 ```
 
-### 3. On the Pi: install
-
-```sh
-deploy/pi/install.sh
-```
+Run the same line again to update. Inside a checkout, `deploy/pi/install.sh` does the same thing.
 
 The script installs Node 24 and pnpm, builds the web app, turns on SPI, installs the panel's Python libraries, and sets up two services that start on boot:
 
@@ -106,15 +94,20 @@ The script installs Node 24 and pnpm, builds the web app, turns on SPI, installs
 
 The panel shows the logo, then the current frame. Papershow is now at `http://papershow.local:5194` on your home network, and it all starts again on its own after a reboot or power cut.
 
-### 4. On the Pi: reach it from anywhere
+### 3. On your Mac: add your API keys (optional)
+
+Without keys, the AI apps and Stocks show stand-in content. To use yours, copy your `.env` over from the repo on your Mac and restart the server:
 
 ```sh
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up                 # open the link it prints and log in
-deploy/pi/install.sh              # again: this time it also runs `tailscale serve`
+scp .env <user>@papershow.local:~/papershow/.env
+ssh <user>@papershow.local sudo systemctl restart papershow
 ```
 
-It prints the address, `https://papershow.<tailnet>.ts.net`. Open it on any device signed in to your tailnet. `tailscale serve` needs MagicDNS and HTTPS certificates turned on in the Tailscale admin console (DNS page). On a phone, add the page to the home screen.
+### 4. Reach it from anywhere
+
+The install asks whether to set up Tailscale. Say yes, open the link it prints to log in, and it ends with the address, `https://papershow.<tailnet>.ts.net`. Open it on any device signed in to your tailnet. On a phone, add the page to the home screen.
+
+`tailscale serve` needs MagicDNS and HTTPS certificates turned on in the Tailscale admin console (DNS page). If you said no, run the install line again later.
 
 ### 5. On your Mac: bring your drawings and shows (optional)
 
@@ -136,7 +129,7 @@ If the Pi used to run e-ink scripts from cron, remove them (`crontab -e`). Only 
 
 ### Updating
 
-On the Pi:
+On the Pi, run the [one line](#2-on-the-pi-install) again, or:
 
 ```sh
 cd ~/papershow && git pull && deploy/pi/install.sh

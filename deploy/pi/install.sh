@@ -1,13 +1,38 @@
 #!/usr/bin/env bash
 # Sets up Papershow on a Raspberry Pi 5 with 64-bit Raspberry Pi OS (Bookworm or later):
 # the server and the panel client, both as systemd services that start on boot.
-# Run it from a checkout of this repo, anywhere in your home folder. It's safe to run again after
-# a `git pull`, and it leaves the rest of a Pi you already use alone.
+# It's safe to run again, and it leaves the rest of a Pi you already use alone.
 #
-#   PAPERSHOW_PORT=8080 deploy/pi/install.sh    # if something else already uses 5194
+# From a checkout:   deploy/pi/install.sh
+# Or in one line, without one: it clones the repo to ~/papershow (or updates it) and carries on.
+#   gh api repos/Diogomartf/papershow/contents/deploy/pi/install.sh -H "Accept: application/vnd.github.raw" | bash
+#
+#   PAPERSHOW_PORT=8080     if something else already uses 5194
+#   PAPERSHOW_DIR=~/x       where the one-line install puts the checkout (~/papershow)
+#   PAPERSHOW_BRANCH=main   which branch it checks out (main)
 set -euo pipefail
 
-repo=$(cd "$(dirname "$0")/../.." && pwd)
+here=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)
+if [ ! -f "$here/install.sh" ] || [ ! -f "$here/../../package.json" ]; then
+  # Piped in, not run from a checkout: get the code, then run the checkout's copy of this script.
+  # Everything here reads from /dev/null, because the rest of this script is still waiting on stdin.
+  dir=${PAPERSHOW_DIR:-$HOME/papershow}
+  branch=${PAPERSHOW_BRANCH:-main}
+  command -v git >/dev/null || sudo apt-get install -y git </dev/null
+  if [ -d "$dir/.git" ]; then
+    git -C "$dir" fetch --quiet origin </dev/null
+    git -C "$dir" switch --quiet "$branch" </dev/null
+    git -C "$dir" pull --quiet --ff-only </dev/null
+  elif command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
+    gh repo clone Diogomartf/papershow "$dir" -- --branch "$branch" </dev/null
+  else
+    # Works once the repo is public; until then, `gh auth login` first.
+    git clone --branch "$branch" https://github.com/Diogomartf/papershow.git "$dir" </dev/null
+  fi
+  exec bash "$dir/deploy/pi/install.sh" </dev/null
+fi
+
+repo=$(cd "$here/../.." && pwd)
 user=$(id -un)
 port=${PAPERSHOW_PORT:-5194}
 
@@ -54,8 +79,19 @@ sudo systemctl restart papershow papershow-panel
 
 echo "Papershow: http://$(hostname).local:$port"
 
-# Reach it from your Mac and phone, at home or away, over HTTPS. A Pi you already use may serve
-# other things through Tailscale; that setup is left alone.
+# Reach it from your Mac and phone, at home or away, over HTTPS. Tailscale is a VPN, so ask before
+# installing it; with no one at the keyboard, skip it. A Pi you already use may serve other things
+# through Tailscale; that setup is left alone.
+if ! command -v tailscale >/dev/null && [ -r /dev/tty ]; then
+  read -rp "Install Tailscale, to open Papershow from anywhere? [Y/n] " answer </dev/tty || answer=n
+  if [[ ! "$answer" =~ ^[Nn] ]]; then
+    curl -fsSL https://tailscale.com/install.sh | sh
+  fi
+fi
+if command -v tailscale >/dev/null && ! tailscale status >/dev/null 2>&1 && [ -r /dev/tty ]; then
+  echo "Log in to Tailscale: open the link below."
+  sudo tailscale up </dev/tty || true
+fi
 if command -v tailscale >/dev/null && tailscale status >/dev/null 2>&1; then
   name=$(tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')
   serving=$(sudo tailscale serve status 2>/dev/null || true)
@@ -69,5 +105,5 @@ if command -v tailscale >/dev/null && tailscale status >/dev/null 2>&1; then
     echo "  sudo tailscale serve --bg --https=8443 $port    # then https://$name:8443"
   fi
 else
-  echo "Install Tailscale and run this again to reach it from anywhere over HTTPS."
+  echo "Without Tailscale, Papershow is only reachable at home. Run this again to set it up."
 fi
