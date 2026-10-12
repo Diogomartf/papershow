@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent, type PointerEvent } from "react";
 import { Nav } from "./Nav";
+import { EinkImage } from "./EinkImage";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
 import { useSideScroll } from "./scroll";
@@ -279,7 +280,7 @@ export function Playlist({ id }: { id: string | null }) {
           <div className="device small">
             <div className="panel">
               {showing && !showing.blank ? (
-                <img className="live-img" src={`/live.png?e=${encodeURIComponent(showing.etag)}`} alt="" />
+                <EinkImage src={`/live.png?e=${encodeURIComponent(showing.etag)}`} />
               ) : showing?.asleep ? (
                 <p className="panel-empty">Asleep. The panel keeps its last picture until {clock(showing.asleep)}.</p>
               ) : (

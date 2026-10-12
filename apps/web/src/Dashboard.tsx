@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { EinkImage } from "./EinkImage";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
 import { Nav, navigate } from "./Nav";
@@ -75,7 +76,7 @@ export function Dashboard() {
             <div className="device small">
               <div className="panel">
                 {showing && !showing.blank ? (
-                  <img className="live-img" src={`/live.png?e=${encodeURIComponent(showing.etag)}`} alt="" />
+                  <EinkImage src={`/live.png?e=${encodeURIComponent(showing.etag)}`} />
                 ) : (
                   <p className="panel-empty">
                     {asleep ? `Asleep. The panel keeps its last picture until ${hhmm(asleep)}.` : "Nothing on /live yet. Build a playlist to start."}

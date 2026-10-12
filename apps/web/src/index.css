@@ -543,6 +543,35 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
 
+/*
+ * A full e-ink refresh when the live picture changes, in hard steps like the panel:
+ * old picture inverted → black → white → black → new picture inverted → new picture.
+ */
+.eink-swap, .eink-layer, .eink-ink { position: absolute; inset: 0; }
+/* The layer blends with the paper instead of the picture: a filtered layer would otherwise blend only with itself. */
+.eink-layer { display: block; mix-blend-mode: multiply; opacity: .92; }
+.eink-swap .live-img { animation: none; mix-blend-mode: normal; opacity: 1; }
+.eink-swap[data-refreshing="true"] .old { animation: einkOld 1100ms step-end forwards; }
+.eink-layer.new { opacity: 0; animation: einkNew 1100ms step-end forwards; }
+.eink-ink { animation: einkInk 1100ms step-end forwards; filter: var(--dim); }
+@keyframes einkOld {
+  0% { filter: none; opacity: .92; }
+  12% { filter: invert(1); opacity: .92; }
+  24%, 100% { opacity: 0; }
+}
+@keyframes einkInk {
+  0% { background: transparent; }
+  24% { background: #111; }
+  36% { background: var(--paper); }
+  48% { background: #111; }
+  60%, 100% { background: transparent; }
+}
+@keyframes einkNew {
+  0% { opacity: 0; }
+  60% { opacity: .92; filter: invert(1); }
+  72%, 100% { opacity: .92; filter: none; }
+}
+
 .panel-empty {
   position: absolute; inset: 0;
   display: grid; place-items: center;
