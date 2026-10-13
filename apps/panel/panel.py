@@ -2,8 +2,9 @@
 """Papershow panel client: puts the server's /live frame on a Waveshare 7.5" V2 (800×480).
 
 It long-polls /live.bin and redraws only when the ETag changes, so the server decides when
-the picture changes and the panel never flashes for nothing. See "The panel's contract" in
-the README.
+the picture changes and the panel never flashes for nothing. A picture sent with Show now
+(X-Show-Now) gets a black flash first, to wipe the old one off clean. See "The panel's
+contract" in the README.
 
   PAPERSHOW_URL   server to follow (http://localhost:5194)
   PANEL_PARTIAL   quick partial refreshes in a row before a full one (10; 0 = always full)
@@ -57,10 +58,14 @@ class Panel:
 
         self.epd = epd7in5_V2.EPD()
 
-    def show(self, img, full):
+    def show(self, img, full, flash=False):
         buf = self.epd.getbuffer(img)
         if full:
             self.epd.init()
+            if flash:
+                # All black, then the picture: every pixel is driven both ways, so nothing of the old
+                # picture ghosts through. One wake for both refreshes keeps it quick.
+                self.epd.display(bytearray([0xFF]) * (W * H // 8))
             self.epd.display(buf)
         else:
             self.epd.init_part()
@@ -84,7 +89,7 @@ class FilePanel:
     def __init__(self, path):
         self.path = path
 
-    def show(self, img, full):
+    def show(self, img, full, flash=False):
         img.save(self.path)
 
     def clean(self):
@@ -98,7 +103,7 @@ def main():
     splash = os.path.join(os.path.dirname(os.path.abspath(__file__)), "splash.png")
     panel.show(Image.open(splash).convert("1").rotate(ROTATE), True)
     log.info("following %s", URL)
-    etag = source = img = was_asleep = None
+    etag = source = img = was_asleep = shown_now = None
     partials = PARTIAL  # the first frame after a start is a full refresh
     cleaned_at = 0.0
     while True:
@@ -126,13 +131,17 @@ def main():
                 panel.clean()
                 log.info("cleaned the panel")
             new_source = headers.get("X-Source")
+            # Show now: a new value means someone just sent this picture. Flash first, once per send.
+            show_now = headers.get("X-Show-Now")
+            flash = show_now is not None and show_now != shown_now and not clean
+            shown_now = show_now
             # A clock ticking over is the same source and suits a partial refresh. A new picture
             # gets a full one, and so does every PARTIAL-th tick, to clear the ghosting.
-            full = clean or new_source is None or new_source != source or partials >= PARTIAL
-            panel.show(img, full)
+            full = clean or flash or new_source is None or new_source != source or partials >= PARTIAL
+            panel.show(img, full, flash)
             partials = 0 if full else partials + 1
             etag, source = headers.get("ETag"), new_source
-            log.info("drew %s (%s refresh)", new_source or "frame", "full" if full else "partial")
+            log.info("drew %s (%s refresh%s)", new_source or "frame", "full" if full else "partial", ", flashed for Show now" if flash else "")
             continue
 
         # No new frame: if it's time, clean and put the same picture back.

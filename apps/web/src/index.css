@@ -1079,7 +1079,11 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 }
 .on-air .left { color: var(--ink-3); letter-spacing: .06em; }
 .pl-rows li[data-off="true"] .pl-main { opacity: .5; }
-.pl-order { display: grid; gap: 2px; }
+.pl-order { display: grid; gap: 2px; cursor: grab; touch-action: none; }
+/* Rows drag to reorder: the others glide aside, the one held lifts. */
+.pl-rows li { transition: transform .18s ease; cursor: grab; }
+.pl-rows li .pl-row-actions, .pl-rows li input { cursor: auto; }
+.pl-rows li[data-dragging="true"] { cursor: grabbing; box-shadow: 0 0 0 1.5px var(--ink-3), 0 18px 40px -18px var(--drop); user-select: none; }
 .pl-order button { border: 0; background: transparent; width: 24px; height: 22px; border-radius: 6px; color: var(--ink-3); font-size: 12px; }
 .pl-order button:hover:not(:disabled) { background: var(--tint); color: var(--ink); }
 .pl-order button:disabled { opacity: .3; cursor: default; }

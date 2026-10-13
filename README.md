@@ -300,7 +300,7 @@ Photos and logos are prepared for e-ink one by one before layout (`ditheredImage
 - **Playlists** hold clips. Each clip has a duration, weekdays and an optional time window (for example 07:00–09:00, which can wrap past midnight). Clips outside their window are skipped.
 - **Repeats**: a single entry can instead run *on the clock*, every 15, 30, 60, 120 or 180 minutes from midnight, interrupting the loop for its duration. The loop keeps time underneath and resumes where the clock says.
 - **At times**: any entry, a playlist too, can leave the loop and play only at set times each day (for example 08:00 and 20:00). At each one it interrupts the loop (a playlist plays its clips back to back), ending at least a minute before its next time. When two interruptions meet, the one higher in the show wins.
-- **Show now**: puts one drawing or app on `/live` once: for its turn (a clip's own length, else 15 minutes), then the show carries on by itself. **Resume now** ends it early.
+- **Show now**: puts one drawing or app on `/live` once: for its turn (a clip's own length, else 15 minutes), then the show carries on by itself. **Resume now** ends it early. The panel flashes black before drawing it, so it goes up clean, and pressing it again on what's already up redraws it.
 - **Night**: sleep hours during which the panel shows a moon and the wake-up time, goes blank, or keeps its last picture.
 
 The rotation runs on wall-clock time: the position in the cycle comes from `now % cycle length`. A restart doesn't change what's on air.
@@ -324,7 +324,7 @@ What's on the panel now: the frame, its name, which playlist it's from, and a pr
 
 ### Show (`/show`)
 
-The running order. Add playlists, or single drawings and apps, then reorder them, set durations, switch entries on or off, set a single entry to repeat on the clock, or set any entry, playlists too, to play only **At times** of day you type, like `08:00, 20:00`. A single drawing or app has **Show now**, to put it on the panel for its turn right away. The header shows how long one pass of the loop takes. Under **Add to the show**, each playlist is a card with a glimpse of its first three clips stacked like a deck, its item count and its length.
+The running order. Add playlists, or single drawings and apps, then drag them into order (or use the arrows; on a phone, drag by the arrows), set durations, switch entries on or off, set a single entry to repeat on the clock, or set any entry, playlists too, to play only **At times** of day you type, like `08:00, 20:00`. A single drawing or app has **Show now**, to put it on the panel for its turn right away. The header shows how long one pass of the loop takes. Under **Add to the show**, each playlist is a card with a glimpse of its first three clips stacked like a deck, its item count and its length.
 
 ### Playlists (`/playlist/:id`)
 
@@ -400,6 +400,7 @@ Response headers:
 - `ETag`: changes only when the pixels do.
 - `X-Next-Change`: seconds until the frame changes by itself, if it will.
 - `X-Sleep-Until`: while asleep, when the panel wakes (ms since epoch).
+- `X-Show-Now`: while a Show now holds `/live`, when it ends (ms since epoch). A new value means someone just sent this picture: the panel client flashes black, then draws it with a full refresh.
 
 Long-poll: send `?wait=1` with `If-None-Match: <etag>`. The server holds the request for up to 55 s and answers as soon as the frame changes, or with `304` if it didn't. A `204` means keep the last picture (asleep with "keep last picture"). Requests without `?e=` count as a display checking in, which the dashboard shows. The web app's own previews add `?e=`.
 
