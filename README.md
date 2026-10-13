@@ -366,7 +366,7 @@ Every source keeps its last good result if a fetch fails. The news apps read uno
 
 ### Draw (`/draw`)
 
-A drawing board the size of the panel. Pens, eraser, undo and swatches come from drawesome. **Text** (or `T`) switches to typing: click to add text, drag to move it with centre guides, pull a corner to scale it. **Ink / E-ink** previews the drawing as the panel will show it, with the swatches cut down to black and white. **Save** (⌘S) stores it on the server. **Open** saves and opens its page in a new tab. **Show now** saves and puts it on the panel for 15 minutes, then the show carries on. **Gallery** reopens or deletes saved drawings, or puts one on `/live`. The draft autosaves in the browser.
+A drawing board the size of the panel. Pens, eraser, undo and swatches come from drawesome. **Text** (or `T`) switches to typing: click to add text, drag to move it with centre guides, pull a corner to scale it. **Ink / E-ink** previews the drawing as the panel will show it, with the swatches cut down to black and white. **Save** (⌘S) stores it on the server. **Open** saves and opens its page in a new tab. **Show now** saves and puts it on the panel for 15 minutes, then the show carries on. **Gallery** reopens or deletes saved drawings, or puts one on `/live`. The draft autosaves in the browser. Coming back to Draw starts a new canvas, unless the last drawing has changes you haven't saved.
 
 ### Image page (`/i/:id`)
 

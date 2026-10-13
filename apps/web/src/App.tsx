@@ -4,7 +4,7 @@ import "drawesome/styles.css";
 import "@fontsource-variable/inter";
 import { PANEL, type Scene, type TextItem } from "@papershow/scene";
 import { paintMono, renderScene } from "./render";
-import { getDraft, imageUrl, putDraft, putImage } from "./store";
+import { getDraft, getSaved, imageUrl, putDraft, putImage, putSaved } from "./store";
 import { Gallery } from "./Gallery";
 import { setLive } from "./slides";
 import { Nav } from "./Nav";
@@ -51,7 +51,10 @@ export default function App() {
 
   useEffect(() => {
     document.title = "Draw · Papershow";
-    getDraft().then((d) => setScene(d ?? newScene()));
+    // Coming back to Draw starts a new canvas, unless the last one has changes that weren't saved.
+    Promise.all([getDraft(), getSaved()]).then(([d, saved]) =>
+      setScene(d && JSON.stringify(d) !== saved ? d : newScene()),
+    );
   }, []);
 
   // Keep the draft and the e-ink preview in step with the drawing.
@@ -99,6 +102,7 @@ export default function App() {
     try {
       const current = { ...scene, strokes: draw.current?.getStrokes() ?? scene.strokes, updatedAt: Date.now() };
       await putImage(current, await renderScene(current));
+      await putSaved(current);
       setScene(current);
       setGalleryKey((k) => k + 1);
       if (tab) tab.location.href = imageUrl(current.id);
@@ -114,6 +118,8 @@ export default function App() {
   }, [scene, saving]);
 
   const open = (s: Scene) => {
+    // As saved: only changes to it keep it on the board when you come back.
+    putSaved(s);
     setScene(s);
     draw.current?.setStrokes(s.strokes);
     setGalleryOpen(false);
