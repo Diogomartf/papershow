@@ -1,7 +1,7 @@
 import { clockParts, defineApp, sheet } from "./types.ts";
 
-// Large fills the panel; the others leave room around it.
-const SCALE = { small: 0.55, medium: 0.78, large: 1 } as const;
+// XL runs the time edge to edge; Large fills the panel with room around it; the others leave more.
+const SCALE = { small: 0.55, medium: 0.78, large: 1, xl: 1.32 } as const;
 
 export default defineApp({
   kind: "clock",
@@ -22,6 +22,7 @@ export default defineApp({
         { value: "small", label: "Small" },
         { value: "medium", label: "Medium" },
         { value: "large", label: "Large" },
+        { value: "xl", label: "XL" },
       ],
     },
   ],
@@ -31,7 +32,8 @@ export default defineApp({
   data: () => null,
   view: ({ config, now }) => {
     const t = clockParts(now, config.timeZone, config.hour12);
-    const k = SCALE[config.size] ?? 1;
+    // XL's widest times (20:08, or 10:08 PM) just fit the width; 12-hour gives up a little to make room for AM/PM.
+    const k = (SCALE[config.size] ?? 1) * (config.size === "xl" && config.hour12 ? 0.93 : 1);
     return (
       <div style={{ ...sheet, flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
         <div style={{ display: "flex", alignItems: "flex-start" }}>
