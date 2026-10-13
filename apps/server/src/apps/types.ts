@@ -117,3 +117,22 @@ export const decode = (s: string) =>
     .replace(/&([a-z]+);/gi, (m, name) => ENTITIES[name.toLowerCase()] ?? m)
     .replace(/\s+/g, " ")
     .trim();
+
+/** Splits text into the lines it takes at `size` px in `width` px: for fitting serif type to a box before satori lays it out. */
+export function wrap(text: string, size: number, width: number) {
+  const out: string[] = [];
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const line = out.length ? `${out.at(-1)} ${word}` : word;
+    // Source Serif averages about half an em per character, at both weights.
+    if (out.length && line.length * size * 0.5 <= width) out[out.length - 1] = line;
+    else out.push(word);
+  }
+  return out;
+}
+
+/** As much of `text` as fits in `rows` lines (see `wrap`), cut at a word with "…"; "" when nothing fits. */
+export function clip(text: string, rows: number, size: number, width: number) {
+  const lines = wrap(text, size, width);
+  if (lines.length <= rows) return text;
+  return rows > 0 ? `${lines.slice(0, rows).join(" ").replace(/[\s,;:.]+\S*$/, "")}…` : "";
+}
