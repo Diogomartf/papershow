@@ -338,7 +338,7 @@ Some apps take a few seconds the first time, because they fetch before they can 
 
 | App | Category | Data from | Key | New frame |
 |---|---|---|---|---|
-| Clock (Small / Medium / Large / XL, 12/24-hour, date; doodles: up to 6 of your drawings scattered around the time, shuffled every minute, hour or day) | Clocks | This device's clock, your drawings | — | every minute |
+| Clock (Small / Medium / Large / XL, 12/24-hour, date; doodles: pick any number of your drawings, and a few at random are scattered around the time, a new draw every minute, hour or day) | Clocks | This device's clock, your drawings | — | every minute |
 | AI Clock (a poem about the time; editable prompt with `{time}`, `{timezone}` and `{date}`; Standard or Large) | Clocks | Groq | `GROQ_API_KEY` | every minute by default; any number of minutes (from a minute of the hour, like :59) or hours (from a time of day, like 08:30) |
 | Word of the day | AI | Groq | `GROQ_API_KEY` | daily (adjustable) |
 | Fun fact | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |

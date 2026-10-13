@@ -60,7 +60,10 @@ function shrink(id: string, w: number, h: number) {
   return shrunk.get(key)!;
 }
 
-/** The picked drawings, scattered over the free space: each in its own spot, a little tilted, shuffled each `shuffle`. */
+/**
+ * A few of the picked drawings, chosen at random, scattered over the free space: each in its own spot, a little
+ * tilted. A new draw each `shuffle`; with fewer picked than spots, some come up twice.
+ */
 function scatter(ids: string[], count: number, spaces: Box[], seed: string): Doodle[] {
   if (!ids.length) return [];
   const rand = random(seed);
@@ -119,12 +122,11 @@ export default defineApp({
         label: "Doodles",
         type: "picks",
         options: store.listImages().map((i) => ({ value: i.id, label: i.name || "Untitled" })),
-        max: 6,
-        hint: "Drawings to scatter around the time. Medium leaves the most room; XL hardly any.",
+        hint: "Pick as many as you like: each shuffle shows a few of them at random. Medium leaves the most room; XL none.",
       },
       {
         key: "count",
-        label: "How many",
+        label: "How many at a time",
         type: "select",
         options: ["1", "2", "3", "4", "5", "6"].map((n) => ({ value: n, label: n })),
       },
