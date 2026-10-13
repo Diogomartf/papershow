@@ -2,9 +2,10 @@
 # Papershow's commands on the Pi. install.sh links this script into /usr/local/bin under each
 # command's name, and the name it's called by picks the command:
 #
-#   paper:update           get the latest main and reinstall
+#   paper:update           get the latest main and reinstall (--if-newer: only if main has changed;
+#                          papershow-update.timer runs it that way every night)
 #   paper:status           what's running, which version, where to open it, what the panel last drew
-#   paper:logs [server|panel] [journalctl options]   follow the logs, both services by default
+#   paper:logs [server|panel|update] [journalctl options]   follow the logs, both services by default
 #   paper:help             list these commands
 #
 # Or call it directly: deploy/pi/paper.sh status
@@ -22,8 +23,8 @@ help() {
   cat <<'EOF'
 Papershow on this Pi:
   paper:status            what's running, which version, where to open it, what the panel last drew
-  paper:logs              follow the logs; paper:logs server or paper:logs panel for one
-  paper:update            get the latest main and reinstall
+  paper:logs              follow the logs; paper:logs server, panel or update for one
+  paper:update            get the latest main and reinstall (it also checks every night on its own)
   paper:help              this list
 EOF
 }
@@ -36,6 +37,13 @@ port() {
 
 case "$cmd" in
   update)
+    if [ "${1:-}" = --if-newer ]; then
+      git -C "$repo" fetch --quiet origin
+      if [ "$(git -C "$repo" rev-parse HEAD)" = "$(git -C "$repo" rev-parse '@{upstream}')" ]; then
+        echo "Up to date: $(git -C "$repo" log -1 --format='%h %s')"
+        exit 0
+      fi
+    fi
     git -C "$repo" pull --ff-only
     # The new copy of install.sh, so changes to the install itself apply in this run.
     exec "$repo/deploy/pi/install.sh"
@@ -71,6 +79,19 @@ case "$cmd" in
       name=$(tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')
       echo "          https://$name"
     fi
+    if systemctl is-enabled --quiet papershow-update.timer 2>/dev/null; then
+      checked=$(systemctl show papershow-update -p ExecMainExitTimestamp --value 2>/dev/null || true)
+      result=$(systemctl show papershow-update -p Result --value 2>/dev/null || true)
+      if [ -z "$checked" ]; then
+        echo "Updates:  every night, not checked yet"
+      elif [ "$result" = success ]; then
+        echo "Updates:  every night, last checked $checked"
+      else
+        echo "Updates:  every night, but the last one failed ($checked): paper:logs update shows why"
+      fi
+    else
+      echo "Updates:  only with paper:update"
+    fi
     if [ -f "$repo/.env" ]; then
       keys=$(grep -oE '^[A-Z_]+=.' "$repo/.env" | cut -d= -f1 | paste -sd' ' - || true)
       echo "Keys:     ${keys:-none set}"
@@ -86,8 +107,14 @@ case "$cmd" in
     case "${1:-}" in
       server) units=(-u papershow); shift ;;
       panel) units=(-u papershow-panel); shift ;;
+      update) units=(-u papershow-update); shift ;;
     esac
-    exec journalctl "${units[@]}" -n 50 -f "$@"
+    # In colour on a terminal; plain when piped, or when you pick journalctl's own output format.
+    if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && ! [[ " $* " =~ \ (-o|--output)[\ =] ]]; then
+      journalctl "${units[@]}" -n 50 -f -o json "$@" | python3 -u "$repo/deploy/pi/logs.py"
+    else
+      exec journalctl "${units[@]}" -n 50 -f "$@"
+    fi
     ;;
 
   help | -h | --help)

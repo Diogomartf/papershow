@@ -9,6 +9,7 @@
 #
 #   PAPERSHOW_PORT=8080     if something else already uses 5194
 #   PAPERSHOW_NAME=paper    its name on the local network: http://paper.local
+#   PAPERSHOW_AUTO_UPDATE=0 don't update every night (1 turns it back on); later runs keep the choice
 #   PAPERSHOW_DIR=~/x       where the one-line install puts the checkout (~/papershow)
 #   PAPERSHOW_BRANCH=main   which branch it checks out (main)
 set -euo pipefail
@@ -90,12 +91,24 @@ else
   publish=yes
 fi
 
+# Nightly updates: on for a new install, and as they were for an earlier one (systemctl disable turns
+# them off for good). They run the install as you, so they need sudo without a password, as the Pi's
+# first user has; otherwise they're off and paper:update does it.
+if [ -f /etc/systemd/system/papershow-update.timer ] && ! systemctl is-enabled --quiet papershow-update.timer; then
+  auto=${PAPERSHOW_AUTO_UPDATE:-0}
+else
+  auto=${PAPERSHOW_AUTO_UPDATE:-1}
+fi
+if [ "$auto" = 1 ] && ! sudo -k -n true 2>/dev/null; then
+  echo "sudo asks $user for a password, so Papershow can't update itself at night. Run paper:update now and then." >&2
+  auto=0
+fi
 
 # Already set up means this run is an update; it changes only the last line of the output.
 [ -f /etc/systemd/system/papershow.service ] && action=updated || action=installed
-for unit in papershow papershow-panel papershow-name; do
+for unit in papershow.service papershow-panel.service papershow-name.service papershow-update.service papershow-update.timer; do
   sed -e "s|@USER@|$user|g" -e "s|@REPO@|$repo|g" -e "s|@PORT@|$port|g" -e "s|@WEB_PORT@|$web_port|g" -e "s|@NAME@|$name|g" \
-    "deploy/pi/$unit.service" | sudo tee "/etc/systemd/system/$unit.service" >/dev/null
+    "deploy/pi/$unit" | sudo tee "/etc/systemd/system/$unit" >/dev/null
 done
 sudo systemctl daemon-reload
 sudo systemctl enable papershow papershow-panel
@@ -106,12 +119,18 @@ if [ -n "$publish" ]; then
 else
   sudo systemctl disable --now papershow-name 2>/dev/null || true
 fi
+# Not restarted: this may be the nightly update itself, running.
+if [ "$auto" = 1 ]; then
+  sudo systemctl enable --now papershow-update.timer
+else
+  sudo systemctl disable --now papershow-update.timer 2>/dev/null || true
+fi
 
 # paper:update, paper:status, paper:logs and paper:help, as links to the checkout's script so they update
 # with it. A command of the same name that isn't ours is left alone.
 chmod +x deploy/pi/paper.sh
-for name in update status logs help; do
-  link=/usr/local/bin/paper:$name
+for command in update status logs help; do
+  link=/usr/local/bin/paper:$command
   if { [ -e "$link" ] || [ -L "$link" ]; } && [[ "$(readlink "$link")" != */deploy/pi/paper.sh ]]; then
     echo "$link already exists and isn't Papershow's, so it was left alone." >&2
   else
@@ -133,16 +152,18 @@ if command -v tailscale >/dev/null && ! tailscale status >/dev/null 2>&1 && [ -r
   sudo tailscale up </dev/tty || true
 fi
 if command -v tailscale >/dev/null && tailscale status >/dev/null 2>&1; then
-  name=$(tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')
+  tailnet=$(tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')
   serving=$(sudo tailscale serve status 2>/dev/null || true)
   if grep -q "127.0.0.1:$port" <<<"$serving"; then
     echo "Tailscale: already serving Papershow (sudo tailscale serve status shows where)"
+    grep -q "^https://$tailnet " <<<"$serving" && away="https://$tailnet"
   elif [ -z "$serving" ] || grep -q "No serve config" <<<"$serving"; then
     sudo tailscale serve --bg "$port"
-    echo "Tailscale: https://$name"
+    away="https://$tailnet"
+    echo "Tailscale: https://$tailnet"
   else
     echo "Tailscale already serves something else on this Pi, so it was left alone. To add Papershow on its own port:"
-    echo "  sudo tailscale serve --bg --https=8443 $port    # then https://$name:8443"
+    echo "  sudo tailscale serve --bg --https=8443 $port    # then https://$tailnet:8443"
   fi
 else
   echo "Without Tailscale, Papershow is only reachable at home. Run this again to set it up."
@@ -181,11 +202,28 @@ for _ in $(seq 30); do
 done
 open="http://$name.local"
 [ -n "$web_port" ] || open+=":$port"
-if curl -fs -o /dev/null "http://127.0.0.1:$port/api/state"; then
-  echo "Papershow $action! Ready to use."
-  echo "  Version:   $(git -C "$repo" log -1 --format='%h %s')"
-  echo "  Open:      $open"
-  echo "  Commands:  paper:help lists them"
+# Colour only on a terminal: the nightly update's output goes to the journal.
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  bold=$'\e[1m' dim=$'\e[2m' green=$'\e[1;32m' cyan=$'\e[36m' red=$'\e[1;31m' off=$'\e[0m'
 else
-  echo "Papershow $action, but the server isn't answering yet. paper:status and paper:logs server show why." >&2
+  bold= dim= green= cyan= red= off=
 fi
+rule="$dim$(printf '─%.0s' $(seq 56))$off"
+row() { printf '  %s%-10s%s %s\n' "$dim" "$1" "$off" "$2"; }
+echo "$rule"
+echo
+if curl -fs -o /dev/null "http://127.0.0.1:$port/api/state"; then
+  echo "  ${green}✓ Papershow $action! Ready to use.$off"
+  echo
+  row Version "$bold$(git -C "$repo" log -1 --format=%h)$off $(git -C "$repo" log -1 --format=%s)"
+  row Open "$bold$cyan$open$off"
+  [ -z "${away:-}" ] || row Away "$cyan$away$off"
+  if [ "$auto" = 1 ]; then row Updates "every night"; else row Updates "with paper:update"; fi
+  row Commands "${bold}paper:help$off lists them"
+else
+  echo "  ${red}✗ Papershow $action, but the server isn't answering yet.$off"
+  echo
+  echo "  ${bold}paper:status$off and ${bold}paper:logs server$off show why."
+fi
+echo
+echo "$rule"

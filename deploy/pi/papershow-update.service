@@ -1,0 +1,13 @@
+# Updates Papershow when main has something new; papershow-update.timer runs it every night.
+# install.sh fills in @USER@ and @REPO@.
+[Unit]
+Description=Papershow update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=@USER@
+ExecStart=@REPO@/deploy/pi/paper.sh update --if-newer
+# A reinstall builds the web app, which takes a few minutes on a Pi.
+TimeoutStartSec=30min

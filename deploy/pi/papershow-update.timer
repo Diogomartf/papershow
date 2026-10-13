@@ -1,0 +1,12 @@
+# Checks for a Papershow update every night around 4, when no one is likely to see the panel redraw as
+# it restarts. A Pi that was off then checks once it's back on.
+[Unit]
+Description=Check for a Papershow update every night
+
+[Timer]
+OnCalendar=*-*-* 04:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
