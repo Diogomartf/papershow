@@ -340,7 +340,7 @@ Some apps take a few seconds the first time, because they fetch before they can 
 | Fun fact | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |
 | Haiku (knows the season and time of day) | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |
 | Quote of the day | AI | Groq | `GROQ_API_KEY` | daily (adjustable) |
-| Custom AI (any prompt, any layout) | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |
+| Custom AI (any prompt, any layout; every AI app has a Clean style: only the reply, as big as it fits) | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |
 | New York Times (lead story and photo, 7 sections; Poster, Clean or Classic) | News | NYT RSS feeds | — | 15 min |
 | Wall Street Journal (latest story and photo, 7 sections; Poster, Clean or Classic) | News | WSJ RSS feeds (Dow Jones) | — | 15 min |
 | Techmeme (top story, or the top 3; Poster, Clean or Classic) | News | techmeme.com "Top News" column | — | 15 min |
