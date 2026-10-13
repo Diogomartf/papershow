@@ -58,3 +58,7 @@ async function kv<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBReq
 
 export const getDraft = () => kv<Scene | undefined>("readonly", (s) => s.get("draft"));
 export const putDraft = (scene: Scene) => kv<void>("readwrite", (s) => s.put(scene, "draft"));
+
+/** The drawing as last saved, as JSON: a draft that still matches it holds nothing new. */
+export const getSaved = () => kv<string | undefined>("readonly", (s) => s.get("saved"));
+export const putSaved = (scene: Scene) => kv<void>("readwrite", (s) => s.put(JSON.stringify(scene), "saved"));

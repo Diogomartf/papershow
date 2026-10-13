@@ -338,7 +338,7 @@ Some apps take a few seconds the first time, because they fetch before they can 
 
 | App | Category | Data from | Key | New frame |
 |---|---|---|---|---|
-| Clock (Small / Medium / Large / XL, 12/24-hour, date) | Clocks | This device's clock | — | every minute |
+| Clock (Small / Medium / Large / XL, 12/24-hour, date; doodles: pick any number of your drawings, and a few at random are scattered around the time, a new draw every minute, hour or day) | Clocks | This device's clock, your drawings | — | every minute |
 | AI Clock (a poem about the time; editable prompt with `{time}`, `{timezone}` and `{date}`; Standard or Large) | Clocks | Groq | `GROQ_API_KEY` | every minute by default; any number of minutes (from a minute of the hour, like :59) or hours (from a time of day, like 08:30) |
 | Word of the day | AI | Groq | `GROQ_API_KEY` | daily (adjustable) |
 | Fun fact | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |
@@ -366,7 +366,7 @@ Every source keeps its last good result if a fetch fails. The news apps read uno
 
 ### Draw (`/draw`)
 
-A drawing board the size of the panel. Pens, eraser, undo and swatches come from drawesome. **Text** (or `T`) switches to typing: click to add text, drag to move it with centre guides, pull a corner to scale it. **Ink / E-ink** previews the drawing as the panel will show it, with the swatches cut down to black and white. **Save** (⌘S) stores it on the server. **Open** saves and opens its page in a new tab. **Show now** saves and puts it on the panel for 15 minutes, then the show carries on. **Gallery** reopens or deletes saved drawings, or puts one on `/live`. The draft autosaves in the browser.
+A drawing board the size of the panel. Pens, eraser, undo and swatches come from drawesome. **Text** (or `T`) switches to typing: click to add text, drag to move it with centre guides, pull a corner to scale it. **Ink / E-ink** previews the drawing as the panel will show it, with the swatches cut down to black and white. **Save** (⌘S) stores it on the server. **Open** saves and opens its page in a new tab. **Show now** saves and puts it on the panel for 15 minutes, then the show carries on. **Gallery** reopens or deletes saved drawings, or puts one on `/live`. The draft autosaves in the browser. Coming back to Draw starts a new canvas, unless the last drawing has changes you haven't saved.
 
 ### Image page (`/i/:id`)
 
