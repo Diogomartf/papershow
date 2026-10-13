@@ -29,7 +29,7 @@ let last: Story[] | null = null;
 const serif = { fontFamily: "Source Serif" };
 
 /** The height of the text under the masthead, in panel pixels (Clean's is slimmer); the text is 728 px wide. */
-const BODY_H = { poster: 360, clean: 372, classic: 360 };
+const BODY_H = { poster: 360, clean: 372, classic: 360, title: 372 };
 const WIDTH = 728;
 
 export default defineApp({
@@ -57,8 +57,9 @@ export default defineApp({
         { value: "poster", label: "Poster" },
         { value: "clean", label: "Clean" },
         { value: "classic", label: "Classic" },
+        { value: "title", label: "Title" },
       ],
-      hint: "Poster reads from across the room. Clean: the same, under a smaller name with no date. Classic: more, smaller, with where each story is from.",
+      hint: "Poster reads from across the room. Clean: the same, under a smaller name with no date. Classic: more, smaller, with where each story is from. Title: only the headlines, as big as they fit.",
     },
   ],
   periodMs: 15 * 60_000,
@@ -78,12 +79,16 @@ export default defineApp({
     const date = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
     const lead = data[0];
     const classic = config.style === "classic";
-    const clean = config.style === "clean";
+    const title = config.style === "title";
+    const clean = config.style === "clean" || title;
     const bodyH = BODY_H[config.style];
     const n = lead.headline.length;
     // Poster and Clean read from across the room (2–3 m). Top story: the headline as big as fits in about two thirds of the
     // page, then as much of the excerpt as fits below. Top 3: as many as fit at 32 px or more, as big as they fit.
-    const size = [72, 64, 58, 52, 48, 44, 40].find((s) => wrap(lead.headline, s, WIDTH).length * s * 1.1 <= bodyH * 0.66) ?? 40;
+    // Title: the headline alone fills the page.
+    const size = title
+      ? ([104, 96, 88, 80, 72, 64, 58, 52, 48, 44].find((s) => wrap(lead.headline, s, WIDTH).length * s * 1.08 <= bodyH - 18) ?? 40)
+      : ([72, 64, 58, 52, 48, 44, 40].find((s) => wrap(lead.headline, s, WIDTH).length * s * 1.1 <= bodyH * 0.66) ?? 40);
     const EXCERPT = 28;
     const room = Math.floor((bodyH - wrap(lead.headline, size, WIDTH).length * size * 1.1 - 18) / (EXCERPT * 1.3));
     const excerpt = clip(lead.excerpt.replace(/\s*(\.\.\.|…)$/, "…"), room, EXCERPT, WIDTH);
@@ -124,14 +129,14 @@ export default defineApp({
                 ...serif,
                 fontSize: classic ? (n <= 90 ? 44 : n <= 140 ? 38 : 32) : size,
                 fontWeight: 700,
-                lineHeight: classic ? 1.15 : 1.1,
-                letterSpacing: -0.5,
+                lineHeight: classic ? 1.15 : title ? 1.08 : 1.1,
+                letterSpacing: title ? -1 : -0.5,
               }}
             >
               {lead.headline}
             </span>
             {classic && lead.excerpt ? <span style={{ ...serif, fontSize: 21, lineHeight: 1.4, marginTop: 16 }}>{lead.excerpt}</span> : null}
-            {!classic && excerpt ? <span style={{ ...serif, fontSize: EXCERPT, lineHeight: 1.3, marginTop: 18 }}>{excerpt}</span> : null}
+            {!classic && !title && excerpt ? <span style={{ ...serif, fontSize: EXCERPT, lineHeight: 1.3, marginTop: 18 }}>{excerpt}</span> : null}
           </div>
         )}
       </div>
