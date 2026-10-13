@@ -27,6 +27,9 @@ const events = new EventEmitter();
 events.setMaxListeners(0);
 const changed = () => events.emit("change");
 
+/** How long Show now holds /live when it isn't given a turn's length. */
+const SHOW_NOW_S = 15 * 60;
+
 type FileKind = "png" | "mono" | "bin";
 type SourceFrame = { etag: string; nextAt: number | null; file: (kind: FileKind) => Uint8Array<ArrayBuffer> };
 
@@ -406,10 +409,14 @@ app.put("/api/sleep", async (c) => {
 });
 
 app.put("/api/live", async (c) => {
-  const live = await c.req.json<Live>();
+  const live = await c.req.json<Live & { forS?: number }>();
   if (live.mode === "pin") {
     if (!live.source || !exists(live.source)) return c.json({ error: "no such image or app" }, 404);
-    store.setLive({ mode: "pin", source: { kind: live.source.kind, id: live.source.id } });
+    // Show now takes over once, for its turn (`forS`, else 15 minutes), then the playlists carry on.
+    const forS = Number(live.forS) > 0 ? Number(live.forS) : SHOW_NOW_S;
+    store.setLive({ mode: "pin", source: { kind: live.source.kind, id: live.source.id }, until: Date.now() + forS * 1000 });
+    // The panel wakes on its own at the end; open pages hear it then.
+    setTimeout(changed, forS * 1000 + 50).unref();
   } else {
     store.setLive({ mode: "rotate" });
   }

@@ -26,8 +26,11 @@ export type Slide = {
   end: string | null;
 };
 
-/** Either a chosen image held on /live, or the playlist rotating. */
-export type Live = { mode: "rotate" } | { mode: "pin"; source: Source };
+/**
+ * Either the playlists rotating, or something put on /live with Show now: until `until`, when the playlists take
+ * over again by themselves (no `until`: until you resume them).
+ */
+export type Live = { mode: "rotate" } | { mode: "pin"; source: Source; until?: number | null };
 
 export type Showing = {
   source: Source;
@@ -108,7 +111,8 @@ function repeatAt(repeats: Repeat[], now: number) {
 const toNextMinute = (now: number) => 60_000 - (now % 60_000);
 
 export function showing(live: Live, slides: Slide[], now = Date.now(), repeats: Repeat[] = []): Showing | null {
-  if (live.mode === "pin") return { source: live.source, slideId: null, endsAt: null, clip: null };
+  if (live.mode === "pin" && (!live.until || now < live.until))
+    return { source: live.source, slideId: null, endsAt: live.until ?? null, clip: null };
 
   // A repeat takes over for its slot; the loop keeps time underneath and resumes where the clock says.
   const rep = repeatAt(repeats, now);

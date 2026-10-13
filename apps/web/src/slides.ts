@@ -47,7 +47,8 @@ export type Turn = {
   endsAt: number;
 };
 
-export type Live = { mode: "rotate" } | { mode: "pin"; source: Source };
+/** Show now holds `source` on /live until `until`, then the playlists carry on. */
+export type Live = { mode: "rotate" } | { mode: "pin"; source: Source; until?: number | null };
 
 /** Night: hours when the panel sleeps, and what it shows ("off" keeps the last picture). */
 export type Sleep = { enabled: boolean; start: string; end: string; screen: "moon" | "blank" | "off" };
@@ -100,7 +101,8 @@ export const addSlide = (source: Source, playlistId?: string, at?: number) =>
 export const updateSlide = (id: string, patch: Partial<Slide>) => call(`/api/slides/${id}`, "PATCH", patch);
 export const reorderSlides = (ids: string[]) => call("/api/slides/order", "PUT", { ids });
 export const removeSlide = (id: string) => call(`/api/slides/${id}`, "DELETE");
-export const setLive = (live: Live) => call("/api/live", "PUT", live);
+/** Show now for `forS` seconds (the server's 15 minutes when left out), or back to the playlists. */
+export const setLive = (live: Live & { forS?: number }) => call("/api/live", "PUT", live);
 export const setSleep = (patch: Partial<Sleep>) => call("/api/sleep", "PUT", patch);
 
 /** New playlists join the end of the show unless `show` is false. */

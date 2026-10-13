@@ -73,6 +73,15 @@ export function Show() {
     toast.show(`Removed ${nameOf(e)} from the show`, () => api.restoreShowEntry(e, index).then(accept));
   };
 
+  /** On the panel now, once: for its turn in the loop (a cut-in's minute is too short; those get 15), then the show carries on. */
+  const showNow = (e: ShowEntry) =>
+    e.source &&
+    api.setLive({ mode: "pin", source: e.source, forS: e.everyM ? undefined : e.durationS }).then((s) => {
+      accept(s);
+      const until = s.live.mode === "pin" && s.live.until ? new Date(s.live.until) : null;
+      toast.show(`${nameOf(e)} is on the panel${until ? ` until ${until.toTimeString().slice(0, 5)}` : ""}`);
+    });
+
   const add = (what: { playlistId: string } | { source: Item["source"] }, name: string) =>
     api.addToShow(what).then((s) => {
       accept(s);
@@ -205,8 +214,12 @@ export function Show() {
                   >
                     <span />
                   </button>
-                  {e.playlistId && (
+                  {e.playlistId ? (
                     <button className="ghost" onClick={() => navigate(`/playlist/${e.playlistId}`)}>Open</button>
+                  ) : (
+                    <button className="ghost" onClick={() => showNow(e)} title="On the panel now, then the show carries on">
+                      Show now
+                    </button>
                   )}
                   <button className="ghost danger" onClick={() => remove(e, i)} aria-label={`Remove ${nameOf(e)} from the show`}>
                     Remove

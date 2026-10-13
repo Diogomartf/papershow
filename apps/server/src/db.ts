@@ -449,6 +449,8 @@ export function getLive(): Live {
   const live = JSON.parse(row.value);
   // Pins saved before apps existed held an image id directly.
   if (live.mode === "pin" && live.imageId) return { mode: "pin", source: { kind: "image", id: live.imageId } };
+  // A Show now whose time is up: the playlists are back.
+  if (live.mode === "pin" && live.until && live.until <= Date.now()) return { mode: "rotate" };
   return live;
 }
 

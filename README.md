@@ -299,7 +299,7 @@ Photos and logos are prepared for e-ink one by one before layout (`ditheredImage
 - **The show** is a list, played top to bottom and then again. Each entry is either a **playlist** (its clips in order) or a **single drawing or app** with its own duration.
 - **Playlists** hold clips. Each clip has a duration, weekdays and an optional time window (for example 07:00–09:00, which can wrap past midnight). Clips outside their window are skipped.
 - **Repeats**: a single entry can instead run *on the clock*, every 15, 30, 60, 120 or 180 minutes from midnight, interrupting the loop for its duration. The loop keeps time underneath and resumes where the clock says.
-- **Pin** ("Show now"): holds one drawing or app on `/live` until you go back to the loop.
+- **Show now**: puts one drawing or app on `/live` once: for its turn (a clip's own length, else 15 minutes), then the show carries on by itself. **Resume now** ends it early.
 - **Night**: sleep hours during which the panel shows a moon and the wake-up time, goes blank, or keeps its last picture.
 
 The rotation runs on wall-clock time: the position in the cycle comes from `now % cycle length`. A restart doesn't change what's on air.
@@ -323,7 +323,7 @@ What's on the panel now: the frame, its name, which playlist it's from, and a pr
 
 ### Show (`/show`)
 
-The running order. Add playlists, or single drawings and apps, then reorder them, set durations, switch entries on or off, or set a single entry to repeat on the clock. The header shows how long one pass of the loop takes. Under **Add to the show**, each playlist is a card with a glimpse of its first three clips stacked like a deck, its item count and its length.
+The running order. Add playlists, or single drawings and apps, then reorder them, set durations, switch entries on or off, or set a single entry to repeat on the clock. A single drawing or app has **Show now**, to put it on the panel for its turn right away. The header shows how long one pass of the loop takes. Under **Add to the show**, each playlist is a card with a glimpse of its first three clips stacked like a deck, its item count and its length.
 
 ### Playlists (`/playlist/:id`)
 
@@ -365,7 +365,7 @@ Every source keeps its last good result if a fetch fails. The news apps read uno
 
 ### Draw (`/draw`)
 
-A drawing board the size of the panel. Pens, eraser, undo and swatches come from drawesome. **Text** (or `T`) switches to typing: click to add text, drag to move it with centre guides, pull a corner to scale it. **Ink / E-ink** previews the drawing as the panel will show it, with the swatches cut down to black and white. **Save & open** (⌘S) stores it on the server and opens its page. **Gallery** reopens or deletes saved drawings, or puts one on `/live`. The draft autosaves in the browser.
+A drawing board the size of the panel. Pens, eraser, undo and swatches come from drawesome. **Text** (or `T`) switches to typing: click to add text, drag to move it with centre guides, pull a corner to scale it. **Ink / E-ink** previews the drawing as the panel will show it, with the swatches cut down to black and white. **Save** (⌘S) stores it on the server. **Open** saves and opens its page in a new tab. **Show now** saves and puts it on the panel for 15 minutes, then the show carries on. **Gallery** reopens or deletes saved drawings, or puts one on `/live`. The draft autosaves in the browser.
 
 ### Image page (`/i/:id`)
 
@@ -419,7 +419,7 @@ Long-poll: send `?wait=1` with `If-None-Match: <etag>`. The server holds the req
 | `POST`, `PATCH`, `DELETE /api/slides…`, `PUT /api/slides/order` | Playlist clips. |
 | `POST`, `PATCH`, `DELETE /api/playlists…`, `PUT /api/playlists/order` | Playlists. |
 | `POST`, `PATCH`, `DELETE /api/show…`, `PUT /api/show/order` | Show entries, durations, on/off, repeats. |
-| `PUT /api/live` | Pin a source (`{ mode: "pin", source }`) or go back to the loop (`{ mode: "rotate" }`). |
+| `PUT /api/live` | Show a source now (`{ mode: "pin", source, forS }`, for `forS` seconds, 15 minutes if left out) or go back to the loop (`{ mode: "rotate" }`). |
 | `PUT /api/sleep` | Night: `{ enabled, start, end, screen: "moon" \| "blank" \| "off" }`. |
 
 Edits answer with the whole new state, so the UI never drifts from the server.
