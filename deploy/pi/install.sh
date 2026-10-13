@@ -67,6 +67,8 @@ sudo raspi-config nonint do_spi 0
 sudo apt-get install -y python3-pil python3-spidev python3-gpiozero python3-lgpio
 
 
+# Already set up means this run is an update; it changes only the last line of the output.
+[ -f /etc/systemd/system/papershow.service ] && action=updated || action=installed
 for unit in papershow papershow-panel; do
   sed -e "s|@USER@|$user|g" -e "s|@REPO@|$repo|g" -e "s|@PORT@|$port|g" "deploy/pi/$unit.service" |
     sudo tee "/etc/systemd/system/$unit.service" >/dev/null
@@ -86,9 +88,6 @@ for name in update status logs help; do
     sudo ln -sfn "$repo/deploy/pi/paper.sh" "$link"
   fi
 done
-
-echo "Papershow: http://$(hostname).local:$port"
-echo "Commands:  paper:help lists them"
 
 # Reach it from your Mac and phone, at home or away, over HTTPS. Tailscale is a VPN, so ask before
 # installing it; with no one at the keyboard, skip it. A Pi you already use may serve other things
@@ -142,4 +141,19 @@ if [ ${#others[@]} -gt 0 ]; then
   printf '  %s\n' "${others[@]}" | sort -u
   echo "Remove the ones that do. For cron: crontab -l > ~/crontab.backup, then crontab -e (sudo crontab -e for root's)."
   echo "If you used pi-e-ink: crontab -l | grep -v pi-e-ink | crontab -"
+fi
+
+# Say it's ready only once the server answers: it takes a few seconds to start after the restart.
+echo
+for _ in $(seq 30); do
+  curl -fs -o /dev/null "http://127.0.0.1:$port/api/state" && break
+  sleep 1
+done
+if curl -fs -o /dev/null "http://127.0.0.1:$port/api/state"; then
+  echo "Papershow $action! Ready to use."
+  echo "  Version:   $(git -C "$repo" log -1 --format='%h %s')"
+  echo "  Open:      http://$(hostname).local:$port"
+  echo "  Commands:  paper:help lists them"
+else
+  echo "Papershow $action, but the server isn't answering yet. paper:status and paper:logs server show why." >&2
 fi

@@ -124,7 +124,7 @@ The panel shows the logo, then the current frame. The script ends by printing Pa
 
 ### 3. On the Pi: stop anything else that draws on the panel
 
-Only one thing may drive the panel. At the end, the install lists anything else that might, such as old e-ink scripts on cron. Remove the ones that draw, keeping a backup of your crontab:
+Only one thing may drive the panel. Near the end, the install lists anything else that might, such as old e-ink scripts on cron. Remove the ones that draw, keeping a backup of your crontab:
 
 ```sh
 crontab -l > ~/crontab.backup
@@ -136,7 +136,7 @@ To go back to them later: `crontab ~/crontab.backup`.
 
 ### 4. Reach it from anywhere
 
-The install asks whether to set up Tailscale. Say yes, open the link it prints to log in, and it ends with the address, `https://<hostname>.<tailnet>.ts.net`. Open it on any device signed in to your tailnet. On a phone, add the page to the home screen. To change the name in that address, rename the machine in the Tailscale admin console.
+The install asks whether to set up Tailscale. Say yes, open the link it prints to log in, and it prints the address, `https://<hostname>.<tailnet>.ts.net`. Open it on any device signed in to your tailnet. On a phone, add the page to the home screen. To change the name in that address, rename the machine in the Tailscale admin console.
 
 `tailscale serve` needs MagicDNS and HTTPS certificates turned on in the Tailscale admin console (DNS page). If you said no, run the install line again later.
 
@@ -171,7 +171,7 @@ Open Papershow. On the Dashboard, under **Device**, set the night hours (for exa
 It's safe to run again, and it leaves the rest of your Pi alone:
 
 - **Port**: it uses 5194, and stops if something else is already on it. Pick another with `PAPERSHOW_PORT=8080 deploy/pi/install.sh`.
-- **Address**: your Pi keeps its hostname. The script prints the address when it's done.
+- **Address**: your Pi keeps its hostname. The script ends by waiting for the server to answer, then prints "Papershow installed! Ready to use." (or "updated!") with the version and the address.
 - **Code**: the one line puts the checkout in `~/papershow` (`PAPERSHOW_DIR` to change it). Or clone it yourself anywhere and run `deploy/pi/install.sh`.
 - **Node**: it installs Node 24 only if the Pi's Node is older than 22.13, and that upgrade is system-wide. A newer Node is left alone.
 - **pnpm**: it runs pnpm 7 through `npx`, so a pnpm the Pi already has stays as it is.
