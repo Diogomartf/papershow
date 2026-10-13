@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
 import { Nav, navigate } from "./Nav";
@@ -10,6 +10,41 @@ import { useUndoToast } from "./Undo";
 
 const every = (m: number) => (m === 60 ? "Hourly" : m % 60 ? `${m} min` : `${m / 60} h`);
 const repeatLine = (m: number) => (m === 60 ? "every hour" : m % 60 ? `every ${m} min` : `every ${m / 60} hours`);
+/** "08:00", "08:00 and 20:00", "08:00, 13:00 and 20:00" */
+const timesLine = (t: string[]) => (t.length < 2 ? (t[0] ?? "") : `${t.slice(0, -1).join(", ")} and ${t.at(-1)}`);
+/** What At times starts with: twice a day, to edit from there. */
+const FIRST_TIMES = ["08:00", "20:00"];
+
+/** The times an entry plays at, typed as "08:00, 20:00": saved on Enter or when you leave the box. */
+function TimesInput({ times, onSave, label }: { times: string[]; onSave: (t: string[]) => void; label: string }) {
+  const [text, setText] = useState(times.join(", "));
+  const [was, setWas] = useState(times);
+  // The server's answer (sorted, cleaned) replaces what was typed.
+  if (was !== times) {
+    setWas(times);
+    setText(times.join(", "));
+  }
+  const save = () => {
+    const next = text.split(/[,\s]+/).filter(Boolean);
+    if (next.join() !== times.join()) onSave(next);
+  };
+  return (
+    <input
+      className="times-input tabular"
+      // As wide as what's in it, so four times still read at a glance.
+      style={{ width: `${text.length + 3}ch` }}
+      value={text}
+      onChange={(ev) => setText(ev.target.value)}
+      onBlur={save}
+      onKeyDown={(ev) => ev.key === "Enter" && (ev.target as HTMLInputElement).blur()}
+      placeholder="08:00, 20:00"
+      aria-label={label}
+      title="Times of day, separated by commas, like 08:00, 13:00, 20:00"
+      spellCheck={false}
+    />
+  );
+}
+
 const fmt = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`);
 
 /** /show — what runs: playlists, images and apps, top to bottom, then again. */
@@ -27,7 +62,7 @@ export function Show() {
   const playlists = state?.playlists ?? [];
   const clipsOf = (playlistId: string) => (state?.slides ?? []).filter((s) => s.playlistId === playlistId);
   const minutesOf = (e: ShowEntry) =>
-    e.everyM
+    e.everyM || e.times?.length
       ? 0
       : e.playlistId
       ? clipsOf(e.playlistId).filter((s) => s.enabled).reduce((n, s) => n + s.durationS / 60, 0)
@@ -107,7 +142,8 @@ export function Show() {
             <h1>Show</h1>
             <p className="muted">
               Runs top to bottom, then starts over{loopMin ? ` · one time around takes ${fmt(loopMin)}` : ""}. Set a drawing or app
-              to repeat on the clock, like a clock every hour, and it cuts in between turns.
+              to repeat on the clock, like a clock every hour, or anything, playlists too, to play only at set times of day, and it
+              cuts in between turns.
             </p>
           </div>
         </div>
@@ -136,7 +172,11 @@ export function Show() {
                       {onAir === e.id && onAirBadge}
                     </span>
                     <span className="muted">
-                      Playlist · {clips.length ? `${clips.length} ${clips.length === 1 ? "item" : "items"} · ${fmt(minutesOf(e))}` : "empty, add items to it"}
+                      Playlist ·{" "}
+                      {clips.length
+                        ? `${clips.length} ${clips.length === 1 ? "item" : "items"} · ${fmt(clips.filter((c) => c.enabled).reduce((n, c) => n + c.durationS / 60, 0))}`
+                        : "empty, add items to it"}
+                      {e.times?.length ? ` · at ${timesLine(e.times)}` : ""}
                     </span>
                     <span className="pl-strip" aria-hidden>
                       {clips.slice(0, 8).map((s) => {
@@ -156,19 +196,24 @@ export function Show() {
                       </span>
                       <span className="muted">
                         {single?.label ?? "Item"}
-                        {e.everyM ? ` · cuts in ${repeatLine(e.everyM)}` : ""}
+                        {e.everyM ? ` · cuts in ${repeatLine(e.everyM)}` : e.times?.length ? ` · at ${timesLine(e.times)}` : ""}
                       </span>
                     </span>
                   </div>
                 )}
 
                 <div className="pl-row-actions">
-                  {!e.playlistId && (
-                    <div className="segmented repeat" role="radiogroup" aria-label={`When ${nameOf(e)} plays`}>
-                      <button role="radio" aria-checked={!e.everyM} onClick={() => api.updateShowEntry(e.id, { everyM: null }).then(accept)} title="Takes its turn in the loop">
-                        In loop
-                      </button>
-                      {api.REPEAT_EVERY.map((m) => (
+                  <div className="segmented repeat" role="radiogroup" aria-label={`When ${nameOf(e)} plays`}>
+                    <button
+                      role="radio"
+                      aria-checked={!e.everyM && !e.times?.length}
+                      onClick={() => api.updateShowEntry(e.id, { everyM: null, times: null }).then(accept)}
+                      title="Takes its turn in the loop"
+                    >
+                      In loop
+                    </button>
+                    {!e.playlistId &&
+                      api.REPEAT_EVERY.map((m) => (
                         <button
                           key={m}
                           role="radio"
@@ -183,7 +228,17 @@ export function Show() {
                           {every(m)}
                         </button>
                       ))}
-                    </div>
+                    <button
+                      role="radio"
+                      aria-checked={!!e.times?.length}
+                      onClick={() => !e.times?.length && api.updateShowEntry(e.id, { times: FIRST_TIMES }).then(accept)}
+                      title="Out of the loop; plays only at the times you set"
+                    >
+                      At times
+                    </button>
+                  </div>
+                  {!!e.times?.length && (
+                    <TimesInput times={e.times} label={`Times ${nameOf(e)} plays`} onSave={(times) => api.updateShowEntry(e.id, { times }).then(accept)} />
                   )}
                   {!e.playlistId && (
                     <div className="stepper" aria-label="Duration">

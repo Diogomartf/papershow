@@ -82,27 +82,77 @@ export function sleepUntil(sleep: Sleep, now = Date.now()): number | null {
 
 // ── Repeats ────────────────────────────────────────────────────────────────
 
-/** A single image or app that interrupts the loop on the clock: every `everyM` minutes, for `durationS`. */
-export type Repeat = { id: string; source: Source; durationS: number; everyM: number };
+/**
+ * A show entry that interrupts the loop instead of taking turns in it: every `everyM` minutes on the clock (a
+ * single image or app), or at set `times` each day (also a whole playlist, its clips back to back).
+ */
+export type Repeat = {
+  id: string;
+  clips: { id: string; source: Source; durationS: number; clipId: string | null; playlistId: string | null }[];
+  everyM?: number | null;
+  /** 'HH:MM' local times, sorted. */
+  times?: string[] | null;
+};
 
 /** Choices that divide the day evenly, so "every hour" lands on the hour. */
 export const REPEAT_EVERY = [15, 30, 60, 120, 180];
 
-/** When the latest slot began, counted from local midnight. */
+const DAY = 24 * 60 * 60_000;
+const midnightOf = (now: number) => new Date(now).setHours(0, 0, 0, 0);
+/** `hhmm` on the day of `day`, as epoch ms (local time, so it follows daylight saving). */
+const timeOn = (day: number, hhmm: string) => {
+  const d = new Date(day);
+  const [h, m] = hhmm.split(":").map(Number);
+  return d.setHours(h, m, 0, 0);
+};
+
+/** When the latest slot began, at or before `now`. */
 function slotStart(r: Repeat, now: number) {
-  const midnight = new Date(now).setHours(0, 0, 0, 0);
-  const every = r.everyM * 60_000;
+  if (r.times?.length) {
+    const today = r.times.map((t) => timeOn(now, t)).filter((t) => t <= now);
+    return today.length ? Math.max(...today) : timeOn(midnightOf(now) - DAY / 2, r.times.at(-1)!);
+  }
+  const midnight = midnightOf(now);
+  const every = r.everyM! * 60_000;
   return midnight + Math.floor((now - midnight) / every) * every;
 }
 
-/** At most a minute short of the interval, so the loop always gets a turn. */
-const repeatMs = (r: Repeat) => Math.min(r.durationS * 1000, (r.everyM - 1) * 60_000);
+/** When the next slot begins, after `now`. */
+function nextSlot(r: Repeat, now: number) {
+  if (r.times?.length) {
+    const today = r.times.map((t) => timeOn(now, t)).filter((t) => t > now);
+    return today.length ? Math.min(...today) : timeOn(midnightOf(now) + DAY * 1.5, r.times[0]);
+  }
+  return slotStart(r, now) + r.everyM! * 60_000;
+}
 
-/** The repeat on air at `now`, if any; the first in show order wins a tie. */
+/**
+ * How long a slot lasts: its clips back to back, but at least a minute short of the next slot, so the loop
+ * always gets a turn.
+ */
+function repeatMs(r: Repeat) {
+  const total = r.clips.reduce((n, c) => n + c.durationS * 1000, 0);
+  if (!r.times?.length) return Math.min(total, (r.everyM! - 1) * 60_000);
+  const mins = r.times.map(minutes);
+  const gaps = mins.map((m, i) => (i + 1 < mins.length ? mins[i + 1] - m : mins[0] + 24 * 60 - m));
+  return Math.min(total, (Math.min(...gaps) - 1) * 60_000);
+}
+
+/** The slide id of a repeat's clip: the entry's own for a single image or app, "<entry>~<clip>" for a playlist's. */
+const repeatSlideId = (r: Repeat, c: Repeat["clips"][number]) => (c.clipId ? `${r.id}~${c.clipId}` : r.id);
+
+/** The repeat on air at `now`, if any, and which of its clips; the first in show order wins a tie. */
 function repeatAt(repeats: Repeat[], now: number) {
   for (const r of repeats) {
     const startedAt = slotStart(r, now);
-    if (now < startedAt + repeatMs(r)) return { r, clip: { startedAt, endsAt: startedAt + repeatMs(r) } };
+    const ends = startedAt + repeatMs(r);
+    if (now >= ends) continue;
+    let at = startedAt;
+    for (const c of r.clips) {
+      const until = Math.min(at + c.durationS * 1000, ends);
+      if (now < until) return { r, c, clip: { startedAt: at, endsAt: until } };
+      at = until;
+    }
   }
   return null;
 }
@@ -116,7 +166,7 @@ export function showing(live: Live, slides: Slide[], now = Date.now(), repeats: 
 
   // A repeat takes over for its slot; the loop keeps time underneath and resumes where the clock says.
   const rep = repeatAt(repeats, now);
-  if (rep) return { source: rep.r.source, slideId: rep.r.id, endsAt: rep.clip.endsAt, clip: rep.clip };
+  if (rep) return { source: rep.c.source, slideId: repeatSlideId(rep.r, rep.c), endsAt: rep.clip.endsAt, clip: rep.clip };
 
   const at = new Date(now);
   // `slides` arrive in play order (playlist by playlist), so keep that order.
@@ -137,7 +187,7 @@ export function showing(live: Live, slides: Slide[], now = Date.now(), repeats: 
       if (repeats.length) {
         // On air between the last repeat and the next one.
         const lastEnd = Math.max(...repeats.map((r) => slotStart(r, now) + repeatMs(r)));
-        const next = Math.min(...repeats.map((r) => slotStart(r, now) + r.everyM * 60_000));
+        const next = Math.min(...repeats.map((r) => nextSlot(r, now)));
         clip.startedAt = Math.max(clip.startedAt, lastEnd);
         clip.endsAt = Math.min(clip.endsAt, next);
         endsAt = Math.min(endsAt ?? Infinity, next);
@@ -181,13 +231,22 @@ export type Turn = {
  */
 export function sequence(slides: Slide[], now = Date.now(), max = 60, repeats: Repeat[] = []): Turn[] {
   const byId = new Map(slides.map((s) => [s.id, s]));
-  const repeatById = new Map(repeats.map((r) => [r.id, r]));
+  // Every clip a repeat can show, by the slide id it airs under.
+  const repeatById = new Map(repeats.flatMap((r) => r.clips.map((c) => [repeatSlideId(r, c), { r, c }] as const)));
   const turn = (t: number): Turn | null => {
     const s = showing({ mode: "rotate" }, slides, t, repeats);
     if (!s?.clip || !s.slideId) return null;
     const rep = repeatById.get(s.slideId);
     if (rep)
-      return { key: rep.id, entryId: rep.id, clipId: null, playlistId: null, source: rep.source, at: s.clip.startedAt, endsAt: s.clip.endsAt };
+      return {
+        key: s.slideId,
+        entryId: rep.r.id,
+        clipId: rep.c.clipId,
+        playlistId: rep.c.playlistId,
+        source: rep.c.source,
+        at: s.clip.startedAt,
+        endsAt: s.clip.endsAt,
+      };
     const slide = byId.get(s.slideId);
     if (!slide) return null;
     return {
@@ -200,7 +259,7 @@ export function sequence(slides: Slide[], now = Date.now(), max = 60, repeats: R
       endsAt: s.clip.endsAt,
     };
   };
-  const nextRepeat = (t: number) => Math.min(...repeats.map((r) => slotStart(r, t) + r.everyM * 60_000));
+  const nextRepeat = (t: number) => Math.min(...repeats.map((r) => nextSlot(r, t)));
   // Only repeats and nothing on air yet: start from the next one.
   const first = turn(now) ?? (repeats.length ? turn(nextRepeat(now)) : null);
   if (!first) return [];
@@ -218,7 +277,14 @@ export function sequence(slides: Slide[], now = Date.now(), max = 60, repeats: R
   // one time around the loop, or until every repeat has come up at least once.
   const at = new Date(now);
   const cycle = slides.filter((s) => isActive(s, at)).reduce((sum, s) => sum + s.durationS * 1000, 0);
-  const horizon = first.at + Math.max(cycle, ...repeats.map((r) => r.everyM * 60_000));
+  // A repeat on the clock: until it has come round. One at set times: through it and one more time around the
+  // loop, but only when it airs within a time around (or there's no loop); hours away, it would list the loop all day.
+  const reach = (r: Repeat) => {
+    const until = nextSlot(r, first.at) - first.at + repeatMs(r);
+    if (!r.times?.length) return r.everyM! * 60_000;
+    return !cycle ? until : until - repeatMs(r) <= cycle ? until + cycle : 0;
+  };
+  const horizon = first.at + Math.max(cycle, ...repeats.map(reach));
   for (let t = first.endsAt; out.length < max && t < horizon; ) {
     const next = turn(t);
     if (!next) {

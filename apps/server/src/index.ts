@@ -282,7 +282,8 @@ async function state() {
   const repeats = store.repeats();
   const live = await liveNow(now);
   const onAir = loop.find((x) => x.id === live?.slideId);
-  const repeat = repeats.find((r) => r.id === live?.slideId);
+  // A repeat's clip airs as "<entry>" (single) or "<entry>~<clip>" (a playlist's).
+  const repeat = repeats.find((r) => live?.slideId === r.id || live?.slideId?.startsWith(`${r.id}~`));
   return {
     now,
     live: store.getLive(),
@@ -290,7 +291,7 @@ async function state() {
       source: live.source,
       slideId: live.slideId,
       entryId: onAir?.entryId ?? repeat?.id ?? null,
-      clipId: onAir?.clipId ?? null,
+      clipId: onAir?.clipId ?? (repeat && live?.slideId?.includes("~") ? live.slideId.split("~")[1] : null),
       endsAt: live.endsAt,
       clip: live.clip,
       etag: live.etag,
