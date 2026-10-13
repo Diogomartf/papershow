@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
 import { Nav, navigate } from "./Nav";
-import { useLiveState } from "./live";
+import { useLiveState, useNow } from "./live";
 import * as api from "./slides";
 import type { ShowEntry } from "./slides";
 import { useItems, type Item } from "./sources";
@@ -14,7 +14,8 @@ const fmt = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 
 
 /** /show — what runs: playlists, images and apps, top to bottom, then again. */
 export function Show() {
-  const { state, accept } = useLiveState();
+  const { state, accept, skew } = useLiveState();
+  const now = useNow(skew, 1000);
   const { items, itemOf } = useItems();
   const toast = useUndoToast();
 
@@ -33,6 +34,28 @@ export function Show() {
       : e.durationS / 60;
   const loopMin = show.filter((e) => e.enabled).reduce((n, e) => n + minutesOf(e), 0);
   const onAir = state?.live.mode === "rotate" && !state.showing?.asleep ? state?.showing?.entryId : null;
+
+  // How far the entry on air is through its turn. A playlist's turn spans all its clips, so it began
+  // the clips before this one ago. Null when nothing ends it: then there's nothing to count down.
+  const turn = (() => {
+    const s = state?.showing;
+    const entry = show.find((e) => e.id === onAir);
+    if (!s?.clip || !s.endsAt || !entry) return null;
+    let { startedAt, endsAt } = s.clip;
+    if (entry.playlistId) {
+      const clips = clipsOf(entry.playlistId).filter((c) => c.enabled);
+      const i = clips.findIndex((c) => c.id === s.clipId);
+      startedAt -= clips.slice(0, Math.max(i, 0)).reduce((n, c) => n + c.durationS * 1000, 0);
+      endsAt += clips.slice(i + 1).reduce((n, c) => n + c.durationS * 1000, 0);
+    }
+    const done = Math.min(1, Math.max(0, (now - startedAt) / (endsAt - startedAt)));
+    return { done, leftM: Math.max(1, Math.ceil((endsAt - now) / 60_000)) };
+  })();
+  const onAirBadge = (
+    <span className="on-air" data-on="true">
+      On air{turn && <span className="left">· {fmt(turn.leftM)} left</span>}
+    </span>
+  );
 
   const nameOf = (e: ShowEntry) =>
     e.playlistId ? (playlists.find((p) => p.id === e.playlistId)?.name ?? "Playlist") : (itemOf(e.source)?.name ?? "…");
@@ -85,7 +108,13 @@ export function Show() {
             const clips = e.playlistId ? clipsOf(e.playlistId) : [];
             const single = e.source ? itemOf(e.source) : undefined;
             return (
-              <li key={e.id} data-off={!e.enabled} data-onair={onAir === e.id}>
+              <li key={e.id} data-off={!e.enabled} data-onair={onAir === e.id} data-turn={onAir === e.id && !!turn}>
+                {onAir === e.id && turn && (
+                  // The border fills clockwise as the turn runs out; full means the next thing is due.
+                  <svg className="turn" aria-hidden>
+                    <rect width="100%" height="100%" rx={14} pathLength={100} strokeDasharray={`${turn.done * 100} 100`} />
+                  </svg>
+                )}
                 <div className="pl-order">
                   <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Play ${nameOf(e)} earlier`}>↑</button>
                   <button onClick={() => move(i, 1)} disabled={i === show.length - 1} aria-label={`Play ${nameOf(e)} later`}>↓</button>
@@ -95,7 +124,7 @@ export function Show() {
                   <button className="pl-main" onClick={() => navigate(`/playlist/${e.playlistId}`)}>
                     <span className="pl-title">
                       {nameOf(e)}
-                      {onAir === e.id && <span className="on-air" data-on="true">On air</span>}
+                      {onAir === e.id && onAirBadge}
                     </span>
                     <span className="muted">
                       Playlist · {clips.length ? `${clips.length} ${clips.length === 1 ? "item" : "items"} · ${fmt(minutesOf(e))}` : "empty, add items to it"}
@@ -114,7 +143,7 @@ export function Show() {
                     <span>
                       <span className="pl-title">
                         {nameOf(e)}
-                        {onAir === e.id && <span className="on-air" data-on="true">On air</span>}
+                        {onAir === e.id && onAirBadge}
                       </span>
                       <span className="muted">
                         {single?.label ?? "Item"}
