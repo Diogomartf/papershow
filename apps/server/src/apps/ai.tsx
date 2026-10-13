@@ -3,12 +3,11 @@ import { defineApp, sheet, type Field } from "./types.ts";
 
 /**
  * How a reply is laid out:
- * text  — one block, sized to fit
- * lines — each line on its own row, centred (a haiku)
+ * text  — one block, sized to fit; short lines keep their own rows (a haiku)
  * lead  — the first line large, the rest smaller below (a word and its meaning)
  * quote — the first line as a large quote, the second as its author
  */
-type Layout = "text" | "lines" | "lead" | "quote";
+type Layout = "text" | "lead" | "quote";
 
 type Preset = {
   kind: string;
@@ -52,11 +51,10 @@ function promptApp(p: Preset) {
           type: "select",
           options: [
             { value: "text", label: "Text" },
-            { value: "lines", label: "Lines" },
             { value: "lead", label: "Word + meaning" },
             { value: "quote", label: "Quote" },
           ],
-          hint: "Lines: one row per line. Word + meaning and Quote: line 1 large, the rest below.",
+          hint: "Word + meaning and Quote: line 1 large, the rest below.",
         },
         {
           key: "refresh",
@@ -100,7 +98,6 @@ function promptApp(p: Preset) {
               letterSpacing: 3,
               textTransform: "uppercase",
               marginBottom: 28,
-              alignSelf: config.layout === "lines" ? "center" : "flex-start",
             }}
           >
             {config.title}
@@ -130,17 +127,6 @@ const fit = (n: number, sizes: [number, number, number, number]) =>
 
 function Reply({ text, layout }: { text: string; layout: Layout }) {
   const rows = lines(text);
-  if (layout === "lines") {
-    // Each line keeps to one row: size by the longest (Inter averages about half an em per character).
-    const size = Math.min(56, Math.floor(672 / (Math.max(...rows.map((r) => r.length)) * 0.52)));
-    return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: size * 0.35 }}>
-        {rows.map((r, i) => (
-          <span key={i} style={{ fontSize: size, fontWeight: 400, letterSpacing: -0.5, textAlign: "center" }}>{r}</span>
-        ))}
-      </div>
-    );
-  }
   if (layout === "lead" && rows.length > 1) {
     const [head, ...rest] = rows;
     return (
@@ -169,6 +155,17 @@ function Reply({ text, layout }: { text: string; layout: Layout }) {
   const flat = rows.join(" ");
   // Fill the frame: the block's area grows with characters × size², so size goes as 1/√length.
   const size = Math.min(80, Math.floor(Math.sqrt(360_000 / Math.max(flat.length, 1))));
+  // Short lines (a haiku) keep a row each, unless that makes them small. Size by the longest row
+  // (Inter at weight 500 averages under half an em per character) and by how many rows fit the height.
+  const rowSize = Math.min(64, Math.floor(672 / (Math.max(...rows.map((r) => r.length)) * 0.47)), Math.floor(400 / (rows.length * 1.3)));
+  if (rows.length > 1 && rowSize >= 36)
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: rowSize * 0.3 }}>
+        {rows.map((r, i) => (
+          <span key={i} style={{ fontSize: rowSize, fontWeight: 500, letterSpacing: -1 }}>{r}</span>
+        ))}
+      </div>
+    );
   return (
     <div style={{ display: "flex", fontSize: size, fontWeight: 500, lineHeight: 1.15, letterSpacing: size > 60 ? -2 : -1 }}>
       {flat}
@@ -220,7 +217,7 @@ export const haiku = promptApp({
   description: "A three-line haiku about the season and the time of day. New every hour.",
   title: "",
   prompt: "It is {time} on {date}. Write a haiku about this season and this time of day. Three lines, one per line, 5-7-5 syllables. " + ONE_LINE,
-  layout: "lines",
+  layout: "text",
   refresh: "hour",
   sample: "Autumn light at noon\nleaves drift past the paper screen\nslowly, then all gone",
 });
