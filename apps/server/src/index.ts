@@ -83,7 +83,10 @@ async function liveNow(now = Date.now()): Promise<LiveNow | null> {
   });
   if (!f) return null;
   const ends = [s.endsAt, f.nextAt].filter((t): t is number => t !== null);
-  return { ...s, endsAt: ends.length ? Math.min(...ends) : null, etag: f.etag, file: f.file, asleep: null };
+  // Show now is a new frame even when it's the picture already up: the panel should redraw it, cleanly.
+  const pin = store.getLive();
+  const etag = pin.mode === "pin" && !s.slideId ? `${f.etag.slice(0, -1)}-now${pin.until ?? 0}"` : f.etag;
+  return { ...s, endsAt: ends.length ? Math.min(...ends) : null, etag, file: f.file, asleep: null };
 }
 
 /** Resolve on the next edit, when the current clip runs out, or after `maxMs`. */
@@ -106,6 +109,7 @@ function nextChange(current: LiveNow | null, maxMs: number) {
 // ?wait=1 with If-None-Match: hold up to 55s until the frame changes (long-poll).
 // X-Next-Change: seconds until the frame changes by itself, if it will.
 // X-Sleep-Until: while asleep, when the panel wakes (ms since epoch). 204 = keep the last picture.
+// X-Show-Now: while Show now holds /live, when it ends (ms since epoch): a new value is a fresh Show now.
 
 /** The last time a display (anything but this web app's previews) asked for /live. */
 let lastSeen: { at: number; agent: string } | null = null;
@@ -125,6 +129,9 @@ async function live(c: Context, kind: "mono" | "bin") {
   if (now.source) c.header("X-Source", `${now.source.kind}:${now.source.id}`);
   if (now.asleep) c.header("X-Sleep-Until", String(now.asleep));
   if (now.endsAt) c.header("X-Next-Change", String(Math.ceil((now.endsAt - Date.now()) / 1000)));
+  // Someone just asked for this picture: the panel flashes clean before drawing it.
+  const pin = store.getLive();
+  if (pin.mode === "pin" && !now.asleep) c.header("X-Show-Now", String(pin.until ?? 0));
   if (etag === now.etag) return c.body(null, 304);
   if (!now.file) return c.body(null, 204);
 

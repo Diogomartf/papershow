@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
 import { Nav, navigate } from "./Nav";
@@ -95,12 +95,77 @@ export function Show() {
   const nameOf = (e: ShowEntry) =>
     e.playlistId ? (playlists.find((p) => p.id === e.playlistId)?.name ?? "Playlist") : (itemOf(e.source)?.name ?? "…");
 
+  // The new order while the server takes it, so a dropped row doesn't jump back first.
+  const [order, setOrder] = useState<string[] | null>(null);
+  const reorder = (ids: string[]) => {
+    setOrder(ids);
+    api
+      .reorderShow(ids)
+      .then(accept)
+      .finally(() => setOrder(null));
+  };
+  const list = order ? order.flatMap((id) => show.filter((e) => e.id === id)) : show;
+
   const move = (i: number, dir: -1 | 1) => {
-    const ids = show.map((e) => e.id);
+    const ids = list.map((e) => e.id);
     const j = i + dir;
     if (j < 0 || j >= ids.length) return;
     [ids[i], ids[j]] = [ids[j], ids[i]];
-    api.reorderShow(ids).then(accept);
+    reorder(ids);
+  };
+
+  // Dragging a row: with a mouse from anywhere but its controls, on touch from the arrows (so the page still scrolls).
+  // The others slide aside to show where it lands.
+  const rows = useRef(new Map<string, HTMLLIElement>());
+  const [drag, setDrag] = useState<{ from: number; to: number; dy: number; h: number } | null>(null);
+  const startDrag = (ev: ReactPointerEvent, from: number) => {
+    const target = ev.target as HTMLElement;
+    if (ev.button !== 0 || target.closest(".pl-row-actions, input")) return;
+    if (ev.pointerType === "touch" && !target.closest(".pl-order")) return;
+    // A mouse drag shouldn't select the names on the way.
+    if (ev.pointerType === "mouse") ev.preventDefault();
+    const rects = list.map((e) => rows.current.get(e.id)!.getBoundingClientRect());
+    const centre = (r: DOMRect) => r.top + r.height / 2;
+    const y0 = ev.clientY;
+    let to = from;
+    let moved = false;
+    const onMove = (m: PointerEvent) => {
+      const dy = m.clientY - y0;
+      if (!moved && Math.abs(dy) < 6) return;
+      moved = true;
+      m.preventDefault();
+      const at = centre(rects[from]) + dy;
+      // Where it lands: after every other row whose middle it has passed.
+      to = rects.filter((r, j) => j !== from && centre(r) < at).length;
+      setDrag({ from, to, dy, h: rects[from].height + 10 });
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      setDrag(null);
+      if (!moved) return;
+      // The release isn't a click: don't open the playlist or press an arrow. Only that click: if none comes, let go.
+      const swallow = (c: MouseEvent) => (c.stopPropagation(), c.preventDefault());
+      window.addEventListener("click", swallow, { capture: true, once: true });
+      setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 50);
+      if (to === from) return;
+      const ids = list.map((e) => e.id);
+      ids.splice(to, 0, ...ids.splice(from, 1));
+      reorder(ids);
+    };
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  };
+  /** Where row `j` sits while another is dragged: the dragged one follows the pointer, the ones it passed shift a place. */
+  const shift = (j: number) => {
+    if (!drag) return undefined;
+    const { from, to, dy, h } = drag;
+    if (j === from) return { transform: `translateY(${dy}px)`, zIndex: 2, position: "relative" as const, transition: "none" };
+    if (from < to && j > from && j <= to) return { transform: `translateY(${-h}px)` };
+    if (to < from && j >= to && j < from) return { transform: `translateY(${h}px)` };
+    return { transform: "none" };
   };
 
   const remove = (e: ShowEntry, index: number) => {
@@ -149,11 +214,23 @@ export function Show() {
         </div>
 
         <ol className="pl-rows">
-          {show.map((e, i) => {
+          {list.map((e, i) => {
             const clips = e.playlistId ? clipsOf(e.playlistId) : [];
             const single = e.source ? itemOf(e.source) : undefined;
             return (
-              <li key={e.id} data-off={!e.enabled} data-onair={onAir === e.id} data-turn={onAir === e.id && !!turn}>
+              <li
+                key={e.id}
+                ref={(el) => {
+                  if (el) rows.current.set(e.id, el);
+                  else rows.current.delete(e.id);
+                }}
+                data-off={!e.enabled}
+                data-onair={onAir === e.id}
+                data-turn={onAir === e.id && !!turn}
+                data-dragging={drag?.from === i}
+                style={shift(i)}
+                onPointerDown={(ev) => startDrag(ev, i)}
+              >
                 {onAir === e.id && turn && (
                   // The border fills clockwise as the turn runs out; full means the next thing is due.
                   <svg className="turn" aria-hidden>
@@ -162,7 +239,7 @@ export function Show() {
                 )}
                 <div className="pl-order">
                   <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Play ${nameOf(e)} earlier`}>↑</button>
-                  <button onClick={() => move(i, 1)} disabled={i === show.length - 1} aria-label={`Play ${nameOf(e)} later`}>↓</button>
+                  <button onClick={() => move(i, 1)} disabled={i === list.length - 1} aria-label={`Play ${nameOf(e)} later`}>↓</button>
                 </div>
 
                 {e.playlistId ? (
