@@ -56,8 +56,16 @@ async function render(def: AnyApp, config: Record<string, unknown>, at: Date, pn
   return renderFrame(def.view({ config, data, now: at }), def.dither, { pngScale });
 }
 
-/** How often an instance's frame can change: its settings may choose. */
-const periodOf = (def: AnyApp, config: Record<string, unknown>): number => def.periodFor?.(config) ?? def.periodMs;
+/**
+ * The stretch of time `now` falls in, during which an instance shows one frame: its own schedule when it has one
+ * (`slotFor`), else even periods from the epoch, so they land on the clock.
+ */
+function slotOf(def: AnyApp, config: Record<string, unknown>, now: number): { start: number; end: number } {
+  if (def.slotFor) return def.slotFor(config, now);
+  const period = def.periodFor?.(config) ?? def.periodMs;
+  const start = Math.floor(now / period) * period;
+  return { start, end: start + period };
+}
 
 // One frame per app instance per period. Concurrent requests share the same render.
 const cache = new Map<string, { key: string; frame: Promise<Frame> }>();
@@ -67,17 +75,16 @@ export async function appFrame(app: AppRow, now = Date.now()): Promise<{ frame: 
   const def = APPS[app.kind];
   if (!def) throw new Error(`unknown app kind: ${app.kind}`);
   const config = configFor(def, app.config);
-  const period = periodOf(def, config);
-  const bucket = Math.floor(now / period);
-  const key = `${bucket}:${period}:${app.updatedAt}`;
+  const slot = slotOf(def, config, now);
+  const key = `${slot.start}:${slot.end}:${app.updatedAt}`;
   let entry = cache.get(app.id);
   if (entry?.key !== key) {
     // Render as of the start of the period, so every request in it agrees.
-    entry = { key, frame: render(def, config, new Date(bucket * period)) };
+    entry = { key, frame: render(def, config, new Date(slot.start)) };
     cache.set(app.id, entry);
     entry.frame.catch(() => cache.get(app.id) === entry && cache.delete(app.id));
   }
-  return { frame: await entry.frame, nextAt: (bucket + 1) * period };
+  return { frame: await entry.frame, nextAt: slot.end };
 }
 
 /** Render unsaved settings, for the Apps page preview. `original`: pictures in full colour, for the full-resolution view. */
@@ -85,8 +92,7 @@ export function previewFrame(kind: string, raw: Record<string, unknown>, { origi
   const def = APPS[kind];
   if (!def) throw new Error(`unknown app kind: ${kind}`);
   const config = configFor(def, raw);
-  const period = periodOf(def, config);
-  const at = new Date(Math.floor(Date.now() / period) * period);
+  const at = new Date(slotOf(def, config, Date.now()).start);
   return original ? renderingOriginal(() => render(def, config, at, 2)) : render(def, config, at);
 }
 
@@ -98,12 +104,11 @@ export function appFrameAt(app: AppRow, at: number): Promise<Frame> {
   const def = APPS[app.kind];
   if (!def) throw new Error(`unknown app kind: ${app.kind}`);
   const config = configFor(def, app.config);
-  const period = periodOf(def, config);
-  const bucket = Math.floor(at / period);
-  const key = `${app.id}:${bucket}:${period}:${app.updatedAt}`;
+  const slot = slotOf(def, config, at);
+  const key = `${app.id}:${slot.start}:${slot.end}:${app.updatedAt}`;
   let frame = ahead.get(key);
   if (!frame) {
-    frame = render(def, config, new Date(bucket * period));
+    frame = render(def, config, new Date(slot.start));
     ahead.set(key, frame);
     frame.catch(() => ahead.delete(key));
     if (ahead.size > 64) ahead.delete(ahead.keys().next().value!);

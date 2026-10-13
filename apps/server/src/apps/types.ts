@@ -28,6 +28,8 @@ export type AppDef<C extends Record<string, unknown>, D> = {
   periodMs: number;
   /** When an instance's settings choose how often it changes; otherwise `periodMs`. */
   periodFor?: (config: C) => number;
+  /** When its settings also choose when the periods start: the slot `now` falls in, as epoch ms. Beats `periodFor`. */
+  slotFor?: (config: C, now: number) => { start: number; end: number };
   /** How long it stays on when added, if not the usual 15 minutes. A clock only needs a minute. */
   clipS?: number;
   /** True while `data` returns made-up numbers instead of calling a real source. */

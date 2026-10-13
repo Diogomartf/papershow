@@ -338,7 +338,7 @@ Some apps take a few seconds the first time, because they fetch before they can 
 | App | Category | Data from | Key | New frame |
 |---|---|---|---|---|
 | Clock (Small / Medium / Large / XL, 12/24-hour, date) | Clocks | This device's clock | — | every minute |
-| AI Clock (a poem about the time; editable prompt with `{time}`, `{timezone}` and `{date}`; Standard or Large) | Clocks | Groq | `GROQ_API_KEY` | every minute, or every 5, 15 or 30 min or hour |
+| AI Clock (a poem about the time; editable prompt with `{time}`, `{timezone}` and `{date}`; Standard or Large) | Clocks | Groq | `GROQ_API_KEY` | every minute by default; any number of minutes (from a minute of the hour, like :59) or hours (from a time of day, like 08:30) |
 | Word of the day | AI | Groq | `GROQ_API_KEY` | daily (adjustable) |
 | Fun fact | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |
 | Haiku (knows the season and time of day) | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |
