@@ -1,4 +1,4 @@
-# The server: API, web app and /live. install.sh fills in @USER@ and @REPO@.
+# The server: API, web app and /live. install.sh fills in @USER@, @REPO@, @PORT@ and @WEB_PORT@.
 [Unit]
 Description=Papershow server
 After=network-online.target
@@ -9,6 +9,9 @@ User=@USER@
 WorkingDirectory=@REPO@/apps/server
 Environment=NODE_ENV=production
 Environment=PORT=@PORT@
+# Port 80 as well, when it was free at install, so http://paper.local needs no port. Empty for none.
+Environment=WEB_PORT=@WEB_PORT@
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 # Outside the checkout, so a fresh clone or a reset doesn't touch your drawings and shows.
 Environment=DB=/var/lib/papershow/papershow.db
 StateDirectory=papershow

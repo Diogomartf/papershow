@@ -428,3 +428,12 @@ if (process.env.NODE_ENV === "production") {
 
 const port = Number(process.env.PORT ?? 5194);
 serve({ fetch: app.fetch, port }, () => console.log(`server on http://localhost:${port}`));
+
+// On the Pi, also on port 80, so http://paper.local needs no port. Optional: if it's taken, the
+// main port still serves everything.
+if (process.env.WEB_PORT) {
+  const webPort = Number(process.env.WEB_PORT);
+  serve({ fetch: app.fetch, port: webPort }, () => console.log(`also on port ${webPort}`)).on("error", (err) =>
+    console.error(`port ${webPort}: ${err.message}; serving on ${port} only`),
+  );
+}
