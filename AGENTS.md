@@ -15,8 +15,8 @@ On the Pi:
 
 ```sh
 paper:status                               # services, version, addresses, keys, last frame
-paper:logs [server|panel]                  # follow the logs
-paper:update                               # pull main and reinstall
+paper:logs [server|panel|update]           # follow the logs
+paper:update                               # pull main and reinstall (the Pi also does it nightly)
 paper:help                                 # list these commands
 ```
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Takes Papershow off the Pi: stops and removes its services (server, panel, and the paper.local
-# name) and the paper: commands, blanks the panel, and removes its Tailscale address. Your drawings
-# and shows stay in /var/lib/papershow unless you pass --purge. Node, pnpm's cache, the Python
-# libraries, avahi, SPI and Tailscale itself stay too: other things on the Pi may use them. Run
-# deploy/pi/install.sh to put it all back.
+# Takes Papershow off the Pi: stops and removes its services (server, panel, the paper.local name
+# and the nightly update) and the paper: commands, blanks the panel, and removes its Tailscale
+# address. Your drawings and shows stay in /var/lib/papershow unless you pass --purge. Node, pnpm's
+# cache, the Python libraries, avahi, SPI and Tailscale itself stay too: other things on the Pi may
+# use them. Run deploy/pi/install.sh to put it all back.
 #
 #   deploy/pi/uninstall.sh            # keep the data
 #   deploy/pi/uninstall.sh --purge    # delete it as well
@@ -13,12 +13,12 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 port=$(systemctl show papershow -p Environment --value 2>/dev/null | tr ' ' '\n' | grep '^PORT=' | cut -d= -f2 || true)
 port=${port:-5194}
 
-sudo systemctl disable --now papershow-name papershow-panel papershow 2>/dev/null || true
-for unit in papershow papershow-panel papershow-name; do
-  sudo rm -rf "/etc/systemd/system/$unit.service" "/etc/systemd/system/$unit.service.d"
+sudo systemctl disable --now papershow-update.timer papershow-name papershow-panel papershow 2>/dev/null || true
+for unit in papershow.service papershow-panel.service papershow-name.service papershow-update.service papershow-update.timer; do
+  sudo rm -rf "/etc/systemd/system/$unit" "/etc/systemd/system/$unit.d"
 done
 sudo systemctl daemon-reload
-echo "Removed the papershow, papershow-panel and papershow-name services."
+echo "Removed the papershow, papershow-panel, papershow-name and papershow-update services."
 
 for name in update status logs help; do
   link=/usr/local/bin/paper:$name
