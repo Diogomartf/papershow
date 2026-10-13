@@ -299,6 +299,7 @@ Photos and logos are prepared for e-ink one by one before layout (`ditheredImage
 - **The show** is a list, played top to bottom and then again. Each entry is either a **playlist** (its clips in order) or a **single drawing or app** with its own duration.
 - **Playlists** hold clips. Each clip has a duration, weekdays and an optional time window (for example 07:00–09:00, which can wrap past midnight). Clips outside their window are skipped.
 - **Repeats**: a single entry can instead run *on the clock*, every 15, 30, 60, 120 or 180 minutes from midnight, interrupting the loop for its duration. The loop keeps time underneath and resumes where the clock says.
+- **At times**: any entry, a playlist too, can leave the loop and play only at set times each day (for example 08:00 and 20:00). At each one it interrupts the loop (a playlist plays its clips back to back), ending at least a minute before its next time. When two interruptions meet, the one higher in the show wins.
 - **Show now**: puts one drawing or app on `/live` once: for its turn (a clip's own length, else 15 minutes), then the show carries on by itself. **Resume now** ends it early.
 - **Night**: sleep hours during which the panel shows a moon and the wake-up time, goes blank, or keeps its last picture.
 
@@ -308,7 +309,7 @@ Anything that edits the show, images, apps or the pin wakes the long-polls, so t
 
 ### Storage
 
-SQLite at `apps/server/data/imagegen.db` (set `DB=/path` to move it). Tables: `images` (scene JSON plus the three rendered files), `apps` (kind, name, settings JSON), `playlists`, `slides` (playlist clips), `show` (entries, durations, repeats), `settings` (pin and night). The draft you're drawing stays in the browser's IndexedDB until you save.
+SQLite at `apps/server/data/imagegen.db` (set `DB=/path` to move it). Tables: `images` (scene JSON plus the three rendered files), `apps` (kind, name, settings JSON), `playlists`, `slides` (playlist clips), `show` (entries, durations, repeats, times), `settings` (pin and night). The draft you're drawing stays in the browser's IndexedDB until you save.
 
 ## Sections
 
@@ -323,7 +324,7 @@ What's on the panel now: the frame, its name, which playlist it's from, and a pr
 
 ### Show (`/show`)
 
-The running order. Add playlists, or single drawings and apps, then reorder them, set durations, switch entries on or off, or set a single entry to repeat on the clock. A single drawing or app has **Show now**, to put it on the panel for its turn right away. The header shows how long one pass of the loop takes. Under **Add to the show**, each playlist is a card with a glimpse of its first three clips stacked like a deck, its item count and its length.
+The running order. Add playlists, or single drawings and apps, then reorder them, set durations, switch entries on or off, set a single entry to repeat on the clock, or set any entry, playlists too, to play only **At times** of day you type, like `08:00, 20:00`. A single drawing or app has **Show now**, to put it on the panel for its turn right away. The header shows how long one pass of the loop takes. Under **Add to the show**, each playlist is a card with a glimpse of its first three clips stacked like a deck, its item count and its length.
 
 ### Playlists (`/playlist/:id`)
 

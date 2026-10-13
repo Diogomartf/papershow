@@ -100,6 +100,9 @@ db.exec(`
 // A single image or app can repeat on the clock (every 15, 30, 60… minutes) instead of taking a turn in the loop.
 if (!(db.prepare("pragma table_info(show)").all() as { name: string }[]).some((c) => c.name === "every_m"))
   db.exec("alter table show add column every_m integer");
+// Times of day an entry plays at instead of taking turns, as a JSON array of 'HH:MM'.
+if (!(db.prepare("pragma table_info(show)").all() as { name: string }[]).some((c) => c.name === "at_times"))
+  db.exec("alter table show add column at_times text");
 
 // First run with the show: what used to play (every enabled playlist, in order) becomes it.
 if (!db.prepare("select 1 from settings where key = 'show-ready'").get()) {
@@ -245,7 +248,7 @@ export function listSlides(): Slide[] {
 export function loopSlides(): Slide[] {
   const clips = listSlides();
   return listShow()
-    .filter((e) => e.enabled && !e.everyM)
+    .filter((e) => e.enabled && !e.everyM && !e.times?.length)
     .flatMap((e): Slide[] =>
       e.playlistId
         ? clips
@@ -283,6 +286,8 @@ export type ShowEntry = {
   enabled: boolean;
   /** Minutes: interrupt the loop on the clock this often (e.g. 60 = on the hour). Null = a turn in the loop. */
   everyM: number | null;
+  /** Or play at these 'HH:MM' times each day, out of the loop otherwise. Playlists too. */
+  times: string[] | null;
 };
 
 type ShowRow = {
@@ -294,6 +299,7 @@ type ShowRow = {
   duration_s: number;
   enabled: number;
   every_m: number | null;
+  at_times: string | null;
 };
 
 export function listShow(): ShowEntry[] {
@@ -305,14 +311,36 @@ export function listShow(): ShowEntry[] {
     durationS: r.duration_s,
     enabled: !!r.enabled,
     everyM: r.playlist_id ? null : r.every_m,
+    times: r.at_times ? (JSON.parse(r.at_times) as string[]) : null,
   }));
 }
 
-/** Show entries that repeat on the clock rather than taking a turn. */
-export const repeats = (): Repeat[] =>
-  listShow()
-    .filter((e) => e.enabled && e.source && e.everyM)
-    .map((e) => ({ id: e.id, source: e.source!, durationS: e.durationS, everyM: e.everyM! }));
+/** Show entries that interrupt the loop, on the clock or at set times, rather than taking a turn. */
+export function repeats(): Repeat[] {
+  const clips = listSlides();
+  return listShow()
+    .filter((e) => e.enabled && (e.times?.length || (e.source && e.everyM)))
+    .map((e) => ({
+      id: e.id,
+      everyM: e.times?.length ? null : e.everyM,
+      times: e.times?.length ? e.times : null,
+      clips: e.playlistId
+        ? clips
+            .filter((c) => c.playlistId === e.playlistId && c.enabled)
+            .map((c) => ({ id: c.id, source: c.source, durationS: c.durationS, clipId: c.id, playlistId: e.playlistId }))
+        : [{ id: e.id, source: e.source!, durationS: e.durationS, clipId: null, playlistId: null }],
+    }))
+    .filter((r) => r.clips.length);
+}
+
+/** "8:00, 20:00, 8:00" → ["08:00", "20:00"]: valid times only, sorted, once each. */
+function cleanTimes(times: string[]) {
+  const ok = times
+    .map((t) => t.trim().match(/^(\d{1,2}):(\d{2})$/))
+    .filter((m): m is RegExpMatchArray => !!m && Number(m[1]) < 24 && Number(m[2]) < 60)
+    .map((m) => `${m[1].padStart(2, "0")}:${m[2]}`);
+  return [...new Set(ok)].sort().slice(0, 24);
+}
 
 /** Add a playlist, image or app to the show at `at` (end by default). */
 export function addShowEntry(what: { playlistId: string } | { source: Source }, at?: number, durationS = DEFAULT_CLIP_S) {
@@ -334,7 +362,7 @@ export function addShowEntry(what: { playlistId: string } | { source: Source }, 
   return id;
 }
 
-export function updateShowEntry(id: string, patch: { durationS?: number; enabled?: boolean; everyM?: number | null }) {
+export function updateShowEntry(id: string, patch: { durationS?: number; enabled?: boolean; everyM?: number | null; times?: string[] | null }) {
   if (patch.durationS !== undefined)
     db.prepare("update show set duration_s = ? where id = ?").run(Math.max(1, Math.round(patch.durationS / 60)) * 60, id);
   if (patch.enabled !== undefined) db.prepare("update show set enabled = ? where id = ?").run(patch.enabled ? 1 : 0, id);
@@ -343,6 +371,14 @@ export function updateShowEntry(id: string, patch: { durationS?: number; enabled
       REPEAT_EVERY.includes(patch.everyM as number) ? patch.everyM : null,
       id,
     );
+  // Set times: the entry leaves the loop and its clock repeat; an empty list puts it back in the loop.
+  if (patch.times !== undefined) {
+    const times = cleanTimes(patch.times ?? []);
+    db.prepare("update show set at_times = ? where id = ?").run(times.length ? JSON.stringify(times) : null, id);
+  }
+  // On the clock and at set times exclude each other: the last one chosen wins.
+  if (patch.everyM) db.prepare("update show set at_times = null where id = ?").run(id);
+  else if (patch.times?.length) db.prepare("update show set every_m = null where id = ?").run(id);
 }
 
 export function reorderShow(ids: string[], transaction = true) {

@@ -1059,7 +1059,8 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .pl-head p { margin: 0; }
 .pl-rows { list-style: none; padding: 0; display: grid; gap: 10px; }
 .pl-rows li {
-  display: flex; align-items: center; gap: 14px;
+  /* The controls drop below the name when they'd squeeze it: a single item has many. */
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
   padding: 12px 14px 12px 8px;
   border-radius: 14px;
   background: var(--surface);
@@ -1083,7 +1084,7 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .pl-order button:hover:not(:disabled) { background: var(--tint); color: var(--ink); }
 .pl-order button:disabled { opacity: .3; cursor: default; }
 .pl-main {
-  flex: 1; min-width: 0;
+  flex: 1 1 260px; min-width: 0;
   display: grid; gap: 4px; justify-items: start;
   padding: 2px 4px; border: 0; background: none; text-align: left;
 }
@@ -1092,7 +1093,7 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .pl-strip { display: flex; gap: 6px; margin-top: 6px; min-height: 36px; align-items: center; }
 .pl-strip img { width: 60px; aspect-ratio: 5 / 3; border-radius: 3px; background: var(--paper); box-shadow: 0 0 0 1px var(--line); filter: var(--dim); }
 .pl-more { font: 600 11px var(--mono); color: var(--ink-3); padding-left: 2px; }
-.pl-row-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.pl-row-actions { display: flex; align-items: center; gap: 4px; flex: none; margin-left: auto; }
 .pl-row-actions .toggle { margin-right: 8px; }
 .pl-row-actions .ghost:disabled { opacity: .35; cursor: default; }
 .pl-main.single { display: flex; align-items: center; gap: 12px; cursor: default; }
@@ -1142,6 +1143,10 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 /* Repeat: a single item can interrupt the loop on the clock */
 .repeat button { padding: 5px 9px; font-size: 13px; white-space: nowrap; }
 .pl-row-actions .repeat { margin-right: 8px; }
+.times-input {
+  min-width: 12ch; max-width: 34ch; margin-right: 8px; padding: 6px 10px; font: inherit; font-size: 13px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: inherit;
+}
 .pl-confirm { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; color: var(--ink-2); padding-left: 4px; }
 
 /* ── Apps ──────────────────────────────────────────── */
@@ -1320,6 +1325,7 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
   .pl-rows li { flex-wrap: wrap; gap: 10px; padding: 12px; }
   .pl-main { flex: 1 1 calc(100% - 40px); }
   .pl-row-actions { flex: 1 1 100%; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+  .pl-row-actions .times-input { flex: 1 1 100%; max-width: none; margin-right: 0; }
   .single-thumb { width: 80px; }
   .add-items button { width: calc((100vw - 52px) / 2); }
 
