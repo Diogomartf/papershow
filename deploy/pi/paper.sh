@@ -30,7 +30,7 @@ EOF
 
 port() {
   local p
-  p=$(systemctl show papershow -p Environment --value 2>/dev/null | grep -o 'PORT=[0-9]*' | cut -d= -f2 || true)
+  p=$(systemctl show papershow -p Environment --value 2>/dev/null | tr ' ' '\n' | grep '^PORT=' | cut -d= -f2 || true)
   echo "${p:-5194}"
 }
 
@@ -55,7 +55,17 @@ case "$cmd" in
       since=$(systemctl show "$unit" -p ActiveEnterTimestamp --value 2>/dev/null || true)
       printf '%-9s %s%s\n' "${pair%%:*}:" "$state" "${since:+ since $since}"
     done
-    echo "Open:     http://$(hostname).local:$p"
+    # paper.local when its name service runs, and without a port when the server also has port 80.
+    web=$(systemctl show papershow -p Environment --value 2>/dev/null | tr ' ' '\n' | grep '^WEB_PORT=' | cut -d= -f2 || true)
+    if systemctl is-active --quiet papershow-name; then
+      alias=$(systemctl show papershow-name -p Environment --value | tr ' ' '\n' | grep '^NAME=' | cut -d= -f2)
+      open="http://$alias.local"
+      [ -n "$web" ] || open+=":$p"
+      echo "Open:     $open"
+      echo "          http://$(hostname).local:$p"
+    else
+      echo "Open:     http://$(hostname).local:$p"
+    fi
     if command -v tailscale >/dev/null && tailscale status >/dev/null 2>&1 &&
       sudo -n tailscale serve status 2>/dev/null | grep -q "127.0.0.1:$p"; then
       name=$(tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')

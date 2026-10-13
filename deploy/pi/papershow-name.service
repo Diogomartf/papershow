@@ -1,0 +1,18 @@
+# Papershow's name on the local network, http://@NAME@.local. install.sh fills in @USER@, @REPO@ and @NAME@.
+[Unit]
+Description=Papershow's name on the local network (@NAME@.local)
+After=avahi-daemon.service network-online.target
+Wants=network-online.target
+Requires=avahi-daemon.service
+
+[Service]
+User=@USER@
+Environment=NAME=@NAME@
+ExecStart=@REPO@/deploy/pi/name.sh @NAME@
+Restart=always
+RestartSec=30
+# Look up the address again every hour, in case the router handed out a new one.
+RuntimeMaxSec=1h
+
+[Install]
+WantedBy=multi-user.target

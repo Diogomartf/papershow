@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
-# Takes Papershow off the Pi: stops and removes both services and the paper: commands, blanks the
-# panel, and removes its Tailscale address. Your drawings and shows stay in /var/lib/papershow
-# unless you pass --purge. Node, pnpm's cache, the Python libraries, SPI and Tailscale itself stay too: other things on the
-# Pi may use them. Run deploy/pi/install.sh to put it all back.
+# Takes Papershow off the Pi: stops and removes its services (server, panel, and the paper.local
+# name) and the paper: commands, blanks the panel, and removes its Tailscale address. Your drawings
+# and shows stay in /var/lib/papershow unless you pass --purge. Node, pnpm's cache, the Python
+# libraries, avahi, SPI and Tailscale itself stay too: other things on the Pi may use them. Run
+# deploy/pi/install.sh to put it all back.
 #
 #   deploy/pi/uninstall.sh            # keep the data
 #   deploy/pi/uninstall.sh --purge    # delete it as well
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
-port=$(systemctl show papershow -p Environment --value 2>/dev/null | grep -o 'PORT=[0-9]*' | cut -d= -f2 || true)
+port=$(systemctl show papershow -p Environment --value 2>/dev/null | tr ' ' '\n' | grep '^PORT=' | cut -d= -f2 || true)
 port=${port:-5194}
 
-sudo systemctl disable --now papershow-panel papershow 2>/dev/null || true
-sudo rm -f /etc/systemd/system/papershow.service /etc/systemd/system/papershow-panel.service
-sudo rm -rf /etc/systemd/system/papershow.service.d /etc/systemd/system/papershow-panel.service.d
+sudo systemctl disable --now papershow-name papershow-panel papershow 2>/dev/null || true
+for unit in papershow papershow-panel papershow-name; do
+  sudo rm -rf "/etc/systemd/system/$unit.service" "/etc/systemd/system/$unit.service.d"
+done
 sudo systemctl daemon-reload
-echo "Removed the papershow and papershow-panel services."
+echo "Removed the papershow, papershow-panel and papershow-name services."
 
 for name in update status logs help; do
   link=/usr/local/bin/paper:$name

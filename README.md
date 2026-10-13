@@ -23,12 +23,12 @@ It signs in to GitHub if needed (the repo is private), installs everything, offe
 
 | Where it runs | From | Address |
 |---|---|---|
-| Raspberry Pi | Any device on your home Wi-Fi | `http://<hostname>.local:5194`, for example `raspberrypi.local` |
+| Raspberry Pi | Any device on your home Wi-Fi | `http://paper.local` (also `http://<hostname>.local:5194`) |
 | Raspberry Pi | Anywhere, through [Tailscale](#4-reach-it-from-anywhere) | `https://<hostname>.<your-tailnet>.ts.net` |
 | Your Mac (`pnpm dev`) | The Mac | http://localhost:5193 |
 | Your Mac (`pnpm dev`) | A phone on the same Wi-Fi | `http://<your-mac's-ip>:5193` |
 
-On a phone, use the Tailscale address even at home: it's HTTPS, which Draw needs on phones, and it's the same address everywhere. Add it to the home screen and it opens like an app. The device needs the Tailscale app, signed in to the same account. Some Android phones can't resolve `.local` names; use the Pi's IP (`hostname -I` on the Pi) or the Tailscale address.
+On a phone, use the Tailscale address even at home: it's HTTPS, which Draw needs on phones, and it's the same address everywhere. Add it to the home screen and it opens like an app. The device needs the Tailscale app, signed in to the same account. Some Android phones can't resolve `.local` names, `paper.local` included; use the Pi's IP (`hostname -I` on the Pi) or the Tailscale address.
 
 ## Dependencies
 
@@ -113,14 +113,15 @@ command -v gh >/dev/null || { sudo apt-get update && sudo apt-get install -y gh;
 
 When `gh auth login` asks, pick GitHub.com, HTTPS, and *Login with a web browser*, then enter the code it shows on your Mac.
 
-The script builds the web app, turns on SPI, installs the panel's Python libraries, and sets up two services that start on boot:
+The script builds the web app, turns on SPI, installs the panel's Python libraries, and sets up three services that start on boot:
 
 | Service | What it runs |
 |---|---|
-| `papershow` | The server: web app, API and `/live` on :5194. Data in `/var/lib/papershow/papershow.db`. |
+| `papershow` | The server: web app, API and `/live` on :5194, and on :80 when it's free. Data in `/var/lib/papershow/papershow.db`. |
 | `papershow-panel` | The panel client: shows the logo, then follows `/live` and draws it. |
+| `papershow-name` | Publishes `paper.local` for the Pi on your network (`deploy/pi/name.sh`, through avahi). |
 
-The panel shows the logo, then the current frame. The script ends with "Papershow installed! Ready to use." and Papershow's address, `http://<hostname>.local:5194`, and it all starts again on its own after a reboot or power cut. [What the install changes on your Pi](#what-the-install-changes-on-your-pi) lists what it touches and what it leaves alone. From then on, [`paper:status`, `paper:logs` and `paper:update`](#commands-on-the-pi) check on it and update it; `paper:help` lists them.
+The panel shows the logo, then the current frame. The script ends with "Papershow installed! Ready to use." and Papershow's address, `http://paper.local`, and it all starts again on its own after a reboot or power cut. [What the install changes on your Pi](#what-the-install-changes-on-your-pi) lists what it touches and what it leaves alone. From then on, [`paper:status`, `paper:logs` and `paper:update`](#commands-on-the-pi) check on it and update it; `paper:help` lists them.
 
 ### 3. On the Pi: stop anything else that draws on the panel
 
@@ -171,7 +172,7 @@ Open Papershow. On the Dashboard, under **Device**, set the night hours (for exa
 It's safe to run again, and it leaves the rest of your Pi alone:
 
 - **Port**: it uses 5194, and stops if something else is already on it. Pick another with `PAPERSHOW_PORT=8080 deploy/pi/install.sh`.
-- **Address**: your Pi keeps its hostname. The script ends by waiting for the server to answer, then prints "Papershow installed! Ready to use." (or "updated!") with the version and the address.
+- **Address**: your Pi keeps its hostname, and gets a second name, `paper.local`, published over mDNS by avahi (installed from apt). If another device already answers to `paper.local`, the install keeps `<hostname>.local` and says so; pick another name with `PAPERSHOW_NAME=paper2 deploy/pi/install.sh`. The server also listens on port 80, so the address needs no port, but only if nothing else uses 80; otherwise it's `http://paper.local:5194`. The script ends by waiting for the server to answer, then prints "Papershow installed! Ready to use." (or "updated!") with the version and the address.
 - **Code**: the one line puts the checkout in `~/papershow` (`PAPERSHOW_DIR` to change it). Or clone it yourself anywhere and run `deploy/pi/install.sh`.
 - **Node**: it installs Node 24 only if the Pi's Node is older than 22.13, and that upgrade is system-wide. A newer Node is left alone.
 - **pnpm**: it runs pnpm 7 through `npx`, so a pnpm the Pi already has stays as it is.
@@ -211,7 +212,7 @@ On the Pi:
 ~/papershow/deploy/pi/uninstall.sh --purge    # deletes them too
 ```
 
-It stops and removes both services and any `systemctl edit` settings, removes the `paper:` commands, blanks the panel, and removes the Tailscale address if it serves only Papershow. Your data in `/var/lib/papershow` stays unless you pass `--purge`. Node, the Python libraries, SPI and Tailscale stay installed, because other things on the Pi may use them. The code stays in `~/papershow`; delete it yourself when you're done. The install line puts everything back.
+It stops and removes the three services and any `systemctl edit` settings, removes the `paper:` commands, blanks the panel, and removes the Tailscale address if it serves only Papershow. Your data in `/var/lib/papershow` stays unless you pass `--purge`. Node, the Python libraries, avahi, SPI and Tailscale stay installed, because other things on the Pi may use them. The code stays in `~/papershow`; delete it yourself when you're done. The install line puts everything back.
 
 To go back to pi-e-ink after uninstalling, restore its cron jobs: `crontab ~/code/pi-e-ink/e_ink_cron_jobs`.
 
@@ -430,6 +431,7 @@ Edits answer with the whole new state, so the UI never drifts from the server.
 | `MASSIVE_API_KEY` | Stocks. Without it the app shows stand-in movers. |
 | `LOGO_DEV_TOKEN` | logo.dev publishable key (`pk_…`) for company logos in Stocks. Without it, ticker badges. |
 | `PORT` | Server port (5194). |
+| `WEB_PORT` | A second port to serve on, if free; the Pi's install sets 80. |
 | `DB` | SQLite file (`apps/server/data/imagegen.db`). |
 
 The server reads `.env` when it starts, so restart it after changing keys.
