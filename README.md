@@ -400,6 +400,8 @@ Response headers:
 - `ETag`: changes only when the pixels do.
 - `X-Next-Change`: seconds until the frame changes by itself, if it will.
 - `X-Sleep-Until`: while asleep, when the panel wakes (ms since epoch).
+- `X-Source`: what's on air, as `app:<id>` or `image:<id>`; a new one gets a full refresh.
+- `X-Source-Name`: its name, URI-encoded (names can have accents), for logs.
 - `X-Show-Now`: while a Show now holds `/live`, when it ends (ms since epoch). A new value means someone just sent this picture: the panel client flashes black, then draws it with a full refresh.
 
 Long-poll: send `?wait=1` with `If-None-Match: <etag>`. The server holds the request for up to 55 s and answers as soon as the frame changes, or with `304` if it didn't. A `204` means keep the last picture (asleep with "keep last picture"). Requests without `?e=` count as a display checking in, which the dashboard shows. The web app's own previews add `?e=`.
