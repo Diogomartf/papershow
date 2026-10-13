@@ -109,6 +109,7 @@ function nextChange(current: LiveNow | null, maxMs: number) {
 // ?wait=1 with If-None-Match: hold up to 55s until the frame changes (long-poll).
 // X-Next-Change: seconds until the frame changes by itself, if it will.
 // X-Sleep-Until: while asleep, when the panel wakes (ms since epoch). 204 = keep the last picture.
+// X-Source-Name: the drawing's or app's name, URI-encoded (names aren't always ASCII), for logs.
 // X-Show-Now: while Show now holds /live, when it ends (ms since epoch): a new value is a fresh Show now.
 
 /** The last time a display (anything but this web app's previews) asked for /live. */
@@ -126,7 +127,11 @@ async function live(c: Context, kind: "mono" | "bin") {
 
   c.header("ETag", now.etag);
   c.header("Cache-Control", "no-cache");
-  if (now.source) c.header("X-Source", `${now.source.kind}:${now.source.id}`);
+  if (now.source) {
+    c.header("X-Source", `${now.source.kind}:${now.source.id}`);
+    const name = now.source.kind === "image" ? store.getImageMeta(now.source.id)?.name : store.getApp(now.source.id)?.name;
+    if (name) c.header("X-Source-Name", encodeURIComponent(name));
+  }
   if (now.asleep) c.header("X-Sleep-Until", String(now.asleep));
   if (now.endsAt) c.header("X-Next-Change", String(Math.ceil((now.endsAt - Date.now()) / 1000)));
   // Someone just asked for this picture: the panel flashes clean before drawing it.

@@ -19,6 +19,7 @@ import sys
 import time
 from datetime import datetime
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from PIL import Image
@@ -141,7 +142,10 @@ def main():
             panel.show(img, full, flash)
             partials = 0 if full else partials + 1
             etag, source = headers.get("ETag"), new_source
-            log.info("drew %s (%s refresh%s)", new_source or "frame", "full" if full else "partial", ", flashed for Show now" if flash else "")
+            # The name, when the server sends one, so the log says what's up and not just its id.
+            name = urllib.parse.unquote(headers.get("X-Source-Name") or "")
+            what = f"{name} ({new_source})" if name and new_source else new_source or "frame"
+            log.info("drew %s (%s refresh%s)", what, "full" if full else "partial", ", flashed for Show now" if flash else "")
             continue
 
         # No new frame: if it's time, clean and put the same picture back.
