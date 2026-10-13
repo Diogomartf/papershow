@@ -64,6 +64,7 @@ export function Playlist({ id }: { id: string | null }) {
 
   const showing = state?.showing ?? null;
   const pinned = state?.live.mode === "pin";
+  const pinnedUntil = state?.live.mode === "pin" ? (state.live.until ?? null) : null;
   const liveItem = itemOf(showing?.source);
   const next = state?.sequence[1];
 
@@ -182,7 +183,8 @@ export function Playlist({ id }: { id: string | null }) {
     toast.show(`Removed ${itemOf(slide.source)?.name ?? "clip"}`, () => api.restoreSlide(slide, index).then(accept));
   };
 
-  const pin = (source: Source) => api.setLive({ mode: "pin", source }).then(accept);
+  /** Show now: on /live for `forS` (a clip's own length; else the server's 15 minutes), then the playlists carry on. */
+  const pin = (source: Source, forS?: number) => api.setLive({ mode: "pin", source, forS }).then(accept);
 
   /** Swap a clip with its neighbour: reordering without dragging. */
   const move = (id: string, dir: -1 | 1) => {
@@ -302,8 +304,14 @@ export function Playlist({ id }: { id: string | null }) {
               </p>
             ) : pinned ? (
               <p>
-                Pinned to /live until you resume the sequence.{" "}
-                <button className="link" onClick={resume}>Resume sequence</button>
+                {pinnedUntil ? (
+                  <>
+                    Shown now until <span className="tabular">{clock(pinnedUntil)}</span>, then the playlist carries on.{" "}
+                  </>
+                ) : (
+                  "Pinned to /live until you resume the sequence. "
+                )}
+                <button className="link" onClick={resume}>Resume now</button>
               </p>
             ) : showing?.slideId ? (
               <p>
@@ -465,7 +473,7 @@ export function Playlist({ id }: { id: string | null }) {
                 minutes={minutesOf(sel)}
                 onDuration={(m) => setDuration(sel.id, m)}
                 onPatch={(p) => patch(sel.id, p)}
-                onShowNow={() => pin(sel.source)}
+                onShowNow={() => pin(sel.source, sel.durationS)}
                 onRemove={() => remove(sel.id)}
               />
             ) : (
@@ -518,7 +526,7 @@ export function Playlist({ id }: { id: string | null }) {
       {sel && !resizing && !dragging && (
         // Clicks in the clip's settings below keep it selected: only clicking elsewhere lets go.
         <FloatingMenu anchor={clipEls.current.get(sel.id) ?? null} onClose={() => setSelected(null)} keepOpenWithin=".inspector">
-          <MenuItem icon="show" onClick={() => pin(sel.source)}>Show now</MenuItem>
+          <MenuItem icon="show" onClick={() => pin(sel.source, sel.durationS)}>Show now</MenuItem>
           {slides.indexOf(sel) > 0 && (
             <MenuItem icon="earlier" onClick={() => move(sel.id, -1)} aria-label="Play earlier">Earlier</MenuItem>
           )}

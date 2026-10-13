@@ -47,6 +47,7 @@ export function Dashboard() {
   const showing = state?.showing ?? null;
   const asleep = showing?.asleep ?? null;
   const pinned = state?.live.mode === "pin";
+  const pinnedUntil = state?.live.mode === "pin" ? (state.live.until ?? null) : null;
   const onAir = itemOf(showing?.source);
   const playlistName = (id: string | null) => (id ? (state?.playlists.find((p) => p.id === id)?.name ?? "") : "In the show");
   const seq = state?.sequence ?? [];
@@ -94,14 +95,16 @@ export function Dashboard() {
                 {asleep
                   ? `Night until ${hhmm(asleep)}`
                   : pinned
-                    ? "Pinned with Show now"
+                    ? pinnedUntil
+                      ? `Show now · until ${hhmm(pinnedUntil)}`
+                      : "Pinned with Show now"
                     : currentTurn
                       ? `${playlistName(currentTurn.playlistId)} · ${countdown((clip?.endsAt ?? now) - now)} left`
                       : ""}
                 {pinned && !asleep && (
                   <>
                     {" · "}
-                    <button className="link" onClick={() => setLive({ mode: "rotate" }).then(accept)}>Resume playlists</button>
+                    <button className="link" onClick={() => setLive({ mode: "rotate" }).then(accept)}>Resume now</button>
                   </>
                 )}
               </p>
@@ -124,7 +127,7 @@ export function Dashboard() {
                 </>
               ) : (
                 <p className="muted">
-                  {asleep ? `The playlists pick up at ${hhmm(asleep)}.` : pinned ? "Resume the playlists to see what's next." : "Nothing else in the loop."}
+                  {asleep ? `The playlists pick up at ${hhmm(asleep)}.` : pinned ? (pinnedUntil ? `The playlists pick up at ${hhmm(pinnedUntil)}.` : "Resume the playlists to see what's next.") : "Nothing else in the loop."}
                 </p>
               )}
             </div>

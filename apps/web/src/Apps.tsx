@@ -281,7 +281,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
                     className="primary"
                     onClick={async () => {
                       await setLive({ mode: "pin", source: { kind: "app", id: current!.id } });
-                      flash(`${draft.name} is now on /live`);
+                      flash(`${draft.name} is on /live for 15 minutes`);
                     }}
                   >
                     Show now

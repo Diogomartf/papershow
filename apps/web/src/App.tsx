@@ -6,6 +6,7 @@ import { PANEL, type Scene, type TextItem } from "@papershow/scene";
 import { paintMono, renderScene } from "./render";
 import { getDraft, imageUrl, putDraft, putImage } from "./store";
 import { Gallery } from "./Gallery";
+import { setLive } from "./slides";
 import { Nav } from "./Nav";
 import { useNarrow } from "./media";
 import { LightSwitch } from "./LightSwitch";
@@ -85,11 +86,15 @@ export default function App() {
     window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 2400);
   };
 
-  const save = useCallback(async () => {
+  /**
+   * Saves the drawing; then, with `then`, opens the saved picture in a new tab, or shows it on the panel now
+   * (once: the playlists carry on after).
+   */
+  const save = useCallback(async (then?: "open" | "show") => {
     if (!scene || saving) return;
     // Open the tab now, while we still hold the click: a tab opened after an
     // await is a popup as far as Safari is concerned.
-    const tab = window.open("", "_blank");
+    const tab = then === "open" ? window.open("", "_blank") : null;
     setSaving(true);
     try {
       const current = { ...scene, strokes: draw.current?.getStrokes() ?? scene.strokes, updatedAt: Date.now() };
@@ -97,7 +102,8 @@ export default function App() {
       setScene(current);
       setGalleryKey((k) => k + 1);
       if (tab) tab.location.href = imageUrl(current.id);
-      flash(tab ? "Saved · opened in a new tab" : "Saved");
+      if (then === "show") await setLive({ mode: "pin", source: { kind: "image", id: current.id } });
+      flash(then === "show" ? "Saved · on the panel for 15 minutes" : tab ? "Saved · opened in a new tab" : "Saved");
     } catch (err) {
       tab?.close();
       flash("Couldn't save. Try again");
@@ -161,7 +167,7 @@ export default function App() {
           ))}
         </div>
 
-        <div className="bar-right">
+        <div className="bar-right draw-actions">
           <LightSwitch />
           <button
             className="ghost text-toggle"
@@ -169,12 +175,18 @@ export default function App() {
             onClick={() => setTyping((t) => !t)}
             title={typing ? "Back to drawing (Esc)" : "Type on the panel (T)"}
           >
-            <span aria-hidden className="text-glyph">T</span> Text
+            <span aria-hidden className="text-glyph">T</span> <span className="text-label">Text</span>
           </button>
           <button className="ghost" onClick={startNew}>New</button>
           <button className="ghost" onClick={() => setGalleryOpen(true)}>Gallery</button>
-          <button className="primary" onClick={save} disabled={saving}>
-            {saving ? "Saving…" : narrow ? "Save" : "Save & open"}
+          <button className="ghost" onClick={() => save("open")} disabled={saving} title="Save, then open the picture in a new tab">
+            Open
+          </button>
+          <button className="ghost" onClick={() => save("show")} disabled={saving} title="Save, then put it on the panel for 15 minutes">
+            Show now
+          </button>
+          <button className="primary" onClick={() => save()} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
             <kbd>⌘S</kbd>
           </button>
         </div>
@@ -215,7 +227,7 @@ export default function App() {
         currentId={scene.id}
         onClose={() => setGalleryOpen(false)}
         onOpen={open}
-        onLive={(name) => flash(`${name} is now on /live`)}
+        onLive={(name) => flash(`${name} is on /live for 15 minutes`)}
       />
 
       <div className="toast" data-on={!!toast} role="status">{toast}</div>
