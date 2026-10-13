@@ -344,9 +344,10 @@ Some apps take a few seconds the first time, because they fetch before they can 
 | Haiku (knows the season and time of day) | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |
 | Quote of the day | AI | Groq | `GROQ_API_KEY` | daily (adjustable) |
 | Custom AI (any prompt, any layout; every AI app has a Clean style: only the reply, as big as it fits) | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |
-| New York Times (lead story and photo, 7 sections; Poster, Clean or Classic) | News | NYT RSS feeds | — | 15 min |
-| Wall Street Journal (latest story and photo, 7 sections; Poster, Clean or Classic) | News | WSJ RSS feeds (Dow Jones) | — | 15 min |
-| Techmeme (top story, or the top 3; Poster, Clean or Classic) | News | techmeme.com "Top News" column | — | 15 min |
+| New York Times (lead story and photo, 7 sections; Poster, Clean, Classic or Title) | News | NYT RSS feeds | — | 15 min |
+| Wall Street Journal (latest story and photo, 7 sections; Poster, Clean, Classic or Title) | News | WSJ RSS feeds (Dow Jones) | — | 15 min |
+| Techmeme (top story, or the top 3; Poster, Clean, Classic or Title) | News | techmeme.com "Top News" column | — | 15 min |
+| Custom news (any news site from its address: its latest story, or the one leading its front page; Poster, Clean, Classic or Title) | News | the site's feed or front page | — | 15 min |
 | Crypto (up to 4 of 10 tokens, USD/EUR) | Stocks & tokens | CoinGecko prices, Trust Wallet logos | — | 5 min |
 | Stocks (top gainers or losers) | Stocks & tokens | Massive, logos from logo.dev | `MASSIVE_API_KEY`, `LOGO_DEV_TOKEN` (logos) | 15 min |
 
@@ -355,6 +356,7 @@ Details per source:
 - **NYT**: `rss.nytimes.com/services/xml/rss/nyt/<Section>.xml`. The first item of `HomePage` is the story leading the front page.
 - **WSJ**: `feeds.content.dowjones.io/public/rss/<Feed>`. There's no front-page feed, so it shows the newest item in the section.
 - **Techmeme**: parses the homepage's "Top News" column, because the RSS feed is newest-first rather than ranked.
+- **Custom news**: paste a site's address (or a feed's). For **Latest** it finds the site's feed, from the page's `<link rel="alternate">` or the usual places (`/feed`, `/rss`, `/rss.xml`…), and shows its first item. For **Top of the page** it takes the first link on the front page that reads like a headline. Each falls back on the other. The summary, photo and site name come from the story's own page (`og:` tags) when the feed doesn't have them. Title is every news app's headline-only style.
 - **CoinGecko**: the free `simple/price` endpoint, one call for all tokens and both currencies, shared for a minute. Logos come from `assets-cdn.trustwallet.com/blockchains/<chain>/info/logo.png` for a chain's own coin, or `/<chain>/assets/<address>/logo.png` for a token on it.
 - **logo.dev**: company logos by ticker (`img.logo.dev/ticker/<SYMBOL>`), fetched once each and dithered into the badge's rounded square. Without `LOGO_DEV_TOKEN`, or for a ticker logo.dev doesn't know, Stocks shows the drawn ticker badge.
 - **Massive**: live top movers on the Starter plan and above. On the free plan, it works out the previous session's movers from daily closes (stocks over $5 that traded over a million shares).

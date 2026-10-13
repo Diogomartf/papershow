@@ -4,23 +4,25 @@ import { clip, decode, defineApp, sheet, wrap } from "./types.ts";
 
 /**
  * How the page is set. Poster reads from across the room (2–3 m). Clean is Poster under a smaller masthead,
- * with no date line. Classic is the denser page: the whole summary and the byline, in smaller type.
+ * with no date line. Classic is the denser page: the whole summary and the byline, in smaller type. Title is
+ * the headline alone, as big as it fits, under Clean's masthead.
  */
-type Style = "poster" | "clean" | "classic";
+export type Style = "poster" | "clean" | "classic" | "title";
 
-const STYLES = [
+export const STYLES = [
   { value: "poster", label: "Poster" },
   { value: "clean", label: "Clean" },
   { value: "classic", label: "Classic" },
+  { value: "title", label: "Title" },
 ];
 
 /** The photo's side, in panel pixels: dithered at exactly this size. */
-const PHOTO: Record<Style, number> = { poster: 280, clean: 300, classic: 330 };
+export const PHOTO: Record<Style, number> = { poster: 280, clean: 300, classic: 330, title: 0 };
 
 /** The height of the text under the masthead, in panel pixels: Clean's slimmer masthead leaves more. */
-const BODY_H: Record<Style, number> = { poster: 330, clean: 372, classic: 330 };
+const BODY_H: Record<Style, number> = { poster: 330, clean: 372, classic: 330, title: 372 };
 
-type Story = { title: string; summary: string; byline: string; credit: string; image: string | null };
+export type Story = { title: string; summary: string; byline: string; credit: string; image: string | null };
 
 type Paper = {
   kind: string;
@@ -79,7 +81,7 @@ function newspaper(paper: Paper) {
         label: "Style",
         type: "select",
         options: STYLES,
-        hint: "Poster reads from across the room. Clean: the same, under a smaller masthead with no date. Classic: the whole summary and the byline, smaller.",
+        hint: "Poster reads from across the room. Clean: the same, under a smaller masthead with no date. Classic: the whole summary and the byline, smaller. Title: only the headline, as big as it fits.",
       },
     ],
     periodMs: 15 * 60_000,
@@ -100,63 +102,81 @@ function newspaper(paper: Paper) {
         throw err;
       }
     },
-    view: ({ config, data, now }) => {
-      const date = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-      const classic = config.style === "classic";
-      const clean = config.style === "clean";
-      const bodyH = BODY_H[config.style];
-      const photo = PHOTO[config.style];
-      const n = data.title.length;
-      const wide = !data.image;
-      // Poster and Clean: the headline as big as fits in about two thirds of the column, then as much of the summary
-      // as fits under it at a size still readable from 2–3 m. Classic: sizes by headline length, all of it.
-      const width = 736 - (data.image ? photo + 28 : 0);
-      const size = classic
-        ? wide ? (n <= 70 ? 50 : n <= 110 ? 42 : 36) : n <= 60 ? 40 : n <= 90 ? 34 : 29
-        : ([72, 64, 58, 52, 48, 44, 40].find((s) => wrap(data.title, s, width).length * s * 1.1 <= bodyH * 0.66) ?? 40);
-      const SUMMARY = classic ? (wide ? 22 : 18) : 28;
-      const room = Math.floor((bodyH - wrap(data.title, size, width).length * size * 1.1 - 16) / (SUMMARY * 1.3));
-      const summary = classic ? data.summary : clip(data.summary, room, SUMMARY, width);
-      const serif = { fontFamily: "Source Serif" };
-      return (
-        <div style={{ ...sheet, flexDirection: "column", padding: "18px 32px 22px" }}>
-          {paper.masthead(clean ? 0.72 : 1)}
-          {clean ? (
-            <div style={{ height: 2, flexShrink: 0, background: "#000", marginTop: 10 }} />
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", marginTop: 8, gap: 2 }}>
-              <div style={{ height: 1, background: "#000" }} />
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12, fontWeight: 500 }}>
-                <span>{date}</span>
-                <span>{paper.sections.find((s) => s.value === config.section)?.label ?? ""}</span>
-              </div>
-              <div style={{ height: 2, background: "#000" }} />
-              <div style={{ height: 1, background: "#000" }} />
-            </div>
-          )}
-          <div style={{ display: "flex", flex: 1, marginTop: 18, gap: 28 }}>
-            <div style={{ display: "flex", flexDirection: "column", flex: 1, ...serif }}>
-              <div style={{ fontSize: size, fontWeight: 700, lineHeight: classic ? 1.12 : 1.1, letterSpacing: -0.5 }}>{data.title}</div>
-              {summary ? (
-                <div style={{ fontSize: SUMMARY, lineHeight: classic ? 1.4 : 1.3, marginTop: classic ? 14 : 16 }}>{summary}</div>
-              ) : null}
-              {classic && data.byline ? (
-                <div style={{ fontFamily: "Inter", fontSize: 12, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", marginTop: 14 }}>
-                  {`By ${data.byline}`}
-                </div>
-              ) : null}
-            </div>
-            {data.image ? (
-              <div style={{ display: "flex", flexDirection: "column", width: photo }}>
-                <img src={data.image} width={photo} height={photo} />
-                {data.credit ? <div style={{ fontSize: 10, marginTop: 5, alignSelf: "flex-end" }}>{data.credit}</div> : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      );
-    },
+    view: ({ config, data, now }) => (
+      <FrontPage
+        masthead={paper.masthead}
+        label={paper.sections.find((s) => s.value === config.section)?.label ?? ""}
+        style={config.style}
+        story={data}
+        now={now}
+      />
+    ),
   });
+}
+
+/** A lead story set like a printed front page: masthead, date line (with `label` on the right), headline, summary, photo. */
+export function FrontPage({ masthead, label, style, story, now }: { masthead: Paper["masthead"]; label: string; style: Style; story: Story; now: Date }) {
+  const date = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  const classic = style === "classic";
+  const title = style === "title";
+  const clean = style === "clean" || title;
+  const bodyH = BODY_H[style];
+  const photo = PHOTO[style];
+  const n = story.title.length;
+  const image = title ? null : story.image;
+  const wide = !image;
+  // Poster and Clean: the headline as big as fits in about two thirds of the column, then as much of the summary
+  // as fits under it at a size still readable from 2–3 m. Classic: sizes by headline length, all of it.
+  // Title: the headline alone fills the page.
+  const width = 736 - (image ? photo + 28 : 0);
+  const size = classic
+    ? wide ? (n <= 70 ? 50 : n <= 110 ? 42 : 36) : n <= 60 ? 40 : n <= 90 ? 34 : 29
+    : title
+      ? ([104, 96, 88, 80, 72, 64, 58, 52, 48, 44].find((s) => wrap(story.title, s, width).length * s * 1.08 <= bodyH - 18) ?? 40)
+      : ([72, 64, 58, 52, 48, 44, 40].find((s) => wrap(story.title, s, width).length * s * 1.1 <= bodyH * 0.66) ?? 40);
+  const SUMMARY = classic ? (wide ? 22 : 18) : 28;
+  const room = Math.floor((bodyH - wrap(story.title, size, width).length * size * 1.1 - 16) / (SUMMARY * 1.3));
+  const summary = title ? "" : classic ? story.summary : clip(story.summary, room, SUMMARY, width);
+  const serif = { fontFamily: "Source Serif" };
+  return (
+    <div style={{ ...sheet, flexDirection: "column", padding: "18px 32px 22px" }}>
+      {masthead(clean ? 0.72 : 1)}
+      {clean ? (
+        <div style={{ height: 2, flexShrink: 0, background: "#000", marginTop: 10 }} />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", marginTop: 8, gap: 2 }}>
+          <div style={{ height: 1, background: "#000" }} />
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12, fontWeight: 500 }}>
+            <span>{date}</span>
+            <span>{label}</span>
+          </div>
+          <div style={{ height: 2, background: "#000" }} />
+          <div style={{ height: 1, background: "#000" }} />
+        </div>
+      )}
+      <div style={{ display: "flex", flex: 1, marginTop: 18, gap: 28 }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: title ? "center" : "flex-start", ...serif }}>
+          <div style={{ fontSize: size, fontWeight: 700, lineHeight: title ? 1.08 : classic ? 1.12 : 1.1, letterSpacing: title ? -1 : -0.5 }}>
+            {story.title}
+          </div>
+          {summary ? (
+            <div style={{ fontSize: SUMMARY, lineHeight: classic ? 1.4 : 1.3, marginTop: classic ? 14 : 16 }}>{summary}</div>
+          ) : null}
+          {classic && story.byline ? (
+            <div style={{ fontFamily: "Inter", fontSize: 12, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", marginTop: 14 }}>
+              {`By ${story.byline}`}
+            </div>
+          ) : null}
+        </div>
+        {image ? (
+          <div style={{ display: "flex", flexDirection: "column", width: photo }}>
+            <img src={image} width={photo} height={photo} />
+            {story.credit ? <div style={{ fontSize: 10, marginTop: 5, alignSelf: "flex-end" }}>{story.credit}</div> : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 const nyt = (feed: string) => `https://rss.nytimes.com/services/xml/rss/nyt/${feed}.xml`;
