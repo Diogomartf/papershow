@@ -194,7 +194,7 @@ function Reply({ text, layout }: { text: string; layout: Layout }) {
 }
 
 // Clean's box: the whole sheet less a 32 px margin.
-const CLEAN_PAD = 32;
+export const CLEAN_PAD = 32;
 const W = 800 - 2 * CLEAN_PAD;
 const H = 480 - 2 * CLEAN_PAD;
 
@@ -225,7 +225,7 @@ const fill = (text: string, w: number, h: number, lineHeight: number, max: numbe
 };
 
 /** Only the reply, as big as it fits: the word and its meaning, the quote without its author, or the text. */
-function CleanReply({ text, layout }: { text: string; layout: Layout }) {
+export function CleanReply({ text, layout }: { text: string; layout: Layout }) {
   const rows = lines(text);
   if (layout === "lead" && rows.length > 1) {
     const [head, ...rest] = rows;
