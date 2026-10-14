@@ -10,6 +10,8 @@ type Props = {
   joinCode: string | null;
   /** Go in: this device is now signed in as someone who's in. */
   onIn: (h: HelloData) => void;
+  /** Open on this person's PIN (switching profiles). */
+  startAs?: string | null;
 };
 
 type Stage =
@@ -20,11 +22,14 @@ type Stage =
   | { at: "welcome"; h: HelloData; line: string }
   | { at: "not-now" };
 
-export function Hello({ hello, joinCode, onIn }: Props) {
+export function Hello({ hello, joinCode, onIn, startAs }: Props) {
   const [h, setH] = useState(hello);
-  const [stage, setStage] = useState<Stage>(() =>
-    hello.me?.status === "knocking" ? { at: "knocking", name: hello.me.name } : joinCode ? { at: "join", invite: joinCode } : { at: "faces" },
-  );
+  const [stage, setStage] = useState<Stage>(() => {
+    if (hello.me?.status === "knocking") return { at: "knocking", name: hello.me.name };
+    if (joinCode) return { at: "join", invite: joinCode };
+    const who = startAs && hello.people.find((p) => p.id === startAs);
+    return who ? { at: "secret", who } : { at: "faces" };
+  });
 
   useEffect(() => {
     document.title = "Papershow";
@@ -77,16 +82,16 @@ export function Hello({ hello, joinCode, onIn }: Props) {
             <ul className="door-faces">
               {h.people.map((p) => (
                 <li key={p.id}>
-                  <button className="face-tile" style={tint(p.color)} onClick={() => setStage({ at: "secret", who: p })}>
-                    <span className="face-big" aria-hidden>{p.face}</span>
-                    <span className="face-name">{p.name}</span>
+                  <button className="profile" onClick={() => setStage({ at: "secret", who: p })}>
+                    <span className="profile-pic" style={tint(p.color)} aria-hidden>{p.face}</span>
+                    <span className="profile-name">{p.name}</span>
                   </button>
                 </li>
               ))}
               <li>
-                <button className="face-tile new" onClick={() => setStage({ at: "join", invite: null })}>
-                  <span className="face-big" aria-hidden>＋</span>
-                  <span className="face-name">I'm new</span>
+                <button className="profile new" onClick={() => setStage({ at: "join", invite: null })}>
+                  <span className="profile-pic" aria-hidden>＋</span>
+                  <span className="profile-name">I'm new</span>
                 </button>
               </li>
             </ul>

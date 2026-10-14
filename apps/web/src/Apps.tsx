@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Blocks } from "./Blocks";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
+import { MeMenu } from "./MeMenu";
 import { Nav, navigate } from "./Nav";
 import * as appsApi from "./apps";
 import type { AppInstance, AppKind, Field } from "./apps";
@@ -21,8 +22,9 @@ const toForm = (fields: Field[], config: Record<string, unknown>) =>
 
 /** `newKind`: setting up an app that isn't created yet; nothing is saved until "Create app". */
 export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
-  const [catalog, setCatalog] = useState<AppKind[]>([]);
-  const [apps, setApps] = useState<AppInstance[] | null>(null);
+  // Start from what the page already loaded (at boot, or the last visit), then refresh.
+  const [catalog, setCatalog] = useState<AppKind[]>(() => appsApi.cached.catalog ?? []);
+  const [apps, setApps] = useState<AppInstance[] | null>(() => appsApi.cached.apps);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   // Rendering can take a few seconds (prices, names, logos fetched first): say so, and say if it failed.
@@ -60,6 +62,8 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
   const kindId = current?.kind ?? newKind;
   const kind = useMemo(() => catalog.find((k) => k.kind === kindId), [catalog, kindId]);
   const isNew = !current && !!newKind && !!kind;
+  // Until the live render comes back, the saved app's current frame: the browser has it from the list already.
+  const shown = preview ?? (current && view === "eink" ? appsApi.appFrameUrl(current) : null);
 
   // Load the selected app into the form.
   const lastSaved = useRef("");
@@ -174,6 +178,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
         <div className="bar-right">
           <LightSwitch />
           <LiveLink />
+          <MeMenu />
         </div>
       </header>
 
@@ -231,15 +236,16 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
         <section className="app-stage">
           <div className="device small">
             <div className="panel">
-              {preview && (current || isNew) ? (
-                <img className="live-img" data-view={view} key={preview} src={preview} alt="" />
+              {shown && (current || isNew) ? (
+                <img className="live-img" data-view={view} data-quiet={saved && !isNew} key={shown} src={shown} alt="" />
               ) : (
                 <p className="panel-empty">{apps?.length === 0 ? "Pick an app on the left to set it up." : ""}</p>
               )}
-              {(current || isNew) && loading && (
-                <div className="panel-loading" data-over={!!preview} role="status">
-                  <Blocks size={preview ? 5 : 18} />
-                  <span>{preview ? "Updating…" : `Loading ${kind?.name ?? "app"}…`}</span>
+              {/* Nothing to say while it only re-renders what the saved frame already shows. */}
+              {(current || isNew) && loading && (!shown || !saved) && (
+                <div className="panel-loading" data-over={!!shown} role="status">
+                  <Blocks size={shown ? 5 : 18} />
+                  <span>{shown ? "Updating…" : `Loading ${kind?.name ?? "app"}…`}</span>
                 </div>
               )}
               {(current || isNew) && failed && !loading && (

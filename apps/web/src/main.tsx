@@ -3,12 +3,13 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
 import { Apps } from "./Apps.tsx";
+import { booting, loadEverything } from "./boot.ts";
 import { Dashboard } from "./Dashboard.tsx";
 import { Hello } from "./Hello.tsx";
 import { Log } from "./Log.tsx";
 import { navigate } from "./Nav.tsx";
 import { People } from "./People.tsx";
-import { hello as getHello, Me, SIGNED_OUT, type Hello as HelloData } from "./house";
+import { hello as getHello, Me, SIGNED_OUT, signOut, type Hello as HelloData } from "./house";
 import { Playlist } from "./Playlist.tsx";
 import { Show } from "./Show.tsx";
 import { Viewer } from "./Viewer.tsx";
@@ -49,18 +50,44 @@ function Gate() {
   }, []);
 
   useEffect(() => {
-    refresh();
+    booting.then(setHello, refresh);
     addEventListener(SIGNED_OUT, refresh);
     return () => removeEventListener(SIGNED_OUT, refresh);
   }, [refresh]);
 
+  /** Switching profiles: the front door opens on this person's PIN. */
+  const [startAs, setStartAs] = useState<string | null>(null);
+  const switchTo = useCallback(
+    async (id: string) => {
+      await signOut().catch(() => {});
+      setStartAs(id);
+      navigate("/");
+      refresh();
+    },
+    [refresh],
+  );
+
+  /** Just signed in: fetch the house before showing it, so it appears whole. */
+  const enter = useCallback(async (h: HelloData) => {
+    await loadEverything().catch(() => {});
+    setHello(h);
+  }, []);
+
   if (!hello) return null;
   if (hello.me?.status !== "in") {
     const join = location.pathname.match(/^\/join\/([A-Za-z0-9]+)/);
-    return <Hello key={hello.me?.id ?? "nobody"} hello={hello} joinCode={join?.[1].toUpperCase() ?? null} onIn={setHello} />;
+    return (
+      <Hello
+        key={`${hello.me?.id ?? "nobody"}:${startAs}`}
+        hello={hello}
+        joinCode={join?.[1].toUpperCase() ?? null}
+        startAs={startAs}
+        onIn={(h) => (setStartAs(null), enter(h))}
+      />
+    );
   }
   return (
-    <Me.Provider value={{ me: hello.me, hello, refresh }}>
+    <Me.Provider value={{ me: hello.me, hello, refresh, switchTo }}>
       <Router />
     </Me.Provider>
   );

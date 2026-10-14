@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { EinkImage } from "./EinkImage";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
+import { MeMenu } from "./MeMenu";
 import { Nav, navigate } from "./Nav";
 import { useLiveState, useNow } from "./live";
 import { NightSettings } from "./NightSettings";
@@ -78,6 +79,7 @@ export function Dashboard() {
         <div className="bar-right">
           <LightSwitch />
           <LiveLink />
+          <MeMenu />
         </div>
       </header>
 

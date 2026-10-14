@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Keypad } from "./Hello";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
+import { MeMenu } from "./MeMenu";
 import { useLiveState, useNow } from "./live";
 import { Nav, navigate } from "./Nav";
 import * as house from "./house";
@@ -53,6 +54,7 @@ export function People() {
         <div className="bar-right">
           <LightSwitch />
           <LiveLink />
+          <MeMenu />
         </div>
       </header>
 

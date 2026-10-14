@@ -784,6 +784,12 @@ if (process.env.NODE_ENV === "production") {
 const port = Number(process.env.PORT ?? 5194);
 serve({ fetch: app.fetch, port }, () => console.log(`server on http://localhost:${port}`));
 
+// Render every app once, one after another, so the first pages opened after a start or an update show
+// their frames at once instead of waiting on prices, headlines and photos.
+(async () => {
+  for (const row of store.listApps()) if (APPS[row.kind]) await appFrame(row, Date.now()).catch(() => {});
+})();
+
 // On the Pi, also on port 80, so http://paper.local needs no port. Optional: if it's taken, the
 // main port still serves everything.
 if (process.env.WEB_PORT) {

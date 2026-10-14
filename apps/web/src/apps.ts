@@ -45,8 +45,11 @@ async function api<T>(path: string, method = "GET", body?: unknown): Promise<T> 
   return (res.status === 204 ? undefined : await res.json()) as T;
 }
 
-export const getCatalog = () => api<AppKind[]>("/api/apps/catalog");
-export const listApps = () => api<AppInstance[]>("/api/apps");
+/** The last catalog and app list fetched, so a page can start from them instead of from empty. */
+export const cached: { catalog: AppKind[] | null; apps: AppInstance[] | null } = { catalog: null, apps: null };
+
+export const getCatalog = () => api<AppKind[]>("/api/apps/catalog").then((c) => (cached.catalog = c));
+export const listApps = () => api<AppInstance[]>("/api/apps").then((a) => (cached.apps = a));
 export const createApp = (kind: string, init?: { name?: string; config?: Record<string, unknown> }) =>
   api<AppInstance>("/api/apps", "POST", { kind, ...init });
 export const updateApp = (id: string, patch: { name?: string; config?: Record<string, unknown> }) =>

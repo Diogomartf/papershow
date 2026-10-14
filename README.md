@@ -310,16 +310,18 @@ Anything that edits the show, images, apps or the pin wakes the long-polls, so t
 
 ### People
 
-Papershow is the house's panel, so everyone in the house can use it. Signing in is made for kids and thumbs: tap your face on **Who's there?**, then tap your 4-digit PIN on a big phone-style number pad (a keyboard works too). The device stays signed in for a year. Each address (`paper.local`, the Tailscale one) keeps its own sign-in.
+Papershow is the house's panel, so everyone in the house can use it. Signing in is made for kids and thumbs: tap your face on **Who's there?** (profiles the way Netflix shows them), then tap your 4-digit PIN on a big phone-style number pad (a keyboard works too). The device stays signed in for a year. Each address (`paper.local`, the Tailscale one) keeps its own sign-in.
 
 - **The first person** to open Papershow sets up the house and becomes its admin.
-- **Someone new** taps **I'm new**, picks a name, a face, a colour and a PIN, and knocks. Admins get a **Let in / Not now** card on the Dashboard and a badge on their face in the nav; the knocking screen opens by itself when they're let in.
+- **Someone new** taps **I'm new**, picks a name, a face, a colour and a PIN, and knocks. Admins get a **Let in / Not now** card on the Dashboard and a badge on their face in the corner; the knocking screen opens by itself when they're let in.
 - **Invite**: on the People page an admin makes an invite, a QR code and a six-letter code that work for 10 minutes. Scanning it (or typing the code under **I'm new**) skips the knock. **Show it on the panel** puts the invite on the e-ink until someone joins or it runs out; it beats the night, but not Off.
 - **The library is shared.** Everyone sees and can use every drawing, app and playlist (Show now, add to the show, duplicate), each with its maker's face. Only the maker or an admin changes or deletes one. Saving someone else's drawing in Draw saves your own copy.
 - **The show** is everyone's to edit. Night hours and Off are admins' only.
 - **Admins** can make others admins, and remove people: they're signed out everywhere, and the things they made stay. There's always at least one admin.
 - **The log** records who did what, for 90 days: drawings, apps, playlists, the show, Show now, night and Off, and people coming in. Edits in a row to the same thing count once.
 - Wrong PINs: five tries, then a minute's wait, doubling after each further miss, so 10,000 PINs can't be tried one by one.
+
+Pages paint once, complete: who's signed in, the house's state and the library are fetched together as the page starts, so nothing jumps into place. App frames are rendered once when the server starts, so the first pages after an update don't wait on them.
 
 `/live` needs no one signed in, so the panel works as before. Everything under `/api` does, except `/api/hello…`, the sign-in screen's own calls.
 
@@ -329,7 +331,7 @@ SQLite at `apps/server/data/imagegen.db` (set `DB=/path` to move it). Tables: `i
 
 ## Sections
 
-The nav runs Dashboard, Show, Apps, Draw, then your face, which opens People. Every page has the light switch (the page dims after sunset on its own; the switch holds until the next sunrise or sunset) and a live thumbnail of the panel, linking to `/live`.
+The nav runs Dashboard, Show, Apps, Draw. Your face sits in the top-right corner: its menu switches to someone else in the house (straight to their PIN, for a tablet that changes hands), opens The house and the Log, and signs out. Every page has the light switch (the page dims after sunset on its own; the switch holds until the next sunrise or sunset) and a live thumbnail of the panel, linking to `/live`.
 
 ### Dashboard (`/`)
 

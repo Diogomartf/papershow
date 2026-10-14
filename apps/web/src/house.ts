@@ -83,7 +83,13 @@ export const getLog = (opts: { before?: number; person?: string; limit?: number 
 
 // ── Who's signed in, for any page ──────────────────────────────────────────
 
-export type MeContext = { me: Person; hello: Hello; refresh: () => void };
+export type MeContext = {
+  me: Person;
+  hello: Hello;
+  refresh: () => void;
+  /** Sign out and go straight to someone else's PIN, as on a shared tablet. */
+  switchTo: (id: string) => void;
+};
 export const Me = createContext<MeContext | null>(null);
 
 export function useMe() {

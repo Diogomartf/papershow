@@ -11,6 +11,7 @@ import { setLive } from "./slides";
 import { Nav } from "./Nav";
 import { useNarrow } from "./media";
 import { LightSwitch } from "./LightSwitch";
+import { MeMenu } from "./MeMenu";
 import { TextLayer } from "./TextLayer";
 import { shortId } from "./id";
 
@@ -207,6 +208,7 @@ export default function App() {
             {saving ? "Saving…" : "Save"}
             <kbd>⌘S</kbd>
           </button>
+          <MeMenu />
         </div>
       </header>
 

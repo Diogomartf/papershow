@@ -3,6 +3,7 @@ import { Nav } from "./Nav";
 import { EinkImage } from "./EinkImage";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
+import { MeMenu } from "./MeMenu";
 import { useSideScroll } from "./scroll";
 import { keyOf, parseKey, useItems, type Item, type Source } from "./sources";
 import * as api from "./slides";
@@ -280,6 +281,7 @@ export function Playlist({ id }: { id: string | null }) {
         <div className="bar-right">
           <LightSwitch />
           <LiveLink />
+          <MeMenu />
         </div>
       </header>
 

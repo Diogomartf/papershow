@@ -1219,6 +1219,8 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .view-switch button { padding: 4px 12px; font-size: 13px; }
 /* The original is a full-resolution colour render: smooth, not pixel-doubled. */
 .live-img[data-view="original"] { image-rendering: auto; }
+/* The refresh blink is for a change you just made: opening an app, or a clock ticking over, swaps quietly. */
+.live-img[data-quiet="true"] { animation: none; filter: var(--dim); }
 .app-stage .device.small .panel { width: min(680px, calc(100vw - 660px), calc((100dvh - 230px) * 5 / 3)); }
 .shelf.thin { height: 64px; }
 .shelf.thin::after { height: 0; border: 0; }
@@ -1530,26 +1532,33 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
 .door-input.code { width: 190px; letter-spacing: .25em; font-family: var(--mono); }
 
 .wave { display: inline-block; transform-origin: 70% 80%; }
+/* Who's there? Profiles the Netflix way: square pictures, the name underneath, and an outline on the one you're on. */
 .door-faces {
-  list-style: none; margin: 18px 0 0; padding: 0;
-  display: grid; gap: 16px; justify-content: center;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 168px));
-  width: min(100%, 760px);
+  list-style: none; margin: 26px 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 28px 26px;
+  width: min(100%, 860px);
 }
-.face-tile {
-  width: 100%; aspect-ratio: 1;
-  display: grid; place-items: center; align-content: center; gap: 8px;
-  border: 0; border-radius: 30px;
-  background: var(--tile, var(--surface)); color: var(--face-ink);
-  cursor: pointer;
-  box-shadow: inset 0 -4px 0 rgba(0,0,0,.08), 0 12px 26px -14px var(--drop);
-  transition: transform 180ms var(--ease-out);
+.profile {
+  width: 148px;
+  display: grid; justify-items: center; gap: 12px;
+  border: 0; padding: 0; background: none; cursor: pointer;
+  color: var(--ink-3);
 }
-.face-tile:active { transform: scale(0.95); }
-.face-tile.new { background: transparent; color: var(--ink-2); box-shadow: inset 0 0 0 3px var(--line); }
-.face-big { font-size: 66px; line-height: 1; }
-.face-tile.new .face-big { font-size: 54px; font-weight: 300; }
-.face-name { font-size: 20px; font-weight: 680; max-width: 90%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-pic {
+  width: 148px; aspect-ratio: 1;
+  display: grid; place-items: center;
+  border-radius: 14%;
+  background: var(--tile, var(--surface));
+  font-size: 76px; line-height: 1;
+  box-shadow: 0 0 0 0 var(--ink);
+  transition: box-shadow 160ms var(--ease-out), transform 160ms var(--ease-out);
+}
+.profile-name { font-size: 19px; font-weight: 560; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: color 160ms; }
+.profile:is(:hover, :focus-visible) { outline: none; color: var(--ink); }
+.profile:is(:hover, :focus-visible) .profile-pic { box-shadow: 0 0 0 4px var(--ink); }
+.profile:active .profile-pic { transform: scale(0.96); }
+.profile.new .profile-pic { background: transparent; box-shadow: inset 0 0 0 3px var(--line); color: var(--ink-3); font-size: 60px; font-weight: 300; }
+.profile.new:is(:hover, :focus-visible) .profile-pic { box-shadow: inset 0 0 0 3px var(--line), 0 0 0 4px var(--ink); color: var(--ink); }
 
 .face-badge {
   position: relative;
@@ -1645,22 +1654,52 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
 }
 
 @media (max-width: 520px) {
-  .door-faces { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-  .face-big { font-size: 56px; }
+  .door-faces { gap: 22px 18px; }
+  .profile, .profile-pic { width: 128px; }
+  .profile-pic { font-size: 64px; }
   .face-grid { grid-template-columns: repeat(6, 1fr); }
   .keypad { gap: 12px 20px; }
 }
 
-/* Your face in the nav: the way to the house. */
-.nav a.me-chip {
+/* Your face in the top-right corner, and its menu */
+.me-menu { position: relative; flex: none; }
+.me-chip {
   position: relative;
-  width: 34px; height: 34px; margin-left: 8px; padding: 0;
-  display: inline-grid; place-items: center;
-  border-radius: 50%;
-  background: var(--tile);
-  font-size: 19px; line-height: 1;
+  width: 36px; height: 36px; padding: 0;
+  display: grid; place-items: center;
+  border: 0; border-radius: 22%;
+  background: var(--tile); font-size: 20px; line-height: 1; cursor: pointer;
+  transition: box-shadow 140ms var(--ease-out);
 }
-.nav a.me-chip[aria-current="page"] { background: var(--tile); box-shadow: 0 0 0 2px var(--wall), 0 0 0 4px var(--ink); }
+.me-chip:hover, .me-chip[aria-expanded="true"] { box-shadow: 0 0 0 2px var(--wall), 0 0 0 4px var(--ink); }
+.me-pop {
+  position: absolute; top: calc(100% + 10px); right: 0; z-index: 45;
+  width: 240px; padding: 8px;
+  display: grid; gap: 2px;
+  border-radius: 16px; background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line), 0 18px 40px -16px rgba(0,0,0,.35);
+  transform-origin: top right;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .me-pop { animation: menuIn 160ms var(--ease-out); }
+}
+@keyframes menuIn { from { opacity: 0; transform: scale(0.96) translateY(-4px); } }
+.me-head { display: flex; align-items: center; gap: 10px; padding: 8px 8px 10px; }
+.me-head .face-badge.small { width: 44px; height: 44px; font-size: 24px; border-radius: 22%; }
+.me-head span:last-child { display: grid; gap: 2px; min-width: 0; }
+.me-head strong { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me-head small { color: var(--ink-3); font-size: 12px; }
+.me-label { padding: 6px 8px 2px; font: 600 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.me-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; min-height: 38px; padding: 6px 8px;
+  border: 0; border-radius: 10px; background: none;
+  color: var(--ink-2); font-size: 14px; font-weight: 520; text-align: left; cursor: pointer;
+}
+.me-item:hover, .me-item:focus-visible { outline: none; background: var(--tint); color: var(--ink); }
+.me-item .face-mini { border-radius: 22%; }
+.knock-item { background: var(--danger-tint); color: var(--ink); }
+.me-pop hr { border: 0; border-top: 1px solid var(--line); margin: 6px 4px; }
 .knock-badge {
   position: absolute; top: -5px; right: -7px;
   min-width: 18px; height: 18px; padding: 0 5px;
@@ -1772,7 +1811,6 @@ button.link.danger { color: var(--danger); }
 
 @media (max-width: 720px) {
   .people-page .people-main { padding: 4px 16px 56px; overflow: visible; }
-  .nav a.me-chip { margin-left: 4px; }
 }
 
 /* Someone else's app: who made it, and settings you can look at but not change */

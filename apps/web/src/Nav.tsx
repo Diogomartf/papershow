@@ -1,6 +1,4 @@
-import type { CSSProperties, MouseEvent } from "react";
-import { useLiveState } from "./live";
-import { useMe } from "./house";
+import type { MouseEvent } from "react";
 
 /** Client-side navigation: swap the route without a reload. */
 export function navigate(to: string) {
@@ -24,11 +22,6 @@ const SECTIONS = [
 export type Section = (typeof SECTIONS)[number]["id"] | "people" | "log";
 
 export function Nav({ current }: { current: Section }) {
-  const { me } = useMe();
-  const { state } = useLiveState();
-  // Admins see a badge while someone's at the door.
-  const knocking = me.role === "admin" ? (state?.people.filter((p) => p.status === "knocking").length ?? 0) : 0;
-  const face = state?.me ?? me;
   return (
     <nav className="nav">
       <img className="mark" src="/icon-nav.png" alt="" />
@@ -38,18 +31,6 @@ export function Nav({ current }: { current: Section }) {
           {s.label}
         </a>
       ))}
-      <a
-        className="me-chip"
-        href="/people"
-        aria-current={current === "people" ? "page" : undefined}
-        onClick={go("/people")}
-        style={{ ["--tile" as string]: face.color } as CSSProperties}
-        aria-label={knocking ? `${face.name}: ${knocking} knocking` : `${face.name} and the house`}
-        title={face.name}
-      >
-        <span aria-hidden>{face.face}</span>
-        {knocking > 0 && <span className="knock-badge">{knocking}</span>}
-      </a>
     </nav>
   );
 }

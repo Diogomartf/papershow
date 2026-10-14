@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
+import { MeMenu } from "./MeMenu";
 import { useLiveState, useNow } from "./live";
 import { Nav } from "./Nav";
 import { getLog, tint, type LogEntry } from "./house";
@@ -47,6 +48,7 @@ export function Log() {
         <div className="bar-right">
           <LightSwitch />
           <LiveLink />
+          <MeMenu />
         </div>
       </header>
       <main className="people-main">

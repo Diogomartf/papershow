@@ -6,6 +6,9 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
     <title>Papershow</title>
+    <!-- The bar's marks, fetched with the page so the first paint already has them. -->
+    <link rel="preload" href="/wordmark.svg" as="image" type="image/svg+xml" />
+    <link rel="preload" href="/icon-nav.png" as="image" />
     <!-- Lights follow the sun; set before first paint so a dark room never flashes bright. -->
     <script src="/lights.js"></script>
   </head>
