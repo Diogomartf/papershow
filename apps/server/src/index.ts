@@ -263,7 +263,7 @@ type Joining = Partial<people.Profile> & { secret?: unknown };
 function joining(body: Joining): { profile: people.Profile; secret: string[] } | string {
   const profile = people.checkProfile(body);
   if (typeof profile === "string") return profile;
-  if (!people.isSecret(body.secret)) return `Pick ${people.SECRET_LENGTH} emoji for your secret`;
+  if (!people.isSecret(body.secret)) return `Pick a ${people.SECRET_LENGTH}-digit PIN`;
   return { profile, secret: body.secret };
 }
 
@@ -337,7 +337,7 @@ app.patch("/api/me", async (c) => {
   const body = await c.req.json<Partial<people.Profile> & { secret?: unknown }>();
   const profile = people.checkProfile({ name: me.name, face: me.face, color: me.color, ...body }, me.id);
   if (typeof profile === "string") return c.json({ error: profile }, 400);
-  if (body.secret !== undefined && !people.isSecret(body.secret)) return c.json({ error: `Pick ${people.SECRET_LENGTH} emoji` }, 400);
+  if (body.secret !== undefined && !people.isSecret(body.secret)) return c.json({ error: `Pick a ${people.SECRET_LENGTH}-digit PIN` }, 400);
   people.updatePerson(me.id, { ...profile, secret: body.secret as string[] | undefined });
   if (profile.name !== me.name || profile.face !== me.face || profile.color !== me.color) note(c, "new-look", { was: namedPerson(me) });
   changed();

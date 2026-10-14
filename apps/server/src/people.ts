@@ -1,13 +1,13 @@
 // The people in the house: who they are, how they get in, and what they've done.
 //
 // Papershow runs on the home Wi-Fi (and a tailnet), so signing in is meant to be easy enough for a
-// kid: tap your face, then tap a secret of four emoji. That keeps a guest on the Wi-Fi from acting
+// kid: tap your face, then tap a four-digit PIN. That keeps a guest on the Wi-Fi from acting
 // as someone else, without passwords. The panel itself (/live) needs no one.
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { db } from "./db.ts";
 
-/** The secret keypad. A secret is four of these in order: 16 keys, so 65,536 secrets. */
-export const KEYS = ["🐸", "🍕", "🌙", "⭐", "🎈", "🐙", "🍩", "🚀", "🌈", "🎸", "🦄", "🍓", "🐝", "🌵", "🎲", "🍉"];
+/** The PIN pad, in the order a phone shows it. A secret is four of these: 10,000 PINs, guarded by the lockout below. */
+export const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
 export const SECRET_LENGTH = 4;
 
 /** Faces to pick from when you join. */
@@ -182,7 +182,7 @@ export const deletePerson = (id: string) => db.prepare("delete from people where
 export const otherAdmins = (id: string) =>
   listPeople().filter((p) => p.id !== id && p.role === "admin" && p.status === "in").length;
 
-// Wrong secrets lock that person for a while, longer each time, so four emoji can't be guessed
+// Wrong PINs lock that person for a while, longer each time, so four digits can't be guessed
 // by trying them all. Kept in memory: a restart forgives, which is fine at home.
 const misses = new Map<string, { n: number; until: number }>();
 const FREE_TRIES = 5;

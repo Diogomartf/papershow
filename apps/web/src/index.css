@@ -1568,28 +1568,29 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
   font-size: 15px; line-height: 1; vertical-align: middle;
 }
 
-/* The secret: four slots and a 4×4 keypad of big emoji. */
-.keypad-wrap { display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%; }
-.secret-dots { display: flex; gap: 12px; }
+/* The PIN: four dots and a phone-style pad of big round keys. */
+.keypad-wrap { display: flex; flex-direction: column; align-items: center; gap: 22px; width: 100%; }
+.secret-dots { display: flex; gap: 18px; }
 .secret-dot {
-  width: 58px; height: 58px;
-  display: grid; place-items: center;
-  border-radius: 18px;
-  box-shadow: inset 0 0 0 3px var(--line);
-  font-size: 32px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 3px var(--ink-3);
 }
-.secret-dot[data-on="true"] { background: var(--surface); box-shadow: inset 0 0 0 3px var(--ink-2); }
-.keypad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: min(100%, 360px); }
+.secret-dot[data-on="true"] { background: var(--ink); box-shadow: none; }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 22px; width: min(100%, 300px); }
 .key {
   aspect-ratio: 1;
-  border: 0; border-radius: 22px;
-  background: var(--surface);
-  font-size: 40px; line-height: 1; cursor: pointer;
+  border: 0; border-radius: 50%;
+  background: var(--surface); color: var(--ink);
+  font-size: 34px; font-weight: 560; line-height: 1; font-variant-numeric: tabular-nums;
+  cursor: pointer;
   box-shadow: inset 0 -4px 0 var(--line), 0 0 0 1px var(--line);
-  transition: transform 120ms var(--ease-out);
+  transition: transform 120ms var(--ease-out), background-color 120ms;
   touch-action: manipulation;
 }
-.key:active { transform: scale(0.9); }
+.key:active { transform: scale(0.9); background: var(--tint); }
+.key.undo { background: transparent; box-shadow: none; font-size: 28px; color: var(--ink-2); }
+.key.undo:disabled { opacity: .25; cursor: default; }
 .keypad[data-disabled="true"] { opacity: .4; }
 
 .face-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; width: min(100%, 500px); }
@@ -1647,8 +1648,7 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
   .door-faces { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .face-big { font-size: 56px; }
   .face-grid { grid-template-columns: repeat(6, 1fr); }
-  .secret-dot { width: 52px; height: 52px; font-size: 28px; }
-  .key { font-size: 34px; border-radius: 18px; }
+  .keypad { gap: 12px 20px; }
 }
 
 /* Your face in the nav: the way to the house. */

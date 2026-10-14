@@ -221,7 +221,7 @@ function SignIn({ who, keys, onIn }: { who: Face; keys: string[]; onIn: (h: Hell
   return (
     <div className="door-center">
       <div className="face-badge" style={tint(who.color)} aria-hidden>{who.face}</div>
-      <h1 className="door-title">Hi {who.name}! What's your secret?</h1>
+      <h1 className="door-title">Hi {who.name}! What's your PIN?</h1>
       <Keypad
         key={wrong}
         keys={keys}
@@ -246,7 +246,7 @@ function SignIn({ who, keys, onIn }: { who: Face; keys: string[]; onIn: (h: Hell
   );
 }
 
-/** Four emoji, tapped in order. Give it a new `key` to start over; a `wrong` count above 0 wiggles the dots as it appears. */
+/** A 4-digit PIN, tapped (or typed) in order. Give it a new `key` to start over; a `wrong` count above 0 wiggles the dots as it appears. */
 export function Keypad({
   keys,
   wrong = 0,
@@ -273,29 +273,49 @@ export function Keypad({
     if (disabled || picked.length >= 4) return;
     const next = [...picked, k];
     setPicked(next);
-    // A beat to see the last emoji land before it's checked.
+    // A beat to see the last dot fill before it's checked.
     if (next.length === 4) setTimeout(() => onDone(next), 180);
   };
+  const undo = () => setPicked((p) => p.slice(0, -1));
 
+  // On a computer, the number keys work too.
+  const keyboard = useRef({ tap, undo });
+  useEffect(() => {
+    keyboard.current = { tap, undo };
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement).tagName === "INPUT") return;
+      if (keys.includes(e.key)) keyboard.current.tap(e.key);
+      else if (e.key === "Backspace") keyboard.current.undo();
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [keys]);
+
+  // Phone order: 1–9 in three rows, then 0 in the middle of the last one.
+  const zero = keys[keys.length - 1];
   return (
     <div className="keypad-wrap">
-      <div className="secret-dots" ref={dots} aria-label={`${picked.length} of 4`}>
+      <div className="secret-dots" ref={dots} role="status" aria-label={`${picked.length} of 4 digits`}>
         {[0, 1, 2, 3].map((i) => (
-          <span key={i} className="secret-dot" data-on={i < picked.length}>
-            {picked[i] ?? ""}
-          </span>
+          <span key={i} className="secret-dot" data-on={i < picked.length} />
         ))}
       </div>
       <div className="keypad" data-disabled={disabled}>
-        {keys.map((k) => (
+        {keys.slice(0, -1).map((k) => (
           <button key={k} className="key" onClick={() => tap(k)} disabled={disabled}>
             {k}
           </button>
         ))}
+        <span aria-hidden />
+        <button className="key" onClick={() => tap(zero)} disabled={disabled}>
+          {zero}
+        </button>
+        <button className="key undo" onClick={undo} disabled={!picked.length || disabled} aria-label="Undo">
+          ⌫
+        </button>
       </div>
-      <button className="door-link" onClick={() => setPicked((p) => p.slice(0, -1))} disabled={!picked.length || disabled}>
-        ⌫ Undo
-      </button>
     </div>
   );
 }
@@ -341,7 +361,7 @@ function Join({
   const finish = async (again: string[]) => {
     if (again.join("") !== secret.join("")) {
       setWrong((n) => n + 1);
-      setError("Those don't match. Make your secret again?");
+      setError("Those don't match. Make your PIN again?");
       setSecret([]);
       setStep("secret");
       return;
@@ -447,8 +467,8 @@ function Join({
       {step === "secret" && (
         <div className="door-step">
           {me}
-          <h1 className="door-title">Make a secret</h1>
-          <p className="door-intro">Tap 4 emoji you'll remember. You'll tap them to come back in.</p>
+          <h1 className="door-title">Make a PIN</h1>
+          <p className="door-intro">Pick 4 numbers you'll remember. You'll tap them to come back in.</p>
           <Keypad
             key={`make-${wrong}`}
             wrong={wrong}

@@ -166,7 +166,7 @@ ssh <user>@<hostname>.local 'sudo systemctl stop papershow &&
 
 ### 7. In the browser: set up the house and the show
 
-Open Papershow. You're the first one there, so it asks your name, a face and a secret of four emoji: you become the house's admin, and every drawing, app and playlist already on the Pi becomes yours. Then let others in (see [People](#people)). On the Dashboard, under **Device**, set the night hours (for example 01:00–10:00) and what the panel shows while asleep; the panel deep-cleans itself as night begins. Then add apps and drawings to the show.
+Open Papershow. You're the first one there, so it asks your name, a face and a 4-digit PIN: you become the house's admin, and every drawing, app and playlist already on the Pi becomes yours. Then let others in (see [People](#people)). On the Dashboard, under **Device**, set the night hours (for example 01:00–10:00) and what the panel shows while asleep; the panel deep-cleans itself as night begins. Then add apps and drawings to the show.
 
 ### What the install changes on your Pi
 
@@ -310,22 +310,22 @@ Anything that edits the show, images, apps or the pin wakes the long-polls, so t
 
 ### People
 
-Papershow is the house's panel, so everyone in the house can use it. Signing in is made for kids and thumbs: tap your face on **Who's there?**, then tap your secret, four emoji from a keypad of 16. The device stays signed in for a year. Each address (`paper.local`, the Tailscale one) keeps its own sign-in.
+Papershow is the house's panel, so everyone in the house can use it. Signing in is made for kids and thumbs: tap your face on **Who's there?**, then tap your 4-digit PIN on a big phone-style number pad (a keyboard works too). The device stays signed in for a year. Each address (`paper.local`, the Tailscale one) keeps its own sign-in.
 
 - **The first person** to open Papershow sets up the house and becomes its admin.
-- **Someone new** taps **I'm new**, picks a name, a face, a colour and a secret, and knocks. Admins get a **Let in / Not now** card on the Dashboard and a badge on their face in the nav; the knocking screen opens by itself when they're let in.
+- **Someone new** taps **I'm new**, picks a name, a face, a colour and a PIN, and knocks. Admins get a **Let in / Not now** card on the Dashboard and a badge on their face in the nav; the knocking screen opens by itself when they're let in.
 - **Invite**: on the People page an admin makes an invite, a QR code and a six-letter code that work for 10 minutes. Scanning it (or typing the code under **I'm new**) skips the knock. **Show it on the panel** puts the invite on the e-ink until someone joins or it runs out; it beats the night, but not Off.
 - **The library is shared.** Everyone sees and can use every drawing, app and playlist (Show now, add to the show, duplicate), each with its maker's face. Only the maker or an admin changes or deletes one. Saving someone else's drawing in Draw saves your own copy.
 - **The show** is everyone's to edit. Night hours and Off are admins' only.
 - **Admins** can make others admins, and remove people: they're signed out everywhere, and the things they made stay. There's always at least one admin.
 - **The log** records who did what, for 90 days: drawings, apps, playlists, the show, Show now, night and Off, and people coming in. Edits in a row to the same thing count once.
-- Wrong secrets: five tries, then a minute's wait, doubling after each further miss.
+- Wrong PINs: five tries, then a minute's wait, doubling after each further miss, so 10,000 PINs can't be tried one by one.
 
 `/live` needs no one signed in, so the panel works as before. Everything under `/api` does, except `/api/hello…`, the sign-in screen's own calls.
 
 ### Storage
 
-SQLite at `apps/server/data/imagegen.db` (set `DB=/path` to move it). Tables: `images` (scene JSON plus the three rendered files), `apps` (kind, name, settings JSON), `playlists`, `slides` (playlist clips), `show` (entries, durations, repeats, times), `settings` (pin and night), `people` (name, face, colour, hashed secret, role, status), `sessions` (one per signed-in device, token hashed), `invites`, `log`. Images, apps and playlists have a `made_by`. The draft you're drawing stays in the browser's IndexedDB until you save.
+SQLite at `apps/server/data/imagegen.db` (set `DB=/path` to move it). Tables: `images` (scene JSON plus the three rendered files), `apps` (kind, name, settings JSON), `playlists`, `slides` (playlist clips), `show` (entries, durations, repeats, times), `settings` (pin and night), `people` (name, face, colour, hashed PIN, role, status), `sessions` (one per signed-in device, token hashed), `invites`, `log`. Images, apps and playlists have a `made_by`. The draft you're drawing stays in the browser's IndexedDB until you save.
 
 ## Sections
 
@@ -386,7 +386,7 @@ A drawing board the size of the panel. Pens, eraser, undo and swatches come from
 
 ### People (`/people`)
 
-Who's knocking (for admins, with **Let in** and **Not now**), you (**New look**, **New secret**, **Sign out**), everyone else with a green dot if they're around now, and what's happened lately. Admins also get **Invite someone** and, per person, **Make admin** and **Remove**; removed people are listed with **Let back in**. Signing in, knocking and joining (`/join/<code>`) happen on the front door before any of this.
+Who's knocking (for admins, with **Let in** and **Not now**), you (**New look**, **New PIN**, **Sign out**), everyone else with a green dot if they're around now, and what's happened lately. Admins also get **Invite someone** and, per person, **Make admin** and **Remove**; removed people are listed with **Let back in**. Signing in, knocking and joining (`/join/<code>`) happen on the front door before any of this.
 
 ### Log (`/log`)
 
@@ -434,11 +434,11 @@ Long-poll: send `?wait=1` with `If-None-Match: <etag>`. The server holds the req
 
 | Method and path | What it does |
 |---|---|
-| `GET /api/hello` | The sign-in screen: whether the house is set up, who's in (faces), the keypad, the faces and colours to pick from, and who this device is signed in as. `?wait=1` long-polls (the knocking screen). |
+| `GET /api/hello` | The sign-in screen: whether the house is set up, who's in (faces), the PIN pad's keys, the faces and colours to pick from, and who this device is signed in as. `?wait=1` long-polls (the knocking screen). |
 | `POST /api/hello/setup`, `POST /api/hello/knock` | Set up the house as its first admin, or knock (`{ name, face, color, secret, invite? }`; a working `invite` lets you straight in). Both sign this device in. |
 | `POST /api/hello/in`, `POST /api/hello/out` | Sign in (`{ id, secret }`; a miss answers `401` with `triesLeft` and `lockedUntil`) or out. |
 | `GET /api/hello/invite/:code` | Whether an invite still works, and who sent it. |
-| `PATCH /api/me` | Your name, face, colour or secret. |
+| `PATCH /api/me` | Your name, face, colour or PIN (`secret`, four digits as strings). |
 | `PATCH /api/people/:id`, `DELETE /api/people/:id` | Admins: let in or remove (`{ status: "in" \| "out" }`), make admin or not (`{ role }`); delete is Not now, for someone knocking. |
 | `POST /api/invites`, `DELETE /api/invites/:code/panel`, `GET /api/invites/:code/qr.svg` | Admins: a 10-minute invite (`{ origin, panel }`), taking it off the panel, its QR code. |
 | `GET /api/log?before=&person=&limit=` | The log, newest first. |

@@ -95,7 +95,7 @@ export function People() {
                 New look
               </button>
               <button className="ghost" onClick={() => setEditing(editing === "secret" ? null : "secret")} aria-expanded={editing === "secret"}>
-                New secret
+                New PIN
               </button>
               <button
                 className="ghost"
@@ -128,7 +128,7 @@ export function People() {
               onSave={async (secret) => {
                 await house.updateMe({ secret });
                 setEditing(null);
-                toast.show("New secret saved 🤫");
+                toast.show("New PIN saved 🤫");
               }}
             />
           )}
@@ -328,7 +328,7 @@ function SecretEditor({ keys, onSave }: { keys: string[]; onSave: (secret: strin
   const [hint, setHint] = useState<string | null>(null);
   return (
     <div className="editor-card secret-editor">
-      <p className="door-intro">{first ? "Once more, to be sure" : "Tap 4 new emoji"}</p>
+      <p className="door-intro">{first ? "Once more, to be sure" : "Tap 4 new numbers"}</p>
       <Keypad
         key={first ? "again" : `first-${wrong}`}
         keys={keys}
