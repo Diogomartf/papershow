@@ -1,6 +1,7 @@
 // Playlist client: the sequence, what's live, and edits to both.
 // Every mutation answers with the whole new state, so the UI never drifts.
 
+import { signedOut, type LogEntry, type Person } from "./house";
 import type { Source } from "./sources";
 
 export type Slide = {
@@ -16,7 +17,7 @@ export type Slide = {
 };
 
 /** Playlists play one after another, then loop; disabled ones are skipped. */
-export type Playlist = { id: string; name: string; position: number; enabled: boolean };
+export type Playlist = { id: string; name: string; position: number; enabled: boolean; madeBy: string | null };
 
 /** What runs: playlists, images and apps, top to bottom, then again. */
 export type ShowEntry = {
@@ -83,6 +84,8 @@ export type State = {
     away: boolean;
     /** True when the panel keeps its last picture and /live sends nothing. */
     blank: boolean;
+    /** The invite code, while an invite is on the panel. */
+    invite: string | null;
   } | null;
   sleep: Sleep;
   slides: Slide[];
@@ -93,6 +96,11 @@ export type State = {
   sequence: Turn[];
   /** The last time a display fetched /live. */
   display: { at: number; agent: string } | null;
+  me: Person;
+  /** Everyone who's in; admins also see who's knocking and who was removed. */
+  people: Person[];
+  /** The last few things people did. */
+  log: LogEntry[];
 };
 
 async function call(path: string, method = "GET", body?: unknown): Promise<State> {
@@ -101,6 +109,7 @@ async function call(path: string, method = "GET", body?: unknown): Promise<State
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401) signedOut();
   if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);
   return res.json();
 }

@@ -1,9 +1,14 @@
-import { StrictMode, useEffect, useState } from "react";
+import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
 import { Apps } from "./Apps.tsx";
 import { Dashboard } from "./Dashboard.tsx";
+import { Hello } from "./Hello.tsx";
+import { Log } from "./Log.tsx";
+import { navigate } from "./Nav.tsx";
+import { People } from "./People.tsx";
+import { hello as getHello, Me, SIGNED_OUT, type Hello as HelloData } from "./house";
 import { Playlist } from "./Playlist.tsx";
 import { Show } from "./Show.tsx";
 import { Viewer } from "./Viewer.tsx";
@@ -16,6 +21,11 @@ function Router() {
     return () => removeEventListener("popstate", onPop);
   }, []);
 
+  // Already in: an invite link just opens Papershow.
+  useEffect(() => {
+    if (path.startsWith("/join/")) navigate("/");
+  }, [path]);
+
   const viewing = path.match(/^\/i\/([\w-]+)/);
   if (viewing) return <Viewer id={viewing[1]} />;
   // /show is what runs; /playlist/:id is one playlist. Older paths still land somewhere sensible.
@@ -26,11 +36,38 @@ function Router() {
   const app = path.match(/^\/apps(?:\/([\w-]+))?/);
   if (app) return <Apps id={app[1] ?? null} />;
   if (path.startsWith("/draw")) return <App />;
+  if (path.startsWith("/people")) return <People />;
+  if (path.startsWith("/log")) return <Log />;
   return <Dashboard />;
+}
+
+/** Nothing but the front door until this device is signed in as someone who's in. */
+function Gate() {
+  const [hello, setHello] = useState<HelloData | null>(null);
+  const refresh = useCallback(function load() {
+    getHello().then(setHello, () => setTimeout(load, 3000));
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    addEventListener(SIGNED_OUT, refresh);
+    return () => removeEventListener(SIGNED_OUT, refresh);
+  }, [refresh]);
+
+  if (!hello) return null;
+  if (hello.me?.status !== "in") {
+    const join = location.pathname.match(/^\/join\/([A-Za-z0-9]+)/);
+    return <Hello key={hello.me?.id ?? "nobody"} hello={hello} joinCode={join?.[1].toUpperCase() ?? null} onIn={setHello} />;
+  }
+  return (
+    <Me.Provider value={{ me: hello.me, hello, refresh }}>
+      <Router />
+    </Me.Provider>
+  );
 }
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <Router />
+    <Gate />
   </StrictMode>,
 );

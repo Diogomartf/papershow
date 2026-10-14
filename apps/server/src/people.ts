@@ -1,0 +1,344 @@
+// The people in the house: who they are, how they get in, and what they've done.
+//
+// Papershow runs on the home Wi-Fi (and a tailnet), so signing in is meant to be easy enough for a
+// kid: tap your face, then tap a secret of four emoji. That keeps a guest on the Wi-Fi from acting
+// as someone else, without passwords. The panel itself (/live) needs no one.
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { db } from "./db.ts";
+
+/** The secret keypad. A secret is four of these in order: 16 keys, so 65,536 secrets. */
+export const KEYS = ["🐸", "🍕", "🌙", "⭐", "🎈", "🐙", "🍩", "🚀", "🌈", "🎸", "🦄", "🍓", "🐝", "🌵", "🎲", "🍉"];
+export const SECRET_LENGTH = 4;
+
+/** Faces to pick from when you join. */
+export const FACES = [
+  "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐵", "🐔", "🐧", "🦉",
+  "🐢", "🐳", "🦋", "🐞", "🌻", "🌸", "🍄", "🌶️", "🥑", "🍋", "🧁", "🍪",
+  "👾", "🤖", "👻", "🎃", "🧙", "🦸", "🐲", "🦖",
+];
+
+/** Tile colours. Only the web app shows them; the panel is black and white. */
+export const COLORS = ["#f4a259", "#f7d046", "#8cc084", "#5fb7c9", "#7d8fe0", "#c98bdb", "#ef7c8e", "#b8a48c"];
+
+export type Role = "admin" | "member";
+/** Knocking: asked to join, waiting for an admin. In: can use Papershow. Out: removed by an admin. */
+export type Status = "knocking" | "in" | "out";
+
+export type Person = {
+  id: string;
+  name: string;
+  face: string;
+  color: string;
+  role: Role;
+  status: Status;
+  createdAt: number;
+  /** The last time they used Papershow, to the minute. */
+  seenAt: number | null;
+};
+
+/** What the sign-in screen shows: enough to pick yourself out. */
+export type Face = Pick<Person, "id" | "name" | "face" | "color">;
+
+db.exec(`
+  create table if not exists people (
+    id         text primary key,
+    name       text not null,
+    face       text not null,
+    color      text not null,
+    secret     text not null,                       -- 'salt:scrypt hash', both hex
+    role       text not null default 'member',
+    status     text not null default 'knocking',
+    created_at integer not null,
+    seen_at    integer
+  );
+
+  -- One per signed-in device. The cookie holds the token; only its hash is stored.
+  create table if not exists sessions (
+    token      text primary key,
+    person_id  text not null references people(id) on delete cascade,
+    created_at integer not null,
+    seen_at    integer not null
+  );
+
+  -- A short code that lets someone in without knocking, until it expires or is used.
+  create table if not exists invites (
+    code       text primary key,
+    made_by    text references people(id) on delete set null,
+    expires_at integer not null,
+    url        text not null,                       -- where it leads: /join/<code> on the address it was made from
+    on_panel   integer not null default 0,
+    used_by    text references people(id) on delete set null
+  );
+
+  -- Who did what, newest last. 'subject' is JSON: the things it was done to, with their names then.
+  create table if not exists log (
+    id        integer primary key,
+    at        integer not null,
+    person_id text references people(id) on delete set null,
+    verb      text not null,
+    subject   text not null default '{}'
+  );
+  create index if not exists log_at on log(at);
+`);
+
+type PersonRow = {
+  id: string;
+  name: string;
+  face: string;
+  color: string;
+  role: Role;
+  status: Status;
+  created_at: number;
+  seen_at: number | null;
+};
+
+const toPerson = (r: PersonRow): Person => ({
+  id: r.id,
+  name: r.name,
+  face: r.face,
+  color: r.color,
+  role: r.role,
+  status: r.status,
+  createdAt: r.created_at,
+  seenAt: r.seen_at,
+});
+
+export const toFace = (p: Person): Face => ({ id: p.id, name: p.name, face: p.face, color: p.color });
+
+/** Everyone, in the order they joined. */
+export function listPeople(): Person[] {
+  return (db.prepare("select * from people order by created_at").all() as PersonRow[]).map(toPerson);
+}
+
+export function getPerson(id: string): Person | undefined {
+  const row = db.prepare("select * from people where id = ?").get(id) as PersonRow | undefined;
+  return row && toPerson(row);
+}
+
+/** No one yet: the next person to arrive sets up the house and becomes its admin. */
+export const isFirstRun = () => !(db.prepare("select count(*) as n from people").get() as { n: number }).n;
+
+// ── Checking what people type ─────────────────────────────────────────────
+
+export type Profile = { name: string; face: string; color: string };
+
+/** A clean profile, or what's wrong with it, in words for the screen. */
+export function checkProfile(p: Partial<Profile>, self?: string): Profile | string {
+  const name = String(p.name ?? "").trim().replace(/\s+/g, " ");
+  if (!name) return "What's your name?";
+  if ([...name].length > 24) return "That name is a bit long. Try a shorter one?";
+  const taken = listPeople().some((x) => x.id !== self && x.status !== "out" && x.name.toLowerCase() === name.toLowerCase());
+  if (taken) return `There's already a ${name} here. Try adding an initial?`;
+  if (!FACES.includes(String(p.face))) return "Pick a face";
+  if (!COLORS.includes(String(p.color))) return "Pick a colour";
+  return { name, face: String(p.face), color: String(p.color) };
+}
+
+/** A secret is exactly four keys from the keypad. */
+export const isSecret = (s: unknown): s is string[] =>
+  Array.isArray(s) && s.length === SECRET_LENGTH && s.every((k) => KEYS.includes(k));
+
+function hashSecret(secret: string[]) {
+  const salt = randomBytes(16);
+  return `${salt.toString("hex")}:${scryptSync(secret.join(""), salt, 32).toString("hex")}`;
+}
+
+function secretMatches(stored: string, secret: string[]) {
+  const [salt, hash] = stored.split(":");
+  const tried = scryptSync(secret.join(""), Buffer.from(salt, "hex"), 32);
+  return timingSafeEqual(tried, Buffer.from(hash, "hex"));
+}
+
+// ── People ────────────────────────────────────────────────────────────────
+
+export function createPerson(profile: Profile, secret: string[], role: Role, status: Status): Person {
+  const id = crypto.randomUUID().slice(0, 8);
+  db.prepare(
+    "insert into people (id, name, face, color, secret, role, status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
+  ).run(id, profile.name, profile.face, profile.color, hashSecret(secret), role, status, Date.now());
+  return getPerson(id)!;
+}
+
+export function updatePerson(id: string, patch: Partial<Profile & { role: Role; status: Status; secret: string[] }>) {
+  const p = getPerson(id);
+  if (!p) return;
+  db.prepare("update people set name = ?, face = ?, color = ?, role = ?, status = ? where id = ?").run(
+    patch.name ?? p.name,
+    patch.face ?? p.face,
+    patch.color ?? p.color,
+    patch.role ?? p.role,
+    patch.status ?? p.status,
+    id,
+  );
+  if (patch.secret) db.prepare("update people set secret = ? where id = ?").run(hashSecret(patch.secret), id);
+  // Removed people are signed out everywhere at once.
+  if (patch.status === "out") db.prepare("delete from sessions where person_id = ?").run(id);
+}
+
+/** Only for someone still knocking: they never got in, so nothing else refers to them. */
+export const deletePerson = (id: string) => db.prepare("delete from people where id = ? and status = 'knocking'").run(id);
+
+/** Admins left if this person stopped being one: the house always keeps at least one. */
+export const otherAdmins = (id: string) =>
+  listPeople().filter((p) => p.id !== id && p.role === "admin" && p.status === "in").length;
+
+// Wrong secrets lock that person for a while, longer each time, so four emoji can't be guessed
+// by trying them all. Kept in memory: a restart forgives, which is fine at home.
+const misses = new Map<string, { n: number; until: number }>();
+const FREE_TRIES = 5;
+
+export type SignIn = { ok: true; person: Person } | { ok: false; triesLeft: number; lockedUntil: number | null };
+
+export function signIn(id: string, secret: string[], now = Date.now()): SignIn {
+  const row = db.prepare("select * from people where id = ?").get(id) as (PersonRow & { secret: string }) | undefined;
+  const m = misses.get(id) ?? { n: 0, until: 0 };
+  if (m.until > now) return { ok: false, triesLeft: 0, lockedUntil: m.until };
+  if (row && row.status !== "out" && secretMatches(row.secret, secret)) {
+    misses.delete(id);
+    return { ok: true, person: toPerson(row) };
+  }
+  m.n++;
+  // Five free tries, then a minute's wait, doubling with every miss after that.
+  m.until = m.n >= FREE_TRIES ? now + 60_000 * 2 ** (m.n - FREE_TRIES) : 0;
+  misses.set(id, m);
+  return { ok: false, triesLeft: Math.max(0, FREE_TRIES - m.n), lockedUntil: m.until || null };
+}
+
+// ── Sessions ──────────────────────────────────────────────────────────────
+
+/** Signed in for a year on a device, unless signed out or removed. */
+export const SESSION_DAYS = 365;
+
+const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
+
+/** A new session for this person. Returns the token for the cookie. */
+export function startSession(personId: string) {
+  const token = randomBytes(32).toString("base64url");
+  const now = Date.now();
+  db.prepare("insert into sessions (token, person_id, created_at, seen_at) values (?, ?, ?, ?)").run(tokenHash(token), personId, now, now);
+  db.prepare("update people set seen_at = ? where id = ?").run(now, personId);
+  return token;
+}
+
+export const endSession = (token: string) => db.prepare("delete from sessions where token = ?").run(tokenHash(token));
+
+/** Who this cookie belongs to. Also notes that they're around, at most once a minute. */
+export function personFor(token: string | undefined, now = Date.now()): Person | undefined {
+  if (!token) return;
+  const hash = tokenHash(token);
+  const s = db.prepare("select person_id, seen_at from sessions where token = ?").get(hash) as
+    | { person_id: string; seen_at: number }
+    | undefined;
+  if (!s) return;
+  if (now - s.seen_at > SESSION_DAYS * 86_400_000) {
+    endSession(token);
+    return;
+  }
+  if (now - s.seen_at > 60_000) {
+    db.prepare("update sessions set seen_at = ? where token = ?").run(now, hash);
+    db.prepare("update people set seen_at = ? where id = ?").run(now, s.person_id);
+  }
+  const p = getPerson(s.person_id);
+  return p && p.status !== "out" ? p : undefined;
+}
+
+// ── Invites ───────────────────────────────────────────────────────────────
+
+/** How long an invite works for. */
+export const INVITE_MS = 10 * 60_000;
+
+/** No 0/O or 1/I/L: the code may be read off the panel and typed. */
+const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+export type Invite = { code: string; madeBy: string | null; expiresAt: number; url: string; onPanel: boolean };
+
+type InviteRow = { code: string; made_by: string | null; expires_at: number; url: string; on_panel: number; used_by: string | null };
+const toInvite = (r: InviteRow): Invite => ({ code: r.code, madeBy: r.made_by, expiresAt: r.expires_at, url: r.url, onPanel: !!r.on_panel });
+
+/** A new invite. `origin` is the address the admin is using, so the link works where they are. */
+export function createInvite(madeBy: string, origin: string, onPanel: boolean, now = Date.now()): Invite {
+  const code = Array.from(randomBytes(6), (b) => CODE_CHARS[b % CODE_CHARS.length]).join("");
+  const url = `${origin.replace(/\/$/, "")}/join/${code}`;
+  // One invite on the panel at a time: a new one takes its place.
+  if (onPanel) db.prepare("update invites set on_panel = 0").run();
+  db.prepare("insert into invites (code, made_by, expires_at, url, on_panel) values (?, ?, ?, ?, ?)").run(
+    code,
+    madeBy,
+    now + INVITE_MS,
+    url,
+    onPanel ? 1 : 0,
+  );
+  db.prepare("delete from invites where expires_at < ?").run(now - 86_400_000);
+  return { code, madeBy, expiresAt: now + INVITE_MS, url, onPanel };
+}
+
+/** An invite that still works: not expired, not used. */
+export function getInvite(code: string, now = Date.now()): Invite | undefined {
+  const row = db.prepare("select * from invites where code = ?").get(code.toUpperCase()) as InviteRow | undefined;
+  return row && !row.used_by && row.expires_at > now ? toInvite(row) : undefined;
+}
+
+export const useInvite = (code: string, personId: string) =>
+  db.prepare("update invites set used_by = ?, on_panel = 0 where code = ?").run(personId, code.toUpperCase());
+
+/** Take the invite off the panel (it still works on the phone that shows it). */
+export const hideInvite = (code: string) => db.prepare("update invites set on_panel = 0 where code = ?").run(code.toUpperCase());
+
+/** The invite the panel shows now, if any. */
+export function panelInvite(now = Date.now()): Invite | undefined {
+  const row = db.prepare("select * from invites where on_panel = 1 and used_by is null and expires_at > ?").get(now) as
+    | InviteRow
+    | undefined;
+  return row && toInvite(row);
+}
+
+// ── The log ───────────────────────────────────────────────────────────────
+
+/** Something that was acted on, with its name at the time, so the log still reads after it's gone. */
+export type Named = { kind: string; id: string; name: string };
+
+export type LogEntry = { id: number; at: number; personId: string | null; verb: string; subject: Record<string, unknown> };
+
+/** How long the log keeps things. */
+const LOG_DAYS = 90;
+
+/** Repeating the same thing to the same subject within this long updates one entry, not many. */
+const SAME_MS = 15 * 60_000;
+
+/** Note that `personId` did `verb` to `subject`, e.g. note(me, "added-to-show", { item }). */
+export function note(personId: string | null, verb: string, subject: Record<string, unknown> = {}, now = Date.now()) {
+  const json = JSON.stringify(subject);
+  const last = db.prepare("select id, at, person_id, verb, subject from log order by id desc limit 1").get() as
+    | { id: number; at: number; person_id: string | null; verb: string; subject: string }
+    | undefined;
+  // Moving sliders or redrawing in a row is one thing someone did, not twenty.
+  if (last && last.person_id === personId && last.verb === verb && now - last.at < SAME_MS && sameSubject(last.subject, subject)) {
+    db.prepare("update log set at = ?, subject = ? where id = ?").run(now, json, last.id);
+  } else {
+    db.prepare("insert into log (at, person_id, verb, subject) values (?, ?, ?, ?)").run(now, personId, verb, json);
+  }
+}
+
+/** Same things acted on, going by ids: a rename in between still counts as the same. */
+function sameSubject(stored: string, subject: Record<string, unknown>) {
+  const ids = (s: Record<string, unknown>) =>
+    JSON.stringify(Object.entries(s).map(([k, v]) => [k, v && typeof v === "object" && "id" in v ? (v as Named).id : v]));
+  return ids(JSON.parse(stored)) === ids(subject);
+}
+
+/** The log, newest first: `limit` entries before `before` (an entry id), optionally one person's. */
+export function listLog({ limit = 50, before, personId }: { limit?: number; before?: number; personId?: string } = {}): LogEntry[] {
+  const where = [before ? "id < ?" : "", personId ? "person_id = ?" : ""].filter(Boolean);
+  const args = [before, personId].filter((x) => x !== undefined && x !== null && x !== "") as (string | number)[];
+  const rows = db
+    .prepare(`select * from log ${where.length ? `where ${where.join(" and ")}` : ""} order by id desc limit ?`)
+    .all(...args, Math.min(200, Math.max(1, limit))) as { id: number; at: number; person_id: string | null; verb: string; subject: string }[];
+  return rows.map((r) => ({ id: r.id, at: r.at, personId: r.person_id, verb: r.verb, subject: JSON.parse(r.subject) }));
+}
+
+/** Forget what's older than LOG_DAYS: now, then once a day. */
+function trimLog() {
+  db.prepare("delete from log where at < ?").run(Date.now() - LOG_DAYS * 86_400_000);
+}
+trimLog();
+setInterval(trimLog, 86_400_000).unref();

@@ -6,6 +6,8 @@ import { Nav, navigate } from "./Nav";
 import * as appsApi from "./apps";
 import type { AppInstance, AppKind, Field } from "./apps";
 import { addToShow, setLive } from "./slides";
+import { mine, tint, useMe } from "./house";
+import { useLiveState } from "./live";
 
 /** The form's state, tagged with the app it belongs to so it can never be saved onto another. */
 type Draft = { id: string; name: string; config: Record<string, unknown> };
@@ -49,6 +51,12 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
   }, [id, newKind, apps]);
 
   const current = apps?.find((a) => a.id === id) ?? null;
+  const { me } = useMe();
+  const everyone = useLiveState().state?.people ?? [];
+  const makerOf = (madeBy: string | null) => everyone.find((p) => p.id === madeBy);
+  // Anyone can show, add or duplicate an app; only its maker or an admin changes it.
+  const canChange = !current || mine(me, current.madeBy);
+  const maker = current && makerOf(current.madeBy);
   const kindId = current?.kind ?? newKind;
   const kind = useMemo(() => catalog.find((k) => k.kind === kindId), [catalog, kindId]);
   const isNew = !current && !!newKind && !!kind;
@@ -111,7 +119,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
 
   // Save shortly after you stop typing.
   useEffect(() => {
-    if (!draft || draft.id !== current?.id) return;
+    if (!draft || draft.id !== current?.id || !canChange) return;
     const b = body(draft);
     if (b === lastSaved.current) return;
     setSaved(false);
@@ -122,7 +130,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
       setSaved(true);
     }, 450);
     return () => clearTimeout(t);
-  }, [draft, current?.id]);
+  }, [draft, current?.id, canChange]);
 
   const flash = (msg: string) => {
     setToast(msg);
@@ -171,7 +179,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
 
       <main className="apps-main">
         <aside className="rail">
-          <h2>Your apps</h2>
+          <h2>House apps</h2>
           <ul className="rail-list">
             {apps?.map((a) => (
               <li key={a.id}>
@@ -188,6 +196,11 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
                     <strong>{a.id === id && draft ? draft.name : a.name}</strong>
                     <small>{catalog.find((k) => k.kind === a.kind)?.name}</small>
                   </span>
+                  {makerOf(a.madeBy) && (
+                    <span className="face-mini maker" style={tint(makerOf(a.madeBy)!.color)} title={`By ${makerOf(a.madeBy)!.name}`}>
+                      {makerOf(a.madeBy)!.face}
+                    </span>
+                  )}
                 </a>
               </li>
             ))}
@@ -254,10 +267,11 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
                   className="name"
                   value={draft.name}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  readOnly={!canChange}
                   aria-label="App name"
                   spellCheck={false}
                 />
-                <span className="saved" data-on={saved}>{isNew ? "Not created yet" : saved ? "Saved" : "Saving…"}</span>
+                <span className="saved" data-on={saved}>{isNew ? "Not created yet" : !canChange ? "" : saved ? "Saved" : "Saving…"}</span>
               </div>
               <p className="muted kind-line">
                 {kind.name}
@@ -266,9 +280,20 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
                 {kind.mock && <span className="chip">Mock data</span>}
               </p>
 
-              {kind.fields.map((f) => (
-                <FieldInput key={f.key} field={f} value={draft.config[f.key]} onChange={(v) => set(f.key, v)} />
-              ))}
+              {!canChange && (
+                <p className="made-by">
+                  {maker && <span className="face-mini" style={tint(maker.color)} aria-hidden>{maker.face}</span>}
+                  <span>
+                    {maker?.name ?? "Someone"} made this, so only they or an admin can change it. Duplicate it to make your own.
+                  </span>
+                </p>
+              )}
+
+              <fieldset className="plain" disabled={!canChange}>
+                {kind.fields.map((f) => (
+                  <FieldInput key={f.key} field={f} value={draft.config[f.key]} onChange={(v) => set(f.key, v)} />
+                ))}
+              </fieldset>
 
               {isNew ? (
                 <div className="settings-actions">
@@ -296,7 +321,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
                     Add to show
                   </button>
                   <button className="ghost" onClick={duplicate}>Duplicate</button>
-                  <button className="ghost danger" onClick={remove}>Delete</button>
+                  {canChange && <button className="ghost danger" onClick={remove}>Delete</button>}
                 </div>
               )}
             </>

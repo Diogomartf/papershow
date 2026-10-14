@@ -10,6 +10,7 @@ import { useLiveState, useNow } from "./live";
 import { FloatingMenu, MenuDivider, MenuItem, useUndoToast } from "./Undo";
 import type { Playlist as PlaylistT, Slide, State } from "./slides";
 import { navigate } from "./Nav";
+import { mine, tint, useMe } from "./house";
 
 /** Timeline zoom, in pixels per minute. */
 const ZOOMS = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96];
@@ -55,6 +56,10 @@ export function Playlist({ id }: { id: string | null }) {
   const playlists = state?.playlists ?? [];
   const current = playlists.find((p) => p.id === id) ?? playlists[0];
   const pid = current?.id;
+  const { me } = useMe();
+  // Anyone can watch a playlist and Show now from it; only its maker or an admin changes it.
+  const canChange = !current || mine(me, current.madeBy);
+  const maker = state?.people.find((p) => p.id === current?.madeBy);
   const allSlides = state?.slides ?? [];
   /** The open playlist's clips; the loop plays every enabled playlist in turn. */
   const slides = allSlides.filter((s) => s.playlistId === pid);
@@ -100,6 +105,7 @@ export function Playlist({ id }: { id: string | null }) {
   };
 
   const onDragOver = (e: DragEvent) => {
+    if (!canChange) return;
     const types = e.dataTransfer.types;
     if (!types.includes(MIME_SOURCE) && !types.includes(MIME_SLIDE)) return;
     e.preventDefault();
@@ -352,6 +358,7 @@ export function Playlist({ id }: { id: string | null }) {
                       navigate(`/playlist/${s.created}`);
                     })
                   }
+                  canChange={(p) => mine(me, p.madeBy)}
                   onRename={(p, name) => api.updatePlaylist(p.id, { name }).then(accept)}
                   onDelete={(p) =>
                     api.deletePlaylist(p.id).then((s) => {
@@ -416,15 +423,15 @@ export function Playlist({ id }: { id: string | null }) {
                         width: minutes * ppm,
                         backgroundImage: img ? `url("${img.thumb}")` : undefined,
                       }}
-                      draggable={!resizing}
+                      draggable={!resizing && canChange}
                       onDragStart={(e) => {
                         e.dataTransfer.setData(MIME_SLIDE, s.id);
                         e.dataTransfer.effectAllowed = "move";
                         setDragging({ kind: "slide", id: s.id, minutes });
                       }}
                       onDragEnd={endDrag}
-                      onClick={() => setSelected(s.id)}
-                      aria-haspopup="menu"
+                      onClick={() => canChange && setSelected(s.id)}
+                      aria-haspopup={canChange ? "menu" : undefined}
                       title={img?.name}
                     >
                       <span className="clip-label">
@@ -432,7 +439,7 @@ export function Playlist({ id }: { id: string | null }) {
                         <span className="clip-dur">{fmtMinutes(minutes)}</span>
                       </span>
                       {(s.start || s.days.length < 7) && <span className="clip-flag" title="Has a schedule">◷</span>}
-                      <button
+                      {canChange && <button
                         className="clip-x"
                         aria-label={`Remove ${img?.name ?? "clip"}`}
                         title="Remove"
@@ -443,8 +450,8 @@ export function Playlist({ id }: { id: string | null }) {
                         }}
                       >
                         ✕
-                      </button>
-                      <span
+                      </button>}
+                      {canChange && <span
                         className="clip-handle"
                         onPointerDown={(e) => startResize(e, s)}
                         role="slider"
@@ -457,7 +464,7 @@ export function Playlist({ id }: { id: string | null }) {
                           if (e.key === "ArrowRight") setDuration(s.id, minutes + 1);
                           if (e.key === "ArrowLeft") setDuration(s.id, minutes - 1);
                         }}
-                      />
+                      />}
                     </div>,
                   ];
                 })}
@@ -476,6 +483,13 @@ export function Playlist({ id }: { id: string | null }) {
                 onShowNow={() => pin(sel.source, sel.durationS)}
                 onRemove={() => remove(sel.id)}
               />
+            ) : !canChange ? (
+              <div className="bin">
+                <p className="made-by">
+                  {maker && <span className="face-mini" style={tint(maker.color)} aria-hidden>{maker.face}</span>}
+                  <span>{maker?.name ?? "Someone"} made {current?.name}, so only they or an admin can change it. Make your own with +.</span>
+                </p>
+              </div>
             ) : (
               <div className="bin">
                 <span className="bin-label">Add</span>
@@ -549,10 +563,12 @@ type TabsProps = {
   onCreate: () => void;
   onRename: (p: PlaylistT, name: string) => void;
   onDelete: (p: PlaylistT) => void;
+  /** Whether you may rename or delete it: yours, or you're an admin. */
+  canChange: (p: PlaylistT) => boolean;
 };
 
 /** The playlists, in loop order. Double-click a name to rename it. */
-function PlaylistTabs({ playlists, current, onPick, onCreate, onRename, onDelete }: TabsProps) {
+function PlaylistTabs({ playlists, current, onPick, onCreate, onRename, onDelete, canChange }: TabsProps) {
   const [editing, setEditing] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
   return (
@@ -585,8 +601,8 @@ function PlaylistTabs({ playlists, current, onPick, onCreate, onRename, onDelete
               role="tab"
               aria-selected={p.id === current.id}
               onClick={() => onPick(p)}
-              onDoubleClick={() => setEditing(p.id)}
-              title="Double-click to rename"
+              onDoubleClick={() => canChange(p) && setEditing(p.id)}
+              title={canChange(p) ? "Double-click to rename" : undefined}
             >
               {p.name}
             </button>
@@ -595,7 +611,7 @@ function PlaylistTabs({ playlists, current, onPick, onCreate, onRename, onDelete
         <button className="pl-add" onClick={onCreate} aria-label="New playlist" title="New playlist">+</button>
       </div>
       <div className="pl-actions">
-        {confirm ? (
+        {!canChange(current) ? null : confirm ? (
           <>
             <span className="muted">Delete {current.name}?</span>
             <button className="danger" onClick={() => (setConfirm(false), onDelete(current))}>Delete</button>

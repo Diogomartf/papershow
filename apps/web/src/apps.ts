@@ -1,4 +1,5 @@
 // The Apps API: built-in apps (clock, crypto, …) and the instances you set up.
+import { signedOut } from "./house";
 
 export type Field =
   | { key: string; label: string; type: "text"; placeholder?: string; hint?: string }
@@ -31,7 +32,7 @@ export type AppKind = {
   periodMs: number;
 };
 
-export type AppInstance = { id: string; kind: string; name: string; config: Record<string, unknown>; updatedAt: number };
+export type AppInstance = { id: string; kind: string; name: string; config: Record<string, unknown>; updatedAt: number; madeBy: string | null };
 
 async function api<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   const res = await fetch(path, {
@@ -39,6 +40,7 @@ async function api<T>(path: string, method = "GET", body?: unknown): Promise<T> 
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401) signedOut();
   if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);
   return (res.status === 204 ? undefined : await res.json()) as T;
 }
@@ -62,6 +64,7 @@ export async function previewApp(kind: string, config: Record<string, unknown>, 
     body: JSON.stringify({ kind, config, original }),
     signal,
   });
+  if (res.status === 401) signedOut();
   if (!res.ok) throw new Error(`preview → ${res.status}`);
   return URL.createObjectURL(await res.blob());
 }

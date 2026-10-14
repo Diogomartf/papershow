@@ -10,6 +10,9 @@ import * as api from "./slides";
 import { frameAt, setLive } from "./slides";
 import { FloatingMenu, MenuDivider, MenuItem, useUndoToast } from "./Undo";
 import { useItems } from "./sources";
+import * as house from "./house";
+import { tint, useMe } from "./house";
+import { LogList } from "./People";
 
 const hhmm = (t: number) => {
   const d = new Date(t);
@@ -37,6 +40,8 @@ export function Dashboard() {
   const { state, accept, skew } = useLiveState();
   const now = useNow(skew, 1000);
   const { itemOf } = useItems();
+  const { me } = useMe();
+  const admin = me.role === "admin";
   const [menu, setMenu] = useState<{ key: string; el: HTMLElement } | null>(null);
   const toast = useUndoToast();
   const closeMenu = useRef(() => setMenu(null)).current;
@@ -96,9 +101,21 @@ export function Dashboard() {
               <span className="on-air" data-on={!!showing && !resting} data-asleep={resting}>
                 {away ? "Off" : resting ? "Asleep" : showing ? "On air" : "Off air"}
               </span>
-              <h1>{away ? "Turned off" : resting ? "Good night" : onAir?.name ?? (showing ? "…" : "Nothing showing")}</h1>
+              <h1>
+                {away ? "Turned off" : resting ? "Good night" : showing?.invite ? "Invite" : onAir?.name ?? (showing ? "…" : "Nothing showing")}
+              </h1>
               <p className="muted">
-                {resting
+                {showing?.invite ? (
+                  <>
+                    Code {showing.invite}, until someone joins
+                    {admin && (
+                      <>
+                        {" · "}
+                        <button className="link" onClick={() => house.hideInvite(showing.invite!)}>Take it down</button>
+                      </>
+                    )}
+                  </>
+                ) : resting
                   ? `${away ? "Off" : "Night"} ${restsUntil}`
                   : pinned
                     ? pinnedUntil
@@ -119,6 +136,26 @@ export function Dashboard() {
           </div>
 
           <div className="dash-side">
+            {admin &&
+              state?.people
+                .filter((p) => p.status === "knocking")
+                .map((p) => (
+                  <div key={p.id} className="card knock-mini">
+                    <h2>Knock knock</h2>
+                    <p>
+                      <span className="face-mini" style={tint(p.color)} aria-hidden>{p.face}</span> <strong>{p.name}</strong> wants to come in
+                    </p>
+                    <div className="knock-actions">
+                      <button className="big-yes" onClick={() => house.updatePerson(p.id, { status: "in" }).then((s) => accept(s as api.State))}>
+                        Let in
+                      </button>
+                      <button className="ghost" onClick={() => house.notNow(p.id).then((s) => accept(s as api.State))}>
+                        Not now
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
             {/* Up next: rendered as it will look when it airs */}
             <div className="card next">
               <h2>Up next</h2>
@@ -148,8 +185,19 @@ export function Dashboard() {
               ) : (
                 <p className="muted">No display has connected yet. Point ShowPi at <code>/live.bin</code>.</p>
               )}
-              {state && <Power sleep={state.sleep} back={away ? asleep || null : null} onChange={(p) => api.setSleep(p).then(accept)} />}
-              {state && !away && <NightSettings sleep={state.sleep} onChange={(p) => api.setSleep(p).then(accept)} />}
+              {state && admin && <Power sleep={state.sleep} back={away ? asleep || null : null} onChange={(p) => api.setSleep(p).then(accept)} />}
+              {state && admin && !away && <NightSettings sleep={state.sleep} onChange={(p) => api.setSleep(p).then(accept)} />}
+              {state && !admin && (
+                <p className="muted">
+                  {state.sleep.enabled ? `Sleeps ${state.sleep.start}–${state.sleep.end}.` : "Never sleeps."} An admin changes this.
+                </p>
+              )}
+            </div>
+
+            <div className="card lately">
+              <h2>Lately</h2>
+              <LogList entries={(state?.log ?? []).slice(0, 4)} people={state?.people ?? []} now={now} />
+              <a className="link" href="/log" onClick={(e) => (e.preventDefault(), navigate("/log"))}>Whole log</a>
             </div>
           </div>
         </section>

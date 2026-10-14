@@ -1,12 +1,14 @@
 // Saved images live on the server (SlideGen), so every device sees the same set.
 // Only the draft being edited stays in this browser's IndexedDB.
+import { Oops, signedOut } from "./house";
 import type { Scene } from "@papershow/scene";
 
-export type ImageMeta = { id: string; name: string; updatedAt: number };
+export type ImageMeta = { id: string; name: string; updatedAt: number; madeBy: string | null };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
-  if (!res.ok) throw new Error(`${init?.method ?? "GET"} ${path} → ${res.status}`);
+  if (res.status === 401) signedOut();
+  if (!res.ok) throw new Oops(`${init?.method ?? "GET"} ${path} → ${res.status}`, res.status, {});
   return (res.status === 204 ? undefined : await res.json()) as T;
 }
 
