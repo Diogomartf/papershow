@@ -64,10 +64,31 @@ export function isActive(slide: Slide, at: Date): boolean {
 
 // ── Night ──────────────────────────────────────────────────────────────────
 
-/** Hours when the panel sleeps, and what it shows meanwhile ("off" keeps the last picture). */
-export type Sleep = { enabled: boolean; start: string; end: string; screen: "moon" | "blank" | "off" };
+/**
+ * Hours when the panel sleeps, and what it shows meanwhile ("off" keeps the last picture). `away` turns the
+ * panel off for days (a holiday, a weekend out) until it's switched back, or until the morning of `back`.
+ */
+export type Sleep = {
+  enabled: boolean;
+  start: string;
+  end: string;
+  screen: "moon" | "blank" | "off";
+  away: boolean;
+  /** 'YYYY-MM-DD' local date when away ends, at the night's wake-up time; null = until switched back. */
+  back: string | null;
+};
 
-export const DEFAULT_SLEEP: Sleep = { enabled: false, start: "23:00", end: "07:00", screen: "moon" };
+export const DEFAULT_SLEEP: Sleep = { enabled: false, start: "23:00", end: "07:00", screen: "moon", away: false, back: null };
+
+/** If the panel is away at `now`, when it comes back: 0 when it waits to be switched back. Otherwise null. */
+export function awayUntil(sleep: Sleep, now = Date.now()): number | null {
+  if (!sleep.away) return null;
+  if (!sleep.back) return 0;
+  const [y, mo, d] = sleep.back.split("-").map(Number);
+  const [h, m] = sleep.end.split(":").map(Number);
+  const back = new Date(y, mo - 1, d, h, m).getTime();
+  return now < back ? back : null;
+}
 
 /** If the panel is asleep at `now`, when it wakes; otherwise null. */
 export function sleepUntil(sleep: Sleep, now = Date.now()): number | null {

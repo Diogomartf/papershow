@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Scene } from "@papershow/scene";
-import { DEFAULT_SLEEP, REPEAT_EVERY, sameSource, type Live, type Repeat, type Sleep, type Slide, type Source } from "./schedule.ts";
+import { awayUntil, DEFAULT_SLEEP, REPEAT_EVERY, sameSource, type Live, type Repeat, type Sleep, type Slide, type Source } from "./schedule.ts";
 
 const path = process.env.DB ?? new URL("../data/imagegen.db", import.meta.url).pathname;
 mkdirSync(dirname(path), { recursive: true });
@@ -498,10 +498,13 @@ export function setLive(live: Live) {
 
 export function getSleep(): Sleep {
   const row = db.prepare("select value from settings where key = 'sleep'").get() as { value: string } | undefined;
-  return row ? { ...DEFAULT_SLEEP, ...JSON.parse(row.value) } : DEFAULT_SLEEP;
+  const sleep: Sleep = row ? { ...DEFAULT_SLEEP, ...JSON.parse(row.value) } : DEFAULT_SLEEP;
+  // Away ends by itself on its date; the switch follows, so the Dashboard doesn't show it still on.
+  return sleep.away && awayUntil(sleep) === null ? { ...sleep, away: false, back: null } : sleep;
 }
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function setSleep(patch: Partial<Sleep>) {
   const cur = getSleep();
@@ -510,6 +513,8 @@ export function setSleep(patch: Partial<Sleep>) {
     start: patch.start && HHMM.test(patch.start) ? patch.start : cur.start,
     end: patch.end && HHMM.test(patch.end) ? patch.end : cur.end,
     screen: patch.screen && ["moon", "blank", "off"].includes(patch.screen) ? patch.screen : cur.screen,
+    away: patch.away ?? cur.away,
+    back: patch.back === undefined ? cur.back : patch.back && DATE.test(patch.back) ? patch.back : null,
   };
   db.prepare("insert into settings (key, value) values ('sleep', ?) on conflict(key) do update set value = excluded.value").run(
     JSON.stringify(next),

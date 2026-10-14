@@ -232,7 +232,7 @@ Environment=PANEL_PARTIAL=0
 | `PAPERSHOW_URL` | `http://localhost:5194` | The server to follow. |
 | `PANEL_ROTATE` | `180` | Degrees to turn the frame. The frame holds the panel upside down. |
 | `PANEL_PARTIAL` | `10` | Quick partial refreshes in a row before a full one. `0` makes every refresh full, if partials leave ghosts. |
-| `PANEL_CLEAN_HOUR` | `3` | Hour of the daily deep clean when night mode is off. |
+| `PANEL_CLEAN_HOUR` | `3` | Hour of the daily deep clean when night mode is off. Skipped while away. |
 
 ### When something's off
 
@@ -244,7 +244,7 @@ Environment=PANEL_PARTIAL=0
 ### How the panel client works
 
 - It long-polls `/live.bin`, so it redraws as soon as the show changes and never in between. When the same app changes (a clock ticking), it uses a quick partial refresh. A new picture, or every `PANEL_PARTIAL`-th tick, gets a full refresh to clear ghosting. Between frames the panel sleeps.
-- Once a day, as night begins, it deep-cleans the panel against ghosting: white, black, white, then the picture again.
+- Once a day, as night begins, it deep-cleans the panel against ghosting: white, black, white, then the picture again. While asleep or away it skips the daily clean: the panel was cleaned as it went to sleep.
 - On every start it shows the logo until the first frame arrives. That's `apps/panel/splash.png`, drawn by `apps/server/src/splash.tsx` (run `npx tsx src/splash.tsx` in `apps/server` after changing the logo).
 - If the server can't be reached, it keeps the current picture and retries every 30 s.
 - `apps/panel/waveshare_epd` is a copy of Waveshare's driver (MIT) that's known to work on this panel. Upstream has since changed the panel voltages, so update it only after testing.
@@ -302,6 +302,7 @@ Photos and logos are prepared for e-ink one by one before layout (`ditheredImage
 - **At times**: any entry, a playlist too, can leave the loop and play only at set times each day (for example 08:00 and 20:00). At each one it interrupts the loop (a playlist plays its clips back to back), ending at least a minute before its next time. When two interruptions meet, the one higher in the show wins.
 - **Show now**: puts one drawing or app on `/live` once: for its turn (a clip's own length, else 15 minutes), then the show carries on by itself. **Resume now** ends it early. The panel flashes black before drawing it, so it goes up clean, and pressing it again on what's already up redraws it.
 - **Night**: sleep hours during which the panel shows a moon and the wake-up time, goes blank, or keeps its last picture.
+- **Off** (`away` in the API): beats the night and the show. The panel is deep-cleaned once, left white (how e-ink keeps best) and not touched again: no daily clean, no redraws, and the panel's power is cut, as it is between all frames. Only the Pi stays on, so you can turn it back on from anywhere.
 
 The rotation runs on wall-clock time: the position in the cycle comes from `now % cycle length`. A restart doesn't change what's on air.
 
@@ -319,7 +320,7 @@ The nav runs Dashboard, Show, Apps, Draw. Every page has the light switch (the p
 
 What's on the panel now: the frame, its name, which playlist it's from, and a progress bar for the current clip. When the panel changes picture, the frame plays a full e-ink refresh (old picture inverted, black, white, black, new picture inverted, then settled) instead of cutting. Below it:
 - **Up next**: the next clip and how it will look when it airs. It's rendered ahead, so a clock shows the right time.
-- **Device**: night hours and what the panel shows while asleep, plus when a display last fetched `/live`.
+- **Device**: a power button that turns the panel off for a holiday or a weekend out. Off takes a press and hold; the card goes dark, the panel preview plays the deep clean, and the rest of the Dashboard dims. It stays off until you press it again, or until an optional **Back on** date (at the night's wake-up time). Also the night hours and what the panel shows while asleep, and when a display last fetched `/live`.
 - **Sequence**: the next hour or so of the loop, with what plays when.
 
 ### Show (`/show`)
@@ -399,7 +400,7 @@ The web app looks like the device it drives: the panel sits in a wooden frame on
 Response headers:
 - `ETag`: changes only when the pixels do.
 - `X-Next-Change`: seconds until the frame changes by itself, if it will.
-- `X-Sleep-Until`: while asleep, when the panel wakes (ms since epoch).
+- `X-Sleep-Until`: while asleep or away, when the panel wakes (ms since epoch); `0` while away with no date set.
 - `X-Source`: what's on air, as `app:<id>` or `image:<id>`; a new one gets a full refresh.
 - `X-Source-Name`: its name, URI-encoded (names can have accents), for logs.
 - `X-Show-Now`: while a Show now holds `/live`, when it ends (ms since epoch). A new value means someone just sent this picture: the panel client flashes black, then draws it with a full refresh.
@@ -424,7 +425,7 @@ Long-poll: send `?wait=1` with `If-None-Match: <etag>`. The server holds the req
 | `POST`, `PATCH`, `DELETE /api/playlists…`, `PUT /api/playlists/order` | Playlists. |
 | `POST`, `PATCH`, `DELETE /api/show…`, `PUT /api/show/order` | Show entries, durations, on/off, repeats. |
 | `PUT /api/live` | Show a source now (`{ mode: "pin", source, forS }`, for `forS` seconds, 15 minutes if left out) or go back to the loop (`{ mode: "rotate" }`). |
-| `PUT /api/sleep` | Night: `{ enabled, start, end, screen: "moon" \| "blank" \| "off" }`. |
+| `PUT /api/sleep` | Night and away: `{ enabled, start, end, screen: "moon" \| "blank" \| "off", away, back: "YYYY-MM-DD" \| null }`. Any subset. |
 
 Edits answer with the whole new state, so the UI never drifts from the server.
 

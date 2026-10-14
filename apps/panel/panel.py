@@ -9,7 +9,7 @@ contract" in the README.
   PAPERSHOW_URL   server to follow (http://localhost:5194)
   PANEL_PARTIAL   quick partial refreshes in a row before a full one (10; 0 = always full)
   PANEL_ROTATE    degrees to turn the frame, for a panel mounted upside down (0)
-  PANEL_CLEAN_HOUR  hour for the daily deep clean when night mode is off (3)
+  PANEL_CLEAN_HOUR  hour for the daily deep clean when night mode is off; skipped while away (3)
   PANEL_OUT       write frames to this PNG instead of the panel, to try it without one
 """
 
@@ -117,11 +117,13 @@ def main():
 
         # The daily deep clean happens as night begins, so it moves with the night hours set on
         # the Dashboard and nobody watches it flash. With night mode off, it runs at CLEAN_HOUR.
-        asleep = bool(headers.get("X-Sleep-Until"))
+        # Not while asleep: away for days, the panel was cleaned as it began and rests untouched.
+        asleep = headers.get("X-Sleep-Until") is not None
         nightfall = asleep and was_asleep is False
         was_asleep = asleep
         drawable = img is not None or status == 200
-        clean = drawable and time.time() - cleaned_at > CLEAN_EVERY and (nightfall or datetime.now().hour == CLEAN_HOUR)
+        daily = not asleep and datetime.now().hour == CLEAN_HOUR
+        clean = drawable and time.time() - cleaned_at > CLEAN_EVERY and (nightfall or daily)
         if clean:
             cleaned_at = time.time()
 

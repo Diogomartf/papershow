@@ -5,6 +5,7 @@ import { LiveLink } from "./LiveLink";
 import { Nav, navigate } from "./Nav";
 import { useLiveState, useNow } from "./live";
 import { NightSettings } from "./NightSettings";
+import { Power } from "./Power";
 import * as api from "./slides";
 import { frameAt, setLive } from "./slides";
 import { FloatingMenu, MenuDivider, MenuItem, useUndoToast } from "./Undo";
@@ -45,20 +46,25 @@ export function Dashboard() {
   }, []);
 
   const showing = state?.showing ?? null;
+  const away = !!showing?.away;
+  // While away, `asleep` is 0 when there's no date to be back on, so test it against null, not for truth.
   const asleep = showing?.asleep ?? null;
+  const resting = asleep !== null;
+  const dayTime = (t: number) => new Date(t).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const restsUntil = away ? (asleep ? `until ${dayTime(asleep)}` : "until you turn it on") : `until ${hhmm(asleep ?? 0)}`;
   const pinned = state?.live.mode === "pin";
   const pinnedUntil = state?.live.mode === "pin" ? (state.live.until ?? null) : null;
   const onAir = itemOf(showing?.source);
   const playlistName = (id: string | null) => (id ? (state?.playlists.find((p) => p.id === id)?.name ?? "") : "In the show");
   const seq = state?.sequence ?? [];
-  const currentTurn = !pinned && !asleep ? seq.find((t) => t.key === showing?.slideId) : undefined;
-  const nextTurn = !pinned && !asleep ? seq.find((t) => t.at > now) : undefined;
+  const currentTurn = !pinned && !resting ? seq.find((t) => t.key === showing?.slideId) : undefined;
+  const nextTurn = !pinned && !resting ? seq.find((t) => t.at > now) : undefined;
   const nextItem = itemOf(nextTurn?.source);
   const clip = showing?.clip;
   const progress = clip ? Math.min(1, Math.max(0, (now - clip.startedAt) / (clip.endsAt - clip.startedAt))) : 0;
 
   return (
-    <div className="app dash">
+    <div className="app dash" data-off={away}>
       <header className="bar">
         <div className="bar-left">
           <Nav current="dashboard" />
@@ -80,20 +86,20 @@ export function Dashboard() {
                   <EinkImage src={`/live.png?e=${encodeURIComponent(showing.etag)}`} />
                 ) : (
                   <p className="panel-empty">
-                    {asleep ? `Asleep. The panel keeps its last picture until ${hhmm(asleep)}.` : "Nothing on /live yet. Build a playlist to start."}
+                    {resting ? `Asleep. The panel keeps its last picture ${restsUntil}.` : "Nothing on /live yet. Build a playlist to start."}
                   </p>
                 )}
               </div>
               <span className="ribbon" aria-hidden />
             </div>
             <div className="dash-caption">
-              <span className="on-air" data-on={!!showing && !asleep} data-asleep={!!asleep}>
-                {asleep ? "Asleep" : showing ? "On air" : "Off air"}
+              <span className="on-air" data-on={!!showing && !resting} data-asleep={resting}>
+                {away ? "Off" : resting ? "Asleep" : showing ? "On air" : "Off air"}
               </span>
-              <h1>{asleep ? "Good night" : onAir?.name ?? (showing ? "…" : "Nothing showing")}</h1>
+              <h1>{away ? "Turned off" : resting ? "Good night" : onAir?.name ?? (showing ? "…" : "Nothing showing")}</h1>
               <p className="muted">
-                {asleep
-                  ? `Night until ${hhmm(asleep)}`
+                {resting
+                  ? `${away ? "Off" : "Night"} ${restsUntil}`
                   : pinned
                     ? pinnedUntil
                       ? `Show now · until ${hhmm(pinnedUntil)}`
@@ -101,7 +107,7 @@ export function Dashboard() {
                     : currentTurn
                       ? `${playlistName(currentTurn.playlistId)} · ${countdown((clip?.endsAt ?? now) - now)} left`
                       : ""}
-                {pinned && !asleep && (
+                {pinned && !resting && (
                   <>
                     {" · "}
                     <button className="link" onClick={() => setLive({ mode: "rotate" }).then(accept)}>Resume now</button>
@@ -127,12 +133,12 @@ export function Dashboard() {
                 </>
               ) : (
                 <p className="muted">
-                  {asleep ? `The playlists pick up at ${hhmm(asleep)}.` : pinned ? (pinnedUntil ? `The playlists pick up at ${hhmm(pinnedUntil)}.` : "Resume the playlists to see what's next.") : "Nothing else in the loop."}
+                  {resting ? (away && !asleep ? "The playlists wait until you're back." : `The playlists pick up ${restsUntil.replace("until", "at")}.`) : pinned ? (pinnedUntil ? `The playlists pick up at ${hhmm(pinnedUntil)}.` : "Resume the playlists to see what's next.") : "Nothing else in the loop."}
                 </p>
               )}
             </div>
 
-            <div className="card">
+            <div className="card device-card">
               <h2>Device</h2>
               {state?.display ? (
                 <p>
@@ -142,7 +148,8 @@ export function Dashboard() {
               ) : (
                 <p className="muted">No display has connected yet. Point ShowPi at <code>/live.bin</code>.</p>
               )}
-              {state && <NightSettings sleep={state.sleep} onChange={(p) => api.setSleep(p).then(accept)} />}
+              {state && <Power sleep={state.sleep} back={away ? asleep || null : null} onChange={(p) => api.setSleep(p).then(accept)} />}
+              {state && !away && <NightSettings sleep={state.sleep} onChange={(p) => api.setSleep(p).then(accept)} />}
             </div>
           </div>
         </section>

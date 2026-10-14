@@ -52,8 +52,16 @@ export type Turn = {
 /** Show now holds `source` on /live until `until`, then the playlists carry on. */
 export type Live = { mode: "rotate" } | { mode: "pin"; source: Source; until?: number | null };
 
-/** Night: hours when the panel sleeps, and what it shows ("off" keeps the last picture). */
-export type Sleep = { enabled: boolean; start: string; end: string; screen: "moon" | "blank" | "off" };
+/** Night: hours when the panel sleeps, and what it shows ("off" keeps the last picture). Away: off for days. */
+export type Sleep = {
+  enabled: boolean;
+  start: string;
+  end: string;
+  screen: "moon" | "blank" | "off";
+  away: boolean;
+  /** 'YYYY-MM-DD' when away ends, at the night's wake-up time; null = until switched back. */
+  back: string | null;
+};
 
 export type State = {
   now: number;
@@ -69,8 +77,10 @@ export type State = {
     endsAt: number | null;
     clip: { startedAt: number; endsAt: number } | null;
     etag: string;
-    /** While asleep, when the panel wakes. */
+    /** While asleep or away, when the panel wakes: 0 while away until switched back. */
     asleep: number | null;
+    /** Away for days, not just asleep for the night. */
+    away: boolean;
     /** True when the panel keeps its last picture and /live sends nothing. */
     blank: boolean;
   } | null;

@@ -7,7 +7,7 @@ import type { Scene } from "@papershow/scene";
 import { APPS, appFrame, appFrameAt, catalog, configFor, forgetApp, previewFrame } from "./apps/index.ts";
 import { watchModels } from "./ai.ts";
 import * as store from "./db.ts";
-import { sequence, showing, sleepUntil, upcoming, type Live, type Showing, type Source } from "./schedule.ts";
+import { awayUntil, sequence, showing, sleepUntil, upcoming, type Live, type Showing, type Source } from "./schedule.ts";
 import { sleepFrame } from "./sleep.tsx";
 
 // Secrets such as GROQ_API_KEY and MASSIVE_API_KEY live in .env at the repo root (not committed).
@@ -54,13 +54,32 @@ type LiveNow = Omit<Showing, "source"> & {
   source: Source | null;
   etag: string;
   file: SourceFrame["file"] | null;
-  /** When the panel wakes, while it's asleep. */
+  /** When the panel wakes, while it's asleep or away: 0 when away until switched back. */
   asleep: number | null;
+  /** Away for days, not just asleep for the night. */
+  away: boolean;
 };
 
 async function liveNow(now = Date.now()): Promise<LiveNow | null> {
-  // Night beats everything: the playlist and any pin wait until morning.
+  // Away beats everything: the panel stays blank (white is how e-ink keeps best) until it's back.
   const sleep = store.getSleep();
+  const back = awayUntil(sleep, now);
+  if (back !== null) {
+    const frame = await sleepFrame({ ...sleep, screen: "blank" }, back);
+    return {
+      source: null,
+      slideId: null,
+      clip: null,
+      endsAt: back || null,
+      asleep: back,
+      away: true,
+      // One tag for every date: changing when you're back must not redraw the same white panel.
+      etag: `"away"`,
+      file: frame ? (k) => frame[k] : null,
+    };
+  }
+
+  // Then night: the playlist and any pin wait until morning.
   const until = sleepUntil(sleep, now);
   if (until) {
     const frame = await sleepFrame(sleep, until);
@@ -70,6 +89,7 @@ async function liveNow(now = Date.now()): Promise<LiveNow | null> {
       clip: null,
       endsAt: until,
       asleep: until,
+      away: false,
       etag: `"sleep-${sleep.screen}-${until}"`,
       file: frame ? (k) => frame[k] : null,
     };
@@ -86,7 +106,7 @@ async function liveNow(now = Date.now()): Promise<LiveNow | null> {
   // Show now is a new frame even when it's the picture already up: the panel should redraw it, cleanly.
   const pin = store.getLive();
   const etag = pin.mode === "pin" && !s.slideId ? `${f.etag.slice(0, -1)}-now${pin.until ?? 0}"` : f.etag;
-  return { ...s, endsAt: ends.length ? Math.min(...ends) : null, etag, file: f.file, asleep: null };
+  return { ...s, endsAt: ends.length ? Math.min(...ends) : null, etag, file: f.file, asleep: null, away: false };
 }
 
 /** Resolve on the next edit, when the current clip runs out, or after `maxMs`. */
@@ -108,7 +128,7 @@ function nextChange(current: LiveNow | null, maxMs: number) {
 // GET /live.bin      800×480 1bpp, MSB first, 1 = white (48,000 bytes)
 // ?wait=1 with If-None-Match: hold up to 55s until the frame changes (long-poll).
 // X-Next-Change: seconds until the frame changes by itself, if it will.
-// X-Sleep-Until: while asleep, when the panel wakes (ms since epoch). 204 = keep the last picture.
+// X-Sleep-Until: while asleep or away, when the panel wakes (ms since epoch; 0 = when switched back). 204 = keep the last picture.
 // X-Source-Name: the drawing's or app's name, URI-encoded (names aren't always ASCII), for logs.
 // X-Show-Now: while Show now holds /live, when it ends (ms since epoch): a new value is a fresh Show now.
 
@@ -132,11 +152,11 @@ async function live(c: Context, kind: "mono" | "bin") {
     const name = now.source.kind === "image" ? store.getImageMeta(now.source.id)?.name : store.getApp(now.source.id)?.name;
     if (name) c.header("X-Source-Name", encodeURIComponent(name));
   }
-  if (now.asleep) c.header("X-Sleep-Until", String(now.asleep));
+  if (now.asleep !== null) c.header("X-Sleep-Until", String(now.asleep));
   if (now.endsAt) c.header("X-Next-Change", String(Math.ceil((now.endsAt - Date.now()) / 1000)));
   // Someone just asked for this picture: the panel flashes clean before drawing it.
   const pin = store.getLive();
-  if (pin.mode === "pin" && !now.asleep) c.header("X-Show-Now", String(pin.until ?? 0));
+  if (pin.mode === "pin" && now.asleep === null) c.header("X-Show-Now", String(pin.until ?? 0));
   if (etag === now.etag) return c.body(null, 304);
   if (!now.file) return c.body(null, 204);
 
@@ -308,6 +328,7 @@ async function state() {
       clip: live.clip,
       etag: live.etag,
       asleep: live.asleep,
+      away: live.away,
       blank: !live.file,
     },
     sleep: store.getSleep(),
