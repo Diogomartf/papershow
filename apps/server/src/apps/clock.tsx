@@ -1,5 +1,5 @@
 import * as store from "../db.ts";
-import { doodleImage } from "../render.ts";
+import { doodleImage, inkBox } from "../render.ts";
 import { clockParts, defineApp, sheet, type Field } from "./types.ts";
 
 // XL runs the time edge to edge; Large fills the panel with room around it; the others leave more.
@@ -47,14 +47,22 @@ function freeSpace(k: number, hour12: boolean, showDate: boolean): Box[] {
 
 // Shrunk drawings by id, version and size: sizes come in 8 px steps, so they repeat.
 const shrunk = new Map<string, ReturnType<typeof doodleImage>>();
+// Where each drawing's ink is, by id and version: finding it is the slow part, and it's the same at every size.
+const inks = new Map<string, ReturnType<typeof inkBox>>();
 
 function shrink(id: string, w: number, h: number) {
   const meta = store.getImageMeta(id);
-  const file = meta && store.getImageFile(id, "png");
-  if (!file) return null;
+  if (!meta) return null;
   const key = `${id}:${meta.updatedAt}:${w}x${h}`;
   if (!shrunk.has(key)) {
-    shrunk.set(key, doodleImage(file.data, w, h));
+    const file = store.getImageFile(id, "png");
+    if (!file) return null;
+    const version = `${id}:${meta.updatedAt}`;
+    if (!inks.has(version)) {
+      inks.set(version, inkBox(file.data));
+      if (inks.size > 100) inks.delete(inks.keys().next().value!);
+    }
+    shrunk.set(key, doodleImage(file.data, w, h, inks.get(version)));
     if (shrunk.size > 300) shrunk.delete(shrunk.keys().next().value!);
   }
   return shrunk.get(key)!;

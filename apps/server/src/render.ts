@@ -124,7 +124,33 @@ export function ditheredImage(
  * around a clock: anything but near-white counts as ink, so thin lines shrunk to a third still read on the panel.
  * Null when the drawing is blank.
  */
-export function doodleImage(png: Uint8Array, maxW: number, maxH: number) {
+export function doodleImage(png: Uint8Array, maxW: number, maxH: number, crop = inkBox(png)) {
+  if (!crop) return null;
+  const { cw, ch, gray: src } = crop;
+  const scale = Math.min(1, maxW / cw, maxH / ch);
+  const ow = Math.max(1, Math.round(cw * scale)), oh = Math.max(1, Math.round(ch * scale));
+  // Shrink by averaging each output pixel's patch of the drawing: quick, and as smooth as resampling needs to be here.
+  const gray = new Uint8Array(ow * oh);
+  for (let oy = 0; oy < oh; oy++) {
+    const y0 = Math.floor((oy * ch) / oh), y1 = Math.max(y0 + 1, Math.floor(((oy + 1) * ch) / oh));
+    for (let ox = 0; ox < ow; ox++) {
+      const x0 = Math.floor((ox * cw) / ow), x1 = Math.max(x0 + 1, Math.floor(((ox + 1) * cw) / ow));
+      let sum = 0;
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) sum += src[y * cw + x];
+      // A lighter cut than the frame's threshold: shrinking greys out thin lines, and they should stay black.
+      gray[oy * ow + ox] = sum / ((y1 - y0) * (x1 - x0)) < 210 ? 0 : 255;
+    }
+  }
+  const mono = encode({ width: ow, height: oh, data: gray, channels: 1, depth: 8 });
+  return { src: `data:image/png;base64,${Buffer.from(mono).toString("base64")}`, width: ow, height: oh };
+}
+
+/**
+ * Where a drawing's ink is: the box `doodleImage` crops to, in the drawing's pixels. The slow half of a doodle
+ * (decoding and scanning every pixel), so callers drawing one drawing at several sizes find it once.
+ * Null when the drawing is blank.
+ */
+export function inkBox(png: Uint8Array) {
   const img = decode(png);
   const { width: w, height: h, channels } = img;
   const data = img.data as Uint8Array | Uint16Array;
@@ -168,17 +194,14 @@ export function doodleImage(png: Uint8Array, maxW: number, maxH: number) {
   const pad = 4;
   x0 = Math.max(0, x0 - pad), y0 = Math.max(0, y0 - pad), x1 = Math.min(w - 1, x1 + pad), y1 = Math.min(h - 1, y1 + pad);
   const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
-  const scale = Math.min(1, maxW / cw, maxH / ch);
-  const ow = Math.max(1, Math.round(cw * scale)), oh = Math.max(1, Math.round(ch * scale));
-  const href = `data:image/png;base64,${Buffer.from(png).toString("base64")}`;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${ow}" height="${oh}" viewBox="${x0} ${y0} ${cw} ${ch}">
-    <image href="${href}" width="${w}" height="${h}"/>
-  </svg>`;
-  const out = new Resvg(svg, { background: "#ffffff" }).render();
-  const px = out.pixels;
-  const gray = new Uint8Array(ow * oh);
-  // A lighter cut than the frame's threshold: shrinking greys out thin lines, and they should stay black.
-  for (let i = 0; i < gray.length; i++) gray[i] = px[i * 4] * 0.3 + px[i * 4 + 1] * 0.59 + px[i * 4 + 2] * 0.11 < 210 ? 0 : 255;
-  const mono = encode({ width: ow, height: oh, data: gray, channels: 1, depth: 8 });
-  return { src: `data:image/png;base64,${Buffer.from(mono).toString("base64")}`, width: ow, height: oh };
+  // The cropped drawing in grey, as it looks on white paper, ready to shrink to any size.
+  const gray = new Uint8Array(cw * ch);
+  for (let y = 0; y < ch; y++)
+    for (let x = 0; x < cw; x++) {
+      const p = ((y + y0) * w + x + x0) * channels;
+      const alpha = channels === 4 || channels === 2 ? data[p + channels - 1] / max : 1;
+      const luma = channels >= 3 ? (data[p] * 0.3 + data[p + 1] * 0.59 + data[p + 2] * 0.11) / max : data[p] / max;
+      gray[y * cw + x] = 255 * (luma * alpha + 1 - alpha);
+    }
+  return { cw, ch, gray };
 }

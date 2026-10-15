@@ -19,7 +19,7 @@ const SECTIONS = [
   { id: "draw", href: "/draw", label: "Draw" },
 ] as const;
 
-export type Section = (typeof SECTIONS)[number]["id"];
+export type Section = (typeof SECTIONS)[number]["id"] | "people" | "log";
 
 export function Nav({ current }: { current: Section }) {
   return (

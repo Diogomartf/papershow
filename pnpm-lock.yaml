@@ -16,6 +16,7 @@ importers:
       '@types/node': '24'
       fast-png: 8.0.0
       hono: 4.13.13
+      qrcode-generator: 2.0.4
       satori: 0.47.1
       tsx: 4.23.15
       typescript: ~6.0.2
@@ -28,6 +29,7 @@ importers:
       '@resvg/resvg-js': 2.6.2
       fast-png: 8.0.0
       hono: 4.13.13
+      qrcode-generator: 2.0.4
       satori: 0.47.1
       tsx: 4.23.15
     devDependencies:
@@ -1178,6 +1180,10 @@ packages:
       picocolors: 1.1.1
       source-map-js: 1.2.2
     dev: true
+
+  /qrcode-generator/2.0.4:
+    resolution: {integrity: sha512-mZSiP6RnbHl4xL2Ap5HfkjLnmxfKcPWpWe/c+5XxCuetEenqmNFf1FH/ftXPCtFG5/TDobjsjz6sSNL0Sr8Z9g==}
+    dev: false
 
   /react-dom/19.3.0_react@19.3.0:
     resolution: {integrity: sha512-JDk8dgif51OjFoDE70+OT9ICyYr+69HlmihNwp1+Nsfbna3t5sIiCa9ZJktDmQ4/1b/rn26hIAR2uYXDMr5r0Q==}

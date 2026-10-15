@@ -15,13 +15,18 @@ function publish(s: State | null) {
   for (const l of listeners) l();
 }
 
+/** Start from state fetched elsewhere (as the page boots), so the first paint already has it. */
+export const primeState = (s: State) => publish(s);
+
 async function poll() {
   polling = true;
-  try {
-    publish(await api.getState());
-  } catch {
-    /* the loop below retries */
-  }
+  // Already primed at boot: go straight to waiting for changes.
+  if (!snap.state)
+    try {
+      publish(await api.getState());
+    } catch {
+      /* the loop below retries */
+    }
   while (listeners.size) {
     try {
       const s = await api.waitState();

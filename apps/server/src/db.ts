@@ -115,17 +115,27 @@ if (!db.prepare("select 1 from settings where key = 'show-ready'").get()) {
   db.exec("commit");
 }
 
-export type ImageMeta = { id: string; name: string; updatedAt: number };
+// Who made each drawing, app and playlist. Anyone can use them; only the maker or an admin changes them.
+for (const table of ["images", "apps", "playlists"])
+  if (!(db.prepare(`pragma table_info(${table})`).all() as { name: string }[]).some((c) => c.name === "made_by"))
+    db.exec(`alter table ${table} add column made_by text`);
+
+/** The first person in the house becomes the maker of everything made before there were people. */
+export function claimAll(personId: string) {
+  for (const table of ["images", "apps", "playlists"]) db.prepare(`update ${table} set made_by = ? where made_by is null`).run(personId);
+}
+
+export type ImageMeta = { id: string; name: string; updatedAt: number; madeBy: string | null };
 export type ImageKind = "png" | "mono" | "bin";
 
 export function listImages(): ImageMeta[] {
   return db
-    .prepare("select id, name, updated_at as updatedAt from images order by updated_at desc")
+    .prepare("select id, name, updated_at as updatedAt, made_by as madeBy from images order by updated_at desc")
     .all() as ImageMeta[];
 }
 
 export function getImageMeta(id: string): ImageMeta | undefined {
-  return db.prepare("select id, name, updated_at as updatedAt from images where id = ?").get(id) as
+  return db.prepare("select id, name, updated_at as updatedAt, made_by as madeBy from images where id = ?").get(id) as
     | ImageMeta
     | undefined;
 }
@@ -142,12 +152,13 @@ export function getImageFile(id: string, kind: ImageKind) {
     | undefined;
 }
 
-export function putImage(scene: Scene, files: Record<ImageKind, Uint8Array>) {
+/** Save a drawing. `madeBy` is kept from the first save: redrawing someone's drawing doesn't make it yours. */
+export function putImage(scene: Scene, files: Record<ImageKind, Uint8Array>, madeBy: string) {
   db.prepare(
-    `insert into images (id, name, scene, png, mono, bin, updated_at) values (?, ?, ?, ?, ?, ?, ?)
+    `insert into images (id, name, scene, png, mono, bin, updated_at, made_by) values (?, ?, ?, ?, ?, ?, ?, ?)
      on conflict(id) do update set name = excluded.name, scene = excluded.scene, png = excluded.png,
        mono = excluded.mono, bin = excluded.bin, updated_at = excluded.updated_at`,
-  ).run(scene.id, scene.name, JSON.stringify(scene), files.png, files.mono, files.bin, scene.updatedAt);
+  ).run(scene.id, scene.name, JSON.stringify(scene), files.png, files.mono, files.bin, scene.updatedAt, madeBy);
 }
 
 export function deleteImage(id: string) {
@@ -164,10 +175,17 @@ function unpin(source: Source) {
 
 // ── Apps ─────────────────────────────────────────────────────────────────
 
-export type AppRow = { id: string; kind: string; name: string; config: Record<string, unknown>; updatedAt: number };
+export type AppRow = { id: string; kind: string; name: string; config: Record<string, unknown>; updatedAt: number; madeBy: string | null };
 
-type AppDbRow = { id: string; kind: string; name: string; config: string; updated_at: number };
-const toApp = (r: AppDbRow): AppRow => ({ id: r.id, kind: r.kind, name: r.name, config: JSON.parse(r.config), updatedAt: r.updated_at });
+type AppDbRow = { id: string; kind: string; name: string; config: string; updated_at: number; made_by: string | null };
+const toApp = (r: AppDbRow): AppRow => ({
+  id: r.id,
+  kind: r.kind,
+  name: r.name,
+  config: JSON.parse(r.config),
+  updatedAt: r.updated_at,
+  madeBy: r.made_by,
+});
 
 export function listApps(): AppRow[] {
   return (db.prepare("select * from apps order by updated_at desc").all() as AppDbRow[]).map(toApp);
@@ -178,14 +196,15 @@ export function getApp(id: string): AppRow | undefined {
   return row && toApp(row);
 }
 
-export function createApp(kind: string, name: string, config: Record<string, unknown>): AppRow {
+export function createApp(kind: string, name: string, config: Record<string, unknown>, madeBy: string): AppRow {
   const id = crypto.randomUUID().slice(0, 8);
-  db.prepare("insert into apps (id, kind, name, config, updated_at) values (?, ?, ?, ?, ?)").run(
+  db.prepare("insert into apps (id, kind, name, config, updated_at, made_by) values (?, ?, ?, ?, ?, ?)").run(
     id,
     kind,
     name,
     JSON.stringify(config),
     Date.now(),
+    madeBy,
   );
   return getApp(id)!;
 }
@@ -393,20 +412,22 @@ export const deleteShowEntry = (id: string) => db.prepare("delete from show wher
 // ── Playlists ──────────────────────────────────────────────────────────────
 
 /** A playlist is made of images and/or apps. Whether and when it plays is up to the show. */
-export type Playlist = { id: string; name: string; position: number; enabled: boolean };
+export type Playlist = { id: string; name: string; position: number; enabled: boolean; madeBy: string | null };
 
 export function listPlaylists(): Playlist[] {
-  return (db.prepare("select * from playlists order by position").all() as (Omit<Playlist, "enabled"> & { enabled: number })[]).map(
-    (p) => ({ ...p, enabled: !!p.enabled }),
-  );
+  return (
+    db.prepare("select id, name, position, enabled, made_by as madeBy from playlists order by position").all() as (Omit<Playlist, "enabled"> & {
+      enabled: number;
+    })[]
+  ).map((p) => ({ ...p, enabled: !!p.enabled }));
 }
 
 export const getPlaylist = (id: string) => listPlaylists().find((p) => p.id === id);
 
-export function createPlaylist(name: string): Playlist {
+export function createPlaylist(name: string, madeBy: string): Playlist {
   const id = crypto.randomUUID().slice(0, 8);
   const { next } = db.prepare("select coalesce(max(position), -1) + 1 as next from playlists").get() as { next: number };
-  db.prepare("insert into playlists (id, name, position) values (?, ?, ?)").run(id, name, next);
+  db.prepare("insert into playlists (id, name, position, made_by) values (?, ?, ?, ?)").run(id, name, next, madeBy);
   return getPlaylist(id)!;
 }
 

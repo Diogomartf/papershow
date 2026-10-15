@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import type { Scene } from "@papershow/scene";
 import { deleteImage, fileUrl, getImage, imageUrl, listImages, type ImageMeta } from "./store";
 import { setLive } from "./slides";
+import { mine, tint, useMe } from "./house";
+import { useLiveState } from "./live";
 
 type Props = {
   open: boolean;
@@ -14,6 +16,8 @@ type Props = {
 
 export function Gallery({ open, refreshKey, currentId, onClose, onOpen, onLive }: Props) {
   const [items, setItems] = useState<ImageMeta[] | null>(null);
+  const { me } = useMe();
+  const everyone = useLiveState().state?.people ?? [];
 
   useEffect(() => {
     if (open) listImages().then(setItems, () => setItems([]));
@@ -58,11 +62,17 @@ export function Gallery({ open, refreshKey, currentId, onClose, onOpen, onLive }
                   <img src={fileUrl(item)} alt="" />
                 </button>
                 <div className="meta">
-                  <span className="title">{item.name}</span>
+                  <span className="title">
+                    {(() => {
+                      const maker = everyone.find((p) => p.id === item.madeBy);
+                      return maker ? <span className="face-mini" style={tint(maker.color)} title={`By ${maker.name}`}>{maker.face}</span> : null;
+                    })()}{" "}
+                    {item.name}
+                  </span>
                   <span className="actions">
                     <button onClick={() => live(item)}>Show on /live</button>
                     <a href={imageUrl(item.id)} target="_blank" rel="noreferrer">Open ↗</a>
-                    <button onClick={() => remove(item.id)}>Delete</button>
+                    {mine(me, item.madeBy) && <button onClick={() => remove(item.id)}>Delete</button>}
                   </span>
                 </div>
               </li>

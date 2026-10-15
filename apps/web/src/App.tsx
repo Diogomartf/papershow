@@ -5,11 +5,13 @@ import "@fontsource-variable/inter";
 import { PANEL, type Scene, type TextItem } from "@papershow/scene";
 import { paintMono, renderScene } from "./render";
 import { getDraft, getSaved, imageUrl, putDraft, putImage, putSaved } from "./store";
+import { Oops } from "./house";
 import { Gallery } from "./Gallery";
 import { setLive } from "./slides";
 import { Nav } from "./Nav";
 import { useNarrow } from "./media";
 import { LightSwitch } from "./LightSwitch";
+import { MeMenu } from "./MeMenu";
 import { TextLayer } from "./TextLayer";
 import { shortId } from "./id";
 
@@ -100,14 +102,25 @@ export default function App() {
     const tab = then === "open" ? window.open("", "_blank") : null;
     setSaving(true);
     try {
-      const current = { ...scene, strokes: draw.current?.getStrokes() ?? scene.strokes, updatedAt: Date.now() };
-      await putImage(current, await renderScene(current));
+      let current = { ...scene, strokes: draw.current?.getStrokes() ?? scene.strokes, updatedAt: Date.now() };
+      const files = await renderScene(current);
+      let copied = false;
+      try {
+        await putImage(current, files);
+      } catch (err) {
+        // Someone else's drawing: keep theirs as it is and save yours as a copy.
+        if (!(err instanceof Oops && err.status === 403)) throw err;
+        current = { ...current, id: shortId(), name: `${current.name} (my version)` };
+        await putImage(current, files);
+        copied = true;
+      }
       await putSaved(current);
       setScene(current);
       setGalleryKey((k) => k + 1);
       if (tab) tab.location.href = imageUrl(current.id);
       if (then === "show") await setLive({ mode: "pin", source: { kind: "image", id: current.id } });
-      flash(then === "show" ? "Saved · on the panel for 15 minutes" : tab ? "Saved · opened in a new tab" : "Saved");
+      const saved = copied ? "Saved as your own copy" : "Saved";
+      flash(then === "show" ? `${saved} · on the panel for 15 minutes` : tab ? `${saved} · opened in a new tab` : saved);
     } catch (err) {
       tab?.close();
       flash("Couldn't save. Try again");
@@ -195,6 +208,7 @@ export default function App() {
             {saving ? "Saving…" : "Save"}
             <kbd>⌘S</kbd>
           </button>
+          <MeMenu />
         </div>
       </header>
 

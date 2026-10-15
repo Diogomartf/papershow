@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
+import { MeMenu } from "./MeMenu";
 import { Nav, navigate } from "./Nav";
 import { useLiveState, useNow } from "./live";
 import * as api from "./slides";
@@ -198,6 +199,7 @@ export function Show() {
         <div className="bar-right">
           <LightSwitch />
           <LiveLink />
+          <MeMenu />
         </div>
       </header>
 

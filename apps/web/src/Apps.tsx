@@ -2,10 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Blocks } from "./Blocks";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
+import { MeMenu } from "./MeMenu";
 import { Nav, navigate } from "./Nav";
 import * as appsApi from "./apps";
 import type { AppInstance, AppKind, Field } from "./apps";
 import { addToShow, setLive } from "./slides";
+import { mine, tint, useMe } from "./house";
+import { useLiveState } from "./live";
 
 /** The form's state, tagged with the app it belongs to so it can never be saved onto another. */
 type Draft = { id: string; name: string; config: Record<string, unknown> };
@@ -19,8 +22,9 @@ const toForm = (fields: Field[], config: Record<string, unknown>) =>
 
 /** `newKind`: setting up an app that isn't created yet; nothing is saved until "Create app". */
 export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
-  const [catalog, setCatalog] = useState<AppKind[]>([]);
-  const [apps, setApps] = useState<AppInstance[] | null>(null);
+  // Start from what the page already loaded (at boot, or the last visit), then refresh.
+  const [catalog, setCatalog] = useState<AppKind[]>(() => appsApi.cached.catalog ?? []);
+  const [apps, setApps] = useState<AppInstance[] | null>(() => appsApi.cached.apps);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   // Rendering can take a few seconds (prices, names, logos fetched first): say so, and say if it failed.
@@ -49,9 +53,17 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
   }, [id, newKind, apps]);
 
   const current = apps?.find((a) => a.id === id) ?? null;
+  const { me } = useMe();
+  const everyone = useLiveState().state?.people ?? [];
+  const makerOf = (madeBy: string | null) => everyone.find((p) => p.id === madeBy);
+  // Anyone can show, add or duplicate an app; only its maker or an admin changes it.
+  const canChange = !current || mine(me, current.madeBy);
+  const maker = current && makerOf(current.madeBy);
   const kindId = current?.kind ?? newKind;
   const kind = useMemo(() => catalog.find((k) => k.kind === kindId), [catalog, kindId]);
   const isNew = !current && !!newKind && !!kind;
+  // Until the live render comes back, the saved app's current frame: the browser has it from the list already.
+  const shown = preview ?? (current && view === "eink" ? appsApi.appFrameUrl(current) : null);
 
   // Load the selected app into the form.
   const lastSaved = useRef("");
@@ -111,7 +123,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
 
   // Save shortly after you stop typing.
   useEffect(() => {
-    if (!draft || draft.id !== current?.id) return;
+    if (!draft || draft.id !== current?.id || !canChange) return;
     const b = body(draft);
     if (b === lastSaved.current) return;
     setSaved(false);
@@ -122,7 +134,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
       setSaved(true);
     }, 450);
     return () => clearTimeout(t);
-  }, [draft, current?.id]);
+  }, [draft, current?.id, canChange]);
 
   const flash = (msg: string) => {
     setToast(msg);
@@ -166,12 +178,13 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
         <div className="bar-right">
           <LightSwitch />
           <LiveLink />
+          <MeMenu />
         </div>
       </header>
 
       <main className="apps-main">
         <aside className="rail">
-          <h2>Your apps</h2>
+          <h2>House apps</h2>
           <ul className="rail-list">
             {apps?.map((a) => (
               <li key={a.id}>
@@ -188,6 +201,11 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
                     <strong>{a.id === id && draft ? draft.name : a.name}</strong>
                     <small>{catalog.find((k) => k.kind === a.kind)?.name}</small>
                   </span>
+                  {makerOf(a.madeBy) && (
+                    <span className="face-mini maker" style={tint(makerOf(a.madeBy)!.color)} title={`By ${makerOf(a.madeBy)!.name}`}>
+                      {makerOf(a.madeBy)!.face}
+                    </span>
+                  )}
                 </a>
               </li>
             ))}
@@ -218,15 +236,16 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
         <section className="app-stage">
           <div className="device small">
             <div className="panel">
-              {preview && (current || isNew) ? (
-                <img className="live-img" data-view={view} key={preview} src={preview} alt="" />
+              {shown && (current || isNew) ? (
+                <img className="live-img" data-view={view} data-quiet={saved && !isNew} key={shown} src={shown} alt="" />
               ) : (
                 <p className="panel-empty">{apps?.length === 0 ? "Pick an app on the left to set it up." : ""}</p>
               )}
-              {(current || isNew) && loading && (
-                <div className="panel-loading" data-over={!!preview} role="status">
-                  <Blocks size={preview ? 5 : 18} />
-                  <span>{preview ? "Updating…" : `Loading ${kind?.name ?? "app"}…`}</span>
+              {/* Nothing to say while it only re-renders what the saved frame already shows. */}
+              {(current || isNew) && loading && (!shown || !saved) && (
+                <div className="panel-loading" data-over={!!shown} role="status">
+                  <Blocks size={shown ? 5 : 18} />
+                  <span>{shown ? "Updating…" : `Loading ${kind?.name ?? "app"}…`}</span>
                 </div>
               )}
               {(current || isNew) && failed && !loading && (
@@ -254,10 +273,11 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
                   className="name"
                   value={draft.name}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  readOnly={!canChange}
                   aria-label="App name"
                   spellCheck={false}
                 />
-                <span className="saved" data-on={saved}>{isNew ? "Not created yet" : saved ? "Saved" : "Saving…"}</span>
+                <span className="saved" data-on={saved}>{isNew ? "Not created yet" : !canChange ? "" : saved ? "Saved" : "Saving…"}</span>
               </div>
               <p className="muted kind-line">
                 {kind.name}
@@ -266,9 +286,20 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
                 {kind.mock && <span className="chip">Mock data</span>}
               </p>
 
-              {kind.fields.map((f) => (
-                <FieldInput key={f.key} field={f} value={draft.config[f.key]} onChange={(v) => set(f.key, v)} />
-              ))}
+              {!canChange && (
+                <p className="made-by">
+                  {maker && <span className="face-mini" style={tint(maker.color)} aria-hidden>{maker.face}</span>}
+                  <span>
+                    {maker?.name ?? "Someone"} made this, so only they or an admin can change it. Duplicate it to make your own.
+                  </span>
+                </p>
+              )}
+
+              <fieldset className="plain" disabled={!canChange}>
+                {kind.fields.map((f) => (
+                  <FieldInput key={f.key} field={f} value={draft.config[f.key]} onChange={(v) => set(f.key, v)} />
+                ))}
+              </fieldset>
 
               {isNew ? (
                 <div className="settings-actions">
@@ -296,7 +327,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
                     Add to show
                   </button>
                   <button className="ghost" onClick={duplicate}>Duplicate</button>
-                  <button className="ghost danger" onClick={remove}>Delete</button>
+                  {canChange && <button className="ghost danger" onClick={remove}>Delete</button>}
                 </div>
               )}
             </>
