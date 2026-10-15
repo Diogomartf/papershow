@@ -933,7 +933,7 @@ a.live-link:hover .live-link-text { color: var(--ink); }
   background: linear-gradient(90deg, var(--signal) calc(var(--p) * 100%), var(--line) 0);
   transition: background 1s linear;
 }
-.dash-side { width: 280px; display: grid; gap: 14px; padding-bottom: 18px; }
+.dash-side { width: 280px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; padding-bottom: 18px; }
 .card {
   display: grid; gap: 8px;
   padding: 14px 16px;
@@ -1050,8 +1050,14 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 
 .night-settings { display: grid; gap: 12px; padding-top: 10px; margin-top: 2px; border-top: 1px solid var(--line); }
 .night-settings .night-row { align-items: center; }
+/* Hours and the panel choice are wider than this column. Drop the control under its label instead of widening the card. */
+.night-settings .night-row:has(.hours),
+.night-settings .night-row:has(.segmented) { flex-wrap: wrap; }
+.night-settings .hours,
+.night-settings .segmented { margin-left: auto; max-width: 100%; }
+.night-settings .segmented { flex-wrap: wrap; justify-content: flex-end; }
 .night-settings .segmented button { padding: 5px 9px; font-size: 13px; }
-.night-settings .hours input { font-size: 13px; }
+.night-settings .hours input { font-size: 13px; width: 6.6em; }
 
 /* ── Playlists overview ──────────────────────────── */
 
@@ -1433,8 +1439,8 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
 /* ── Power: turning the panel off ────────────────── */
 
 .toggle { flex-shrink: 0; }
-.power { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 14px; padding-top: 12px; margin-top: 2px; border-top: 1px solid var(--line); }
-.power-text { display: grid; gap: 3px; }
+.power { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px 14px; padding-top: 12px; margin-top: 2px; border-top: 1px solid var(--line); }
+.power-text { display: grid; gap: 3px; min-width: 0; }
 .power-text small { font-size: 12px; line-height: 1.35; }
 .power-btn {
   position: relative;
@@ -1820,6 +1826,7 @@ fieldset.plain:disabled > * { opacity: .55; }
 .rail-list .maker { margin-left: auto; }
 /* With a knock and the log in it, the side column can outgrow the room above the sequence: scroll it, don't spill it. */
 @media (min-width: 721px) {
-  .dash-side { max-height: 100%; overflow-y: auto; scrollbar-width: none; padding-top: 6px; margin-top: -6px; align-content: safe end; }
+  /* min-height: 0 lets the column shrink to the room above the desk and scroll, instead of running under it. */
+  .dash-side { max-height: 100%; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; padding-top: 6px; margin-top: -6px; align-content: safe end; }
 }
 .door-center.wide { max-width: 760px; }
