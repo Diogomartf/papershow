@@ -2,9 +2,9 @@
 """Papershow panel client: puts the server's /live frame on a Waveshare 7.5" V2 (800×480).
 
 It long-polls /live.bin and redraws only when the ETag changes, so the server decides when
-the picture changes and the panel never flashes for nothing. A picture sent with Show now
-(X-Show-Now) gets a black flash first, to wipe the old one off clean. See "The panel's
-contract" in the README.
+the picture changes and the panel never flashes for nothing. Waking from Off or the night
+shows the logo first, then the picture. A picture sent with Show now (X-Show-Now) gets a
+black flash first, to wipe the old one off clean. See "The panel's contract" in the README.
 
   PAPERSHOW_URL   server to follow (http://localhost:5194)
   PANEL_PARTIAL   quick partial refreshes in a row before a full one (10; 0 = always full)
@@ -100,9 +100,9 @@ class FilePanel:
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     panel = FilePanel(OUT) if OUT else Panel()
-    # The logo while the server starts up (apps/server/src/splash.tsx draws it).
-    splash = os.path.join(os.path.dirname(os.path.abspath(__file__)), "splash.png")
-    panel.show(Image.open(splash).convert("1").rotate(ROTATE), True)
+    # The logo while the server starts up, and again whenever the panel wakes (apps/server/src/splash.tsx draws it).
+    logo = Image.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "splash.png")).convert("1").rotate(ROTATE)
+    panel.show(logo, True)
     log.info("following %s", URL)
     etag = source = img = was_asleep = shown_now = None
     partials = PARTIAL  # the first frame after a start is a full refresh
@@ -120,6 +120,9 @@ def main():
         # Not while asleep: away for days, the panel was cleaned as it began and rests untouched.
         asleep = headers.get("X-Sleep-Until") is not None
         nightfall = asleep and was_asleep is False
+        # A full refresh resets the glass and leaves it blank until the picture settles. The logo
+        # covers that gap when the panel comes back from Off or the night.
+        woke = was_asleep is True and not asleep
         was_asleep = asleep
         drawable = img is not None or status == 200
         daily = not asleep and datetime.now().hour == CLEAN_HOUR
@@ -135,9 +138,13 @@ def main():
                 log.info("cleaned the panel")
             new_source = headers.get("X-Source")
             # Show now: a new value means someone just sent this picture. Flash first, once per send.
+            # Not after the logo: that frame is the intro, and a black flash would replace it.
             show_now = headers.get("X-Show-Now")
-            flash = show_now is not None and show_now != shown_now and not clean
+            flash = show_now is not None and show_now != shown_now and not clean and not woke
             shown_now = show_now
+            if woke:
+                panel.show(logo, True)
+                log.info("drew the logo")
             # A clock ticking over is the same source and suits a partial refresh. A new picture
             # gets a full one, and so does every PARTIAL-th tick, to clear the ghosting.
             full = clean or flash or new_source is None or new_source != source or partials >= PARTIAL
@@ -157,6 +164,10 @@ def main():
             partials = 0
             log.info("cleaned the panel")
         if status == 204:
+            # Nothing to draw yet. Still put the logo up once, so waking onto an empty show isn't a blank glass.
+            if woke:
+                panel.show(logo, True)
+                log.info("drew the logo")
             # Asleep and keeping the last picture. With an ETag we can keep long-polling. Without one,
             # wait briefly: a minute-long clip can start and finish during a longer sleep, and turning
             # the panel back on would sit on the white frame until that sleep ended.
