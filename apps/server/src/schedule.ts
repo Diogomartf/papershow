@@ -220,6 +220,25 @@ export function showing(live: Live, slides: Slide[], now = Date.now(), repeats: 
   return null; // unreachable
 }
 
+/**
+ * The picture still on the panel between turns, when nothing is scheduled this moment: the clip that just
+ * ended, held until the next one starts. Off cleans the panel to white, so turning it back on in a gap
+ * would otherwise keep that white frame and look still off.
+ */
+export function kept(slides: Slide[], now = Date.now(), repeats: Repeat[] = []): Showing | null {
+  if (!repeats.length) return null;
+  let ended = -1;
+  for (const r of repeats) {
+    const end = slotStart(r, now) + repeatMs(r);
+    if (end <= now && end > ended) ended = end;
+  }
+  if (ended < 0) return null;
+  const s = showing({ mode: "rotate" }, slides, ended - 1, repeats);
+  if (!s) return null;
+  const next = Math.min(...repeats.map((r) => nextSlot(r, now)));
+  return { ...s, endsAt: next, clip: s.clip && { startedAt: s.clip.startedAt, endsAt: next } };
+}
+
 /** The next few clip changes, for the admin's "up next". */
 export function upcoming(slides: Slide[], now = Date.now(), count = 3, repeats: Repeat[] = []): { slideId: string; at: number }[] {
   const out: { slideId: string; at: number }[] = [];

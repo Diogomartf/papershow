@@ -302,7 +302,7 @@ Photos and logos are prepared for e-ink one by one before layout (`ditheredImage
 - **At times**: any entry, a playlist too, can leave the loop and play only at set times each day (for example 08:00 and 20:00). At each one it interrupts the loop (a playlist plays its clips back to back), ending at least a minute before its next time. When two interruptions meet, the one higher in the show wins.
 - **Show now**: puts one drawing or app on `/live` once: for its turn (a clip's own length, else 15 minutes), then the show carries on by itself. **Resume now** ends it early. The panel flashes black before drawing it, so it goes up clean, and pressing it again on what's already up redraws it.
 - **Night**: sleep hours during which the panel shows a moon and the wake-up time, goes blank, or keeps its last picture.
-- **Off** (`away` in the API): beats the night and the show. The panel is deep-cleaned once, left white (how e-ink keeps best) and not touched again: no daily clean, no redraws, and the panel's power is cut, as it is between all frames. Only the Pi stays on, so you can turn it back on from anywhere.
+- **Off** (`away` in the API): beats the night and the show. The panel is deep-cleaned once, left white (how e-ink keeps best) and not touched again: no daily clean, no redraws, and the panel's power is cut, as it is between all frames. Only the Pi stays on, so you can turn it back on from anywhere. It shows the current clip at once; between clips it keeps the one that just played, rather than sitting on the white frame.
 
 The rotation runs on wall-clock time: the position in the cycle comes from `now % cycle length`. A restart doesn't change what's on air.
 

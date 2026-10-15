@@ -157,11 +157,14 @@ def main():
             partials = 0
             log.info("cleaned the panel")
         if status == 204:
-            # Asleep and keeping the last picture. With an ETag we can keep long-polling; without one
-            # nothing is on air, so don't spin.
-            etag = headers.get("ETag")
-            if not etag:
-                time.sleep(60)
+            # Asleep and keeping the last picture. With an ETag we can keep long-polling. Without one,
+            # wait briefly: a minute-long clip can start and finish during a longer sleep, and turning
+            # the panel back on would sit on the white frame until that sleep ended.
+            got = headers.get("ETag")
+            if got:
+                etag = got
+            else:
+                time.sleep(5)
         elif status != 304:
             log.warning("unexpected answer %s (%d bytes); retrying in 30 s", status, len(body))
             time.sleep(30)

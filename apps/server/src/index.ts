@@ -10,7 +10,7 @@ import { watchModels } from "./ai.ts";
 import * as store from "./db.ts";
 import { inviteFrame, qrSvg } from "./invite.tsx";
 import * as people from "./people.ts";
-import { awayUntil, sequence, showing, sleepUntil, upcoming, type Live, type Showing, type Source } from "./schedule.ts";
+import { awayUntil, kept, sequence, showing, sleepUntil, upcoming, type Live, type Showing, type Source } from "./schedule.ts";
 import { sleepFrame } from "./sleep.tsx";
 
 // Secrets such as GROQ_API_KEY and MASSIVE_API_KEY live in .env at the repo root (not committed).
@@ -127,7 +127,10 @@ async function liveNow(now = Date.now()): Promise<LiveNow | null> {
     };
   }
 
-  const s = showing(store.getLive(), store.loopSlides(), now, store.repeats());
+  const slides = store.loopSlides();
+  const reps = store.repeats();
+  // Between clips the panel keeps the one that just ended. A bare 204 would keep the white off frame instead.
+  const s = showing(store.getLive(), slides, now, reps) ?? kept(slides, now, reps);
   if (!s) return null;
   const f = await sourceFrame(s.source, now).catch((err) => {
     console.error("render failed", s.source, err);
@@ -161,7 +164,7 @@ function nextChange(current: LiveNow | null, maxMs: number) {
 // GET /live.bin      800×480 1bpp, MSB first, 1 = white (48,000 bytes)
 // ?wait=1 with If-None-Match: hold up to 55s until the frame changes (long-poll).
 // X-Next-Change: seconds until the frame changes by itself, if it will.
-// X-Sleep-Until: while asleep or away, when the panel wakes (ms since epoch; 0 = when switched back). 204 = keep the last picture.
+// X-Sleep-Until: while asleep or away, when the panel wakes (ms since epoch; 0 = when switched back). 204 = keep the last picture; ETag "idle" when nothing has played.
 // X-Source: app:<id>, image:<id>, or invite:<code> while an invite is on the panel.
 // X-Source-Name: the drawing's or app's name, URI-encoded (names aren't always ASCII), for logs.
 // X-Show-Now: while Show now or an invite holds /live, when it ends (ms since epoch): a new value is a fresh one.
@@ -173,11 +176,17 @@ async function live(c: Context, kind: "mono" | "bin") {
   if (!c.req.query("e")) lastSeen = { at: Date.now(), agent: c.req.header("user-agent") ?? "" };
   let now = await liveNow();
   const etag = c.req.header("if-none-match");
-  if (c.req.query("wait") && etag && now?.etag === etag) {
+  // Nothing on air uses its own tag, so the panel can keep waiting instead of coming back a minute later.
+  const same = !!etag && (now ? now.etag === etag : etag === `"idle"`);
+  if (c.req.query("wait") && same) {
     await nextChange(now, 55_000);
     now = await liveNow();
   }
-  if (!now) return c.body(null, 204);
+  if (!now) {
+    c.header("ETag", `"idle"`);
+    c.header("Cache-Control", "no-cache");
+    return c.body(null, 204);
+  }
 
   c.header("ETag", now.etag);
   c.header("Cache-Control", "no-cache");
