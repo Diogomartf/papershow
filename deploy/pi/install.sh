@@ -195,9 +195,11 @@ if [ ${#others[@]} -gt 0 ]; then
 fi
 
 # Say it's ready only once the server answers: it takes a few seconds to start after the restart.
+# /api/state needs someone signed in, so a fresh house answers 401. /api/hello is the sign-in screen and stays open.
 echo
+ready="http://127.0.0.1:$port/api/hello"
 for _ in $(seq 30); do
-  curl -fs -o /dev/null "http://127.0.0.1:$port/api/state" && break
+  curl -fs -o /dev/null "$ready" && break
   sleep 1
 done
 open="http://$name.local"
@@ -212,7 +214,7 @@ rule="$dim$(printf '─%.0s' $(seq 56))$off"
 row() { printf '  %s%-10s%s %s\n' "$dim" "$1" "$off" "$2"; }
 echo "$rule"
 echo
-if curl -fs -o /dev/null "http://127.0.0.1:$port/api/state"; then
+if curl -fs -o /dev/null "$ready"; then
   echo "  ${green}✓ Papershow $action! Ready to use.$off"
   echo
   row Version "$bold$(git -C "$repo" log -1 --format=%h)$off $(git -C "$repo" log -1 --format=%s)"
