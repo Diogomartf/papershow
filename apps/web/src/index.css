@@ -1718,11 +1718,12 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
 
 /* The house page and the log */
 .people-page .people-main {
-  min-height: 0; overflow-y: auto;
+  min-height: 0; overflow-y: auto; scrollbar-width: none;
   width: 100%; max-width: 820px; margin: 0 auto;
   display: grid; align-content: start; gap: 30px;
   padding: 8px 20px 72px;
 }
+.people-page .people-main::-webkit-scrollbar { display: none; }
 .people-section { display: grid; gap: 12px; }
 .people-section h2 { margin: 0; font: 600 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; }
@@ -1823,7 +1824,7 @@ button.link.danger { color: var(--danger); }
 .made-by { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--tint); font-size: 13px; line-height: 1.4; color: var(--ink-2); }
 fieldset.plain { display: contents; border: 0; margin: 0; padding: 0; min-width: 0; }
 fieldset.plain:disabled > * { opacity: .55; }
-.rail-list .maker { margin-left: auto; }
+.rail-list .maker { margin-left: auto; width: 22px; height: 22px; font-size: 12px; }
 /* With a knock and the log in it, the side column can outgrow the room above the sequence: scroll it, don't spill it. */
 @media (min-width: 721px) {
   /* min-height: 0 lets the column shrink to the room above the desk and scroll, instead of running under it. */

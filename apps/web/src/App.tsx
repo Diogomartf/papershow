@@ -20,11 +20,13 @@ const SWATCHES = ["#111111", "#555555", "#999999", "#d4d4d4", "#ffffff", "#e5484
 // E-ink mode: only what the panel can actually show.
 const SWATCHES_EINK = ["#000000", "#ffffff"];
 
+const UNTITLED = "Untitled";
+
 const newScene = (): Scene => {
   const now = Date.now();
   return {
     id: shortId(),
-    name: "Untitled",
+    name: UNTITLED,
     width: PANEL.w,
     height: PANEL.h,
     background: "#ffffff",
@@ -34,6 +36,19 @@ const newScene = (): Scene => {
     updatedAt: now,
   };
 };
+
+/** A name from the first words on the drawing. Empty text stays Untitled. */
+function nameFromText(texts: TextItem[] | undefined): string {
+  for (const item of texts ?? []) {
+    const line = item.text.replace(/\s+/g, " ").trim();
+    if (!line) continue;
+    if (line.length <= 48) return line;
+    const cut = line.slice(0, 48);
+    const at = cut.lastIndexOf(" ");
+    return (at > 16 ? cut.slice(0, at) : cut).trimEnd();
+  }
+  return UNTITLED;
+}
 
 type View = "ink" | "eink";
 
@@ -50,12 +65,22 @@ export default function App() {
   const [typing, setTyping] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   const narrow = useNarrow();
+  // True once the name field is typed in. Until then the name follows the text, instead of staying Untitled.
+  const nameEdited = useRef(false);
+
+  /** A drawing nobody named takes its name from its text. A name that already is that text still follows it. */
+  const adopt = (s: Scene): Scene => {
+    const fromText = nameFromText(s.texts);
+    const untouched = !s.name.trim() || s.name === UNTITLED || s.name === fromText;
+    nameEdited.current = !untouched;
+    return untouched ? { ...s, name: fromText } : s;
+  };
 
   useEffect(() => {
     document.title = "Draw · Papershow";
     // Coming back to Draw starts a new canvas, unless the last one has changes that weren't saved.
     Promise.all([getDraft(), getSaved()]).then(([d, saved]) =>
-      setScene(d && JSON.stringify(d) !== saved ? d : newScene()),
+      setScene(adopt(d && JSON.stringify(d) !== saved ? d : newScene())),
     );
   }, []);
 
@@ -71,7 +96,7 @@ export default function App() {
   }, []);
 
   const onTexts = useCallback((texts: TextItem[]) => {
-    setScene((s) => (s ? { ...s, texts, updatedAt: Date.now() } : s));
+    setScene((s) => (s ? { ...s, texts, name: nameEdited.current ? s.name : nameFromText(texts), updatedAt: Date.now() } : s));
   }, []);
 
   // Picking a pen from the drawing toolbar goes back to drawing.
@@ -111,6 +136,7 @@ export default function App() {
         // Someone else's drawing: keep theirs as it is and save yours as a copy.
         if (!(err instanceof Oops && err.status === 403)) throw err;
         current = { ...current, id: shortId(), name: `${current.name} (my version)` };
+        nameEdited.current = true;
         await putImage(current, files);
         copied = true;
       }
@@ -133,12 +159,13 @@ export default function App() {
   const open = (s: Scene) => {
     // As saved: only changes to it keep it on the board when you come back.
     putSaved(s);
-    setScene(s);
+    setScene(adopt(s));
     draw.current?.setStrokes(s.strokes);
     setGalleryOpen(false);
   };
 
   const startNew = () => {
+    nameEdited.current = false;
     const s = newScene();
     setScene(s);
     setTyping(false);
@@ -171,7 +198,10 @@ export default function App() {
           <input
             className="name"
             value={scene.name}
-            onChange={(e) => setScene({ ...scene, name: e.target.value })}
+            onChange={(e) => {
+              nameEdited.current = true;
+              setScene({ ...scene, name: e.target.value });
+            }}
             onFocus={(e) => e.target.select()}
             aria-label="Image name"
             spellCheck={false}

@@ -20,6 +20,12 @@ const toForm = (fields: Field[], config: Record<string, unknown>) =>
     Object.entries(config).map(([k, v]) => [k, fields.find((f) => f.key === k)?.type === "list" && Array.isArray(v) ? v.join(", ") : v]),
   );
 
+/** A new app is called by its title. With no title, it keeps the kind's name. */
+const nameFor = (kind: AppKind, config: Record<string, unknown>) => {
+  const title = typeof config.title === "string" ? config.title.trim() : "";
+  return title || kind.name;
+};
+
 /** `newKind`: setting up an app that isn't created yet; nothing is saved until "Create app". */
 export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
   // Start from what the page already loaded (at boot, or the last visit), then refresh.
@@ -67,6 +73,8 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
 
   // Load the selected app into the form.
   const lastSaved = useRef("");
+  // True once the name field is typed in. Until then a new app's name follows its title.
+  const nameEdited = useRef(false);
   useEffect(() => {
     // Another app: don't leave the last one's picture up while this one renders.
     setPreview((old) => {
@@ -74,13 +82,15 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
       return null;
     });
     setFailed(false);
+    nameEdited.current = false;
     if (current && kind) {
       const d = { id: current.id, name: current.name, config: toForm(kind.fields, current.config) };
       lastSaved.current = body(d);
       setDraft(d);
       setSaved(true);
     } else if (newKind && kind) {
-      setDraft({ id: `new:${kind.kind}`, name: kind.name, config: toForm(kind.fields, kind.defaults) });
+      const config = toForm(kind.fields, kind.defaults);
+      setDraft({ id: `new:${kind.kind}`, name: nameFor(kind, config), config });
     } else setDraft(null);
     // Only when switching apps, not on every save echo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -166,7 +176,14 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
     navigate(rest.length ? `/apps/${rest[0].id}` : "/apps");
   };
 
-  const set = (key: string, value: unknown) => setDraft((d) => d && { ...d, config: { ...d.config, [key]: value } });
+  const set = (key: string, value: unknown) =>
+    setDraft((d) => {
+      if (!d || !kind) return d;
+      const config = { ...d.config, [key]: value };
+      // Left alone, the name stays the title. Typing in the name field keeps whatever you wrote.
+      const follow = isNew && key === "title" && !nameEdited.current;
+      return { ...d, config, name: follow ? nameFor(kind, config) : d.name };
+    });
 
   return (
     <div className="app apps">
@@ -272,7 +289,10 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
                 <input
                   className="name"
                   value={draft.name}
-                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  onChange={(e) => {
+                    nameEdited.current = true;
+                    setDraft({ ...draft, name: e.target.value });
+                  }}
                   readOnly={!canChange}
                   aria-label="App name"
                   spellCheck={false}
