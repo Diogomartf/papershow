@@ -201,7 +201,7 @@ export default defineApp({
       label: "Style",
       type: "select",
       options: STYLES,
-      hint: "Poster reads from across the room. Clean: the same, under a smaller name with no date. Classic: the whole summary, smaller. Title: only the headline, as big as it fits.",
+      hint: "Poster reads from across the room. Clean: the same, under a smaller name with no date. Classic: the whole summary, smaller. Title: only the headline, as big as it fits. Fill: the headline as large as the panel allows, the site's name in the corner.",
     },
   ],
   periodMs: 15 * 60_000,
@@ -232,6 +232,7 @@ export default defineApp({
           </div>
         )}
         label={data.host}
+        kicker={name}
         style={config.style}
         story={data}
         now={now}

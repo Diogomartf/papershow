@@ -1,26 +1,47 @@
 import type { JSX } from "#jsx/jsx-runtime";
 import { ditheredImage } from "../render.ts";
-import { clip, decode, defineApp, sheet, wrap } from "./types.ts";
+import { FillFrame } from "./fit.tsx";
+import { clip, decode, defineApp, linesInto, sheet, wrap } from "./types.ts";
 
 /**
  * How the page is set. Poster reads from across the room (2–3 m). Clean is Poster under a smaller masthead,
  * with no date line. Classic is the denser page: the whole summary and the byline, in smaller type. Title is
- * the headline alone, as big as it fits, under Clean's masthead.
+ * the headline alone, as big as it fits, under Clean's masthead. Fill drops the masthead and sets the
+ * headline as large as the panel allows, with the paper's name in the corner.
  */
-export type Style = "poster" | "clean" | "classic" | "title";
+export type Style = "poster" | "clean" | "classic" | "title" | "fill";
 
 export const STYLES = [
   { value: "poster", label: "Poster" },
   { value: "clean", label: "Clean" },
   { value: "classic", label: "Classic" },
   { value: "title", label: "Title" },
+  { value: "fill", label: "Fill" },
 ];
 
-/** The photo's side, in panel pixels: dithered at exactly this size. */
-export const PHOTO: Record<Style, number> = { poster: 280, clean: 300, classic: 330, title: 0 };
+/** The photo's side, in panel pixels: dithered at exactly this size. Fill and Title have none. */
+export const PHOTO: Record<Style, number> = { poster: 280, clean: 300, classic: 330, title: 0, fill: 0 };
 
 /** The height of the text under the masthead, in panel pixels: Clean's slimmer masthead leaves more. */
-const BODY_H: Record<Style, number> = { poster: 330, clean: 372, classic: 330, title: 372 };
+const BODY_H: Record<Style, number> = { poster: 330, clean: 372, classic: 330, title: 372, fill: 0 };
+
+const downFrom = (cap: number, floor = 22) => {
+  const out: number[] = [];
+  for (let s = cap; s >= floor; s -= 2) out.push(s);
+  return out;
+};
+
+/** Serif lines already broken to the measure, so satori can't wrap them again and off the panel. */
+function Set({ lines, size, weight, lineHeight, tracking = 0 }: { lines: string[]; size: number; weight: number; lineHeight: number; tracking?: number }) {
+  if (!lines.length) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", fontFamily: "Source Serif", fontWeight: weight, letterSpacing: tracking }}>
+      {lines.map((line, i) => (
+        <div key={i} style={{ fontSize: size, lineHeight, flexShrink: 0 }}>{line}</div>
+      ))}
+    </div>
+  );
+}
 
 export type Story = { title: string; summary: string; byline: string; credit: string; image: string | null };
 
@@ -81,7 +102,7 @@ function newspaper(paper: Paper) {
         label: "Style",
         type: "select",
         options: STYLES,
-        hint: "Poster reads from across the room. Clean: the same, under a smaller masthead with no date. Classic: the whole summary and the byline, smaller. Title: only the headline, as big as it fits.",
+        hint: "Poster reads from across the room. Clean: the same, under a smaller masthead with no date. Classic: the whole summary and the byline, smaller. Title: only the headline, as big as it fits. Fill: the headline as large as the panel allows, the paper's name in the corner.",
       },
     ],
     periodMs: 15 * 60_000,
@@ -106,6 +127,7 @@ function newspaper(paper: Paper) {
       <FrontPage
         masthead={paper.masthead}
         label={paper.sections.find((s) => s.value === config.section)?.label ?? ""}
+        kicker={paper.name}
         style={config.style}
         story={data}
         now={now}
@@ -115,7 +137,8 @@ function newspaper(paper: Paper) {
 }
 
 /** A lead story set like a printed front page: masthead, date line (with `label` on the right), headline, summary, photo. */
-export function FrontPage({ masthead, label, style, story, now }: { masthead: Paper["masthead"]; label: string; style: Style; story: Story; now: Date }) {
+export function FrontPage({ masthead, label, kicker, style, story, now }: { masthead: Paper["masthead"]; label: string; kicker?: string; style: Style; story: Story; now: Date }) {
+  if (style === "fill") return <FillFrame kicker={kicker || label} text={story.title} font="serif" />;
   const date = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
   const classic = style === "classic";
   const title = style === "title";
@@ -126,18 +149,19 @@ export function FrontPage({ masthead, label, style, story, now }: { masthead: Pa
   const image = title ? null : story.image;
   const wide = !image;
   // Poster and Clean: the headline as big as fits in about two thirds of the column, then as much of the summary
-  // as fits under it at a size still readable from 2–3 m. Classic: sizes by headline length, all of it.
-  // Title: the headline alone fills the page.
+  // as fits under it at a size still readable from 2–3 m. Classic: sizes by headline length. Title fills the page.
+  // Whatever is left over is cut, including in Classic: a long summary used to run off the bottom.
   const width = 736 - (image ? photo + 28 : 0);
-  const size = classic
-    ? wide ? (n <= 70 ? 50 : n <= 110 ? 42 : 36) : n <= 60 ? 40 : n <= 90 ? 34 : 29
-    : title
-      ? ([104, 96, 88, 80, 72, 64, 58, 52, 48, 44].find((s) => wrap(story.title, s, width).length * s * 1.08 <= bodyH - 18) ?? 40)
-      : ([72, 64, 58, 52, 48, 44, 40].find((s) => wrap(story.title, s, width).length * s * 1.1 <= bodyH * 0.66) ?? 40);
+  const cap = classic ? (wide ? (n <= 70 ? 50 : n <= 110 ? 42 : 36) : n <= 60 ? 40 : n <= 90 ? 34 : 29) : title ? 104 : 72;
+  const headLh = title ? 1.08 : classic ? 1.12 : 1.1;
+  const bylineH = classic && story.byline ? 32 : 0;
+  const headMax = title ? bodyH - 18 : (classic ? bodyH * 0.55 : bodyH * 0.66) - bylineH;
+  const head = linesInto(story.title, width, headMax, downFrom(cap), headLh);
   const SUMMARY = classic ? (wide ? 22 : 18) : 28;
-  const room = Math.floor((bodyH - wrap(story.title, size, width).length * size * 1.1 - 16) / (SUMMARY * 1.3));
-  const summary = title ? "" : classic ? story.summary : clip(story.summary, room, SUMMARY, width);
-  const serif = { fontFamily: "Source Serif" };
+  const summaryLh = classic ? 1.4 : 1.3;
+  const room = title ? 0 : Math.max(0, Math.floor((bodyH - head.lines.length * head.size * headLh - 16 - bylineH) / (SUMMARY * summaryLh)));
+  const summary = room > 0 ? clip(story.summary, room, SUMMARY, width) : "";
+  const summaryLines = summary ? wrap(summary, SUMMARY, width).slice(0, room) : [];
   return (
     <div style={{ ...sheet, flexDirection: "column", padding: "18px 32px 22px" }}>
       {masthead(clean ? 0.72 : 1)}
@@ -155,12 +179,12 @@ export function FrontPage({ masthead, label, style, story, now }: { masthead: Pa
         </div>
       )}
       <div style={{ display: "flex", flex: 1, marginTop: 18, gap: 28 }}>
-        <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: title ? "center" : "flex-start", ...serif }}>
-          <div style={{ fontSize: size, fontWeight: 700, lineHeight: title ? 1.08 : classic ? 1.12 : 1.1, letterSpacing: title ? -1 : -0.5 }}>
-            {story.title}
-          </div>
-          {summary ? (
-            <div style={{ fontSize: SUMMARY, lineHeight: classic ? 1.4 : 1.3, marginTop: classic ? 14 : 16 }}>{summary}</div>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: title ? "center" : "flex-start" }}>
+          <Set lines={head.lines} size={head.size} weight={700} lineHeight={headLh} tracking={title ? -1 : -0.5} />
+          {summaryLines.length ? (
+            <div style={{ marginTop: classic ? 14 : 16 }}>
+              <Set lines={summaryLines} size={SUMMARY} weight={400} lineHeight={summaryLh} />
+            </div>
           ) : null}
           {classic && story.byline ? (
             <div style={{ fontFamily: "Inter", fontSize: 12, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", marginTop: 14 }}>

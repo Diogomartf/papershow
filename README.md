@@ -194,7 +194,7 @@ The install adds these commands:
 
 | Command | What it does |
 |---|---|
-| `paper:update` | Gets the latest `main` and reinstalls. Running the [one line](#2-on-the-pi-install) again does the same. The Pi also does it on its own every night when `main` has changed (see [Updates](#what-the-install-changes-on-your-pi)). |
+| `paper:update` | Gets the latest `main` and reinstalls. If `main` hasn't changed, it stops, so the panel isn't restarted for the same picture. A local edit to a tracked file is dropped only when there is something to pull; `.env` stays. Running the [one line](#2-on-the-pi-install) again does the same. The Pi also does it on its own every night when `main` has changed (see [Updates](#what-the-install-changes-on-your-pi)). |
 | `paper:status` | Whether the server and panel are running, the version and whether it's behind, where to open Papershow, whether it updates itself and when it last checked, which keys are set, and what the panel last drew. |
 | `paper:logs` | Follows the server's and the panel's logs, coloured by service, with problems in red, warnings in yellow and drawn frames in green. `paper:logs server`, `paper:logs panel` or `paper:logs update` (the nightly updates) for one; journalctl options go after, like `paper:logs panel -n 200`. |
 | `paper:help` | Lists these commands. |
@@ -354,28 +354,30 @@ Your app instances on the left, with live thumbnails, and **New app** grouped by
 
 Some apps take a few seconds the first time, because they fetch before they can draw: Stocks asks Massive for movers, closes and company names and logo.dev for logos; Crypto asks CoinGecko and Trust Wallet. While a preview renders, the panel shows an e-ink loader with "Loading Stocks…" (or a small "Updating…" pill over the current picture when you change a setting). The loader only appears after a moment, so fast renders don't flicker. If a render fails, the panel says so instead of staying blank. Everything that doesn't change is cached after the first render.
 
+Every app has **Fill**. It sets the main text as large as it can be while it still sits on the panel, and puts a small label in the top-right corner (close enough to read up close, out of the way of the big type). The size steps down a little when that pulls a short last word up onto the line above, and anything that still will not fit is cut, so type never runs off the panel.
+
 | App | Category | Data from | Key | New frame |
 |---|---|---|---|---|
-| Clock (Small / Medium / Large / XL, 12/24-hour, date; doodles: pick any number of your drawings, and a few at random are scattered around the time, a new draw every minute, hour or day) | Clocks | This device's clock, your drawings | — | every minute |
-| AI Clock (a poem about the time; editable prompt with `{time}`, `{timezone}` and `{date}`; Standard or Large) | Clocks | Groq | `GROQ_API_KEY` | every minute by default; any number of minutes (from a minute of the hour, like :59) or hours (from a time of day, like 08:30) |
-| Word of the day | AI | Groq | `GROQ_API_KEY` | daily (adjustable) |
-| Fun fact | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |
-| Haiku (knows the season and time of day) | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |
-| Quote of the day | AI | Groq | `GROQ_API_KEY` | daily (adjustable) |
-| Custom AI (any prompt, any layout; every AI app has a Clean style: only the reply, as big as it fits) | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |
-| New York Times (lead story and photo, 7 sections; Poster, Clean, Classic or Title) | News | NYT RSS feeds | — | 15 min |
-| Wall Street Journal (latest story and photo, 7 sections; Poster, Clean, Classic or Title) | News | WSJ RSS feeds (Dow Jones) | — | 15 min |
-| Techmeme (top story, or the top 3; Poster, Clean, Classic or Title) | News | techmeme.com "Top News" column | — | 15 min |
-| Custom news (any news site from its address: its latest story, or the one leading its front page; Poster, Clean, Classic or Title) | News | the site's feed or front page | — | 15 min |
-| Crypto (up to 4 of 10 tokens, USD/EUR) | Stocks & tokens | CoinGecko prices, Trust Wallet logos | — | 5 min |
-| Stocks (top gainers or losers) | Stocks & tokens | Massive, logos from logo.dev | `MASSIVE_API_KEY`, `LOGO_DEV_TOKEN` (logos) | 15 min |
+| Clock (Small / Medium / Large / XL / Fill, 12/24-hour, date; doodles: pick any number of your drawings, and a few at random are scattered around the time, a new draw every minute, hour or day) | Clocks | This device's clock, your drawings | — | every minute |
+| AI Clock (a poem about the time; editable prompt with `{time}`, `{timezone}` and `{date}`; Standard, Large or Fill) | Clocks | Groq | `GROQ_API_KEY` | every minute by default; any number of minutes (from a minute of the hour, like :59) or hours (from a time of day, like 08:30) |
+| Word of the day (Standard, Clean or Fill) | AI | Groq | `GROQ_API_KEY` | daily (adjustable) |
+| Fun fact (opens on Fill, with "Did you know" in the corner) | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |
+| Haiku (knows the season and time of day; Standard, Clean or Fill) | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |
+| Quote of the day (Standard, Clean or Fill; Fill puts the author in the corner) | AI | Groq | `GROQ_API_KEY` | daily (adjustable) |
+| Custom AI (any prompt, any layout; Standard, Clean or Fill. Clean and Fill set the reply as big as it fits; Fill keeps the title in the corner) | AI | Groq | `GROQ_API_KEY` | hourly (adjustable) |
+| New York Times (lead story and photo, 7 sections; Poster, Clean, Classic, Title or Fill) | News | NYT RSS feeds | — | 15 min |
+| Wall Street Journal (latest story and photo, 7 sections; Poster, Clean, Classic, Title or Fill) | News | WSJ RSS feeds (Dow Jones) | — | 15 min |
+| Techmeme (top story, or the top 3; Poster, Clean, Classic, Title or Fill) | News | techmeme.com "Top News" column | — | 15 min |
+| Custom news (any news site from its address: its latest story, or the one leading its front page; Poster, Clean, Classic, Title or Fill) | News | the site's feed or front page | — | 15 min |
+| Crypto (up to 4 of 10 tokens, USD/EUR; Standard or Fill) | Stocks & tokens | CoinGecko prices, Trust Wallet logos | — | 5 min |
+| Stocks (top gainers or losers; Standard or Fill) | Stocks & tokens | Massive, logos from logo.dev | `MASSIVE_API_KEY`, `LOGO_DEV_TOKEN` (logos) | 15 min |
 
 Details per source:
 - **Groq**: `openai/gpt-oss-20b` by default (`GROQ_MODEL` to change it). Each AI app has a model picker filled from Groq's live model list. The same prompt in the same period is asked once. A key Groq rejects counts as missing until the server restarts.
 - **NYT**: `rss.nytimes.com/services/xml/rss/nyt/<Section>.xml`. The first item of `HomePage` is the story leading the front page.
 - **WSJ**: `feeds.content.dowjones.io/public/rss/<Feed>`. There's no front-page feed, so it shows the newest item in the section.
 - **Techmeme**: parses the homepage's "Top News" column, because the RSS feed is newest-first rather than ranked.
-- **Custom news**: paste a site's address (or a feed's). For **Latest** it finds the site's feed, from the page's `<link rel="alternate">` or the usual places (`/feed`, `/rss`, `/rss.xml`…), and shows its first item. For **Top of the page** it takes the first link on the front page that reads like a headline. Each falls back on the other. The summary, photo and site name come from the story's own page (`og:` tags) when the feed doesn't have them. Title is every news app's headline-only style.
+- **Custom news**: paste a site's address (or a feed's). For **Latest** it finds the site's feed, from the page's `<link rel="alternate">` or the usual places (`/feed`, `/rss`, `/rss.xml`…), and shows its first item. For **Top of the page** it takes the first link on the front page that reads like a headline. Each falls back on the other. The summary, photo and site name come from the story's own page (`og:` tags) when the feed doesn't have them. Title is every news app's headline-only style. Fill is the headline alone, as large as the panel allows, with the paper's name in the corner.
 - **CoinGecko**: the free `simple/price` endpoint, one call for all tokens and both currencies, shared for a minute. Logos come from `assets-cdn.trustwallet.com/blockchains/<chain>/info/logo.png` for a chain's own coin, or `/<chain>/assets/<address>/logo.png` for a token on it.
 - **logo.dev**: company logos by ticker (`img.logo.dev/ticker/<SYMBOL>`), fetched once each and dithered into the badge's rounded square. Without `LOGO_DEV_TOKEN`, or for a ticker logo.dev doesn't know, Stocks shows the drawn ticker badge.
 - **Massive**: live top movers on the Starter plan and above. On the free plan, it works out the previous session's movers from daily closes (stocks over $5 that traded over a million shares).

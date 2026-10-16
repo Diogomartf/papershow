@@ -1,4 +1,5 @@
 import { ditheredImage, isOriginal } from "../render.ts";
+import { Kicker, textWidth } from "./fit.tsx";
 import { TokenMark } from "./marks.tsx";
 import { defineApp, money, sheet } from "./types.ts";
 
@@ -44,8 +45,30 @@ function logo(id: string, size: number): Promise<string | null> {
   return mark.catch(() => null);
 }
 
-/** Mark sizes match the view: smaller when four tokens share the panel. */
-const markSize = (count: number) => (count > 3 ? 84 : 110);
+type Style = "standard" | "fill";
+
+/**
+ * One size for every price. Standard keeps the old marks and shrinks a price that would run off.
+ * Fill grows the marks and the type together until the next step would leave the panel.
+ */
+function cryptoMetrics(labels: string[], fill: boolean) {
+  const count = Math.max(labels.length, 1);
+  if (!fill) {
+    const mark = count > 3 ? 84 : 110;
+    const room = 800 - 128 - mark - 56;
+    let size = count > 3 ? 70 : 88;
+    for (const label of labels) while (size > 28 && textWidth(label, size) > room) size -= 2;
+    return { size, mark, gap: count > 3 ? 22 : 34 };
+  }
+  for (let size = 150; size >= 32; size -= 2) {
+    const mark = Math.round(size * 1.15);
+    const gap = Math.round(size * 0.32);
+    const room = 800 - 64 - mark - 36;
+    const height = count * Math.max(mark, size) + (count - 1) * gap;
+    if (height <= 416 && labels.every((label) => textWidth(label, size) <= room)) return { size, mark, gap };
+  }
+  return { size: 32, mark: 37, gap: 10 };
+}
 
 type Prices = Record<string, { usd?: number; eur?: number }>;
 
@@ -76,7 +99,7 @@ export default defineApp({
   source: "CoinGecko prices, Trust Wallet logos",
   name: "Crypto",
   description: "Prices for a few tokens, with their marks, from CoinGecko.",
-  defaults: { tokens: ["bitcoin", "ethereum", "solana"] as string[], currency: "usd" },
+  defaults: { tokens: ["bitcoin", "ethereum", "solana"] as string[], currency: "usd", style: "standard" as Style },
   fields: [
     {
       key: "tokens",
@@ -95,6 +118,16 @@ export default defineApp({
         { value: "eur", label: "Euro" },
       ],
     },
+    {
+      key: "style",
+      label: "Style",
+      type: "select",
+      options: [
+        { value: "standard", label: "Standard" },
+        { value: "fill", label: "Fill" },
+      ],
+      hint: "Fill: the prices as large as they can be, and still on the panel, with the currency in the corner.",
+    },
   ],
   periodMs: 5 * 60_000,
   mock: false,
@@ -108,29 +141,38 @@ export default defineApp({
       all = last;
     }
     const ids = config.tokens.slice(0, 4);
+    const currency = config.currency.toUpperCase();
+    const labels = ids.map((id) => {
+      const price = all[id]?.[config.currency as "usd" | "eur"];
+      return price === undefined ? "—" : money(price, currency);
+    });
+    const { mark } = cryptoMetrics(labels, config.style === "fill");
     return Promise.all(
       ids.map(async (id) => ({
         id,
         symbol: KNOWN[id]?.symbol ?? id.slice(0, 4).toUpperCase(),
         price: all[id]?.[config.currency as "usd" | "eur"],
-        logo: await logo(id, markSize(ids.length)),
+        logo: await logo(id, mark),
       })),
     );
   },
   view: ({ config, data }) => {
-    const four = data.length > 3;
-    const mark = markSize(data.length);
+    const fill = config.style === "fill";
+    const currency = config.currency.toUpperCase();
+    const labels = data.map((token) => (token.price === undefined ? "—" : money(token.price, currency)));
+    const { size, mark, gap } = cryptoMetrics(labels, fill);
     return (
-      <div style={{ ...sheet, flexDirection: "column", justifyContent: "center", padding: "0 64px", gap: four ? 22 : 34 }}>
-        {data.map((token) => (
+      <div style={{ ...sheet, position: "relative", flexDirection: "column", justifyContent: "center", padding: fill ? "40px 32px 24px" : "0 64px", gap }}>
+        {fill ? <Kicker text={currency} /> : null}
+        {data.map((token, i) => (
           <div key={token.id} style={{ display: "flex", alignItems: "center" }}>
             {token.logo ? (
               <img src={token.logo} width={mark} height={mark} />
             ) : (
               <TokenMark id={token.id} symbol={token.symbol} size={mark} />
             )}
-            <span style={{ marginLeft: 56, fontSize: four ? 70 : 88, fontWeight: 400, letterSpacing: -2 }}>
-              {token.price === undefined ? "—" : money(token.price, config.currency.toUpperCase())}
+            <span style={{ marginLeft: fill ? 36 : 56, fontSize: size, fontWeight: 400, letterSpacing: -2 }}>
+              {labels[i]}
             </span>
           </div>
         ))}

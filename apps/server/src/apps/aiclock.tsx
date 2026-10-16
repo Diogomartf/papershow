@@ -1,5 +1,6 @@
 import { aiReady, complete, defaultModel, modelOptions } from "../ai.ts";
 import { CleanReply, CLEAN_PAD } from "./ai.tsx";
+import { FillFrame, FittedRows } from "./fit.tsx";
 import { clockParts, defineApp, isZone, sheet, type Field } from "./types.ts";
 
 const ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
@@ -96,7 +97,7 @@ export default defineApp({
       every: "1",
       unit: "minutes" as "minutes" | "hours",
       start: "00",
-      size: "standard" as "standard" | "large",
+      size: "standard" as "standard" | "large" | "fill",
       model: defaultModel(),
     };
   },
@@ -135,8 +136,9 @@ export default defineApp({
         options: [
           { value: "standard", label: "Standard" },
           { value: "large", label: "Large" },
+          { value: "fill", label: "Fill" },
         ],
-        hint: "Large: the poem as big as it fits, and the default prompt asks for a shorter one.",
+        hint: "Large: the poem as big as it fits, and the default prompt asks for a shorter one. Fill: the same, with the time small in the corner.",
       },
       { key: "model", label: "Model", type: "select", options: modelOptions() },
     ] satisfies Field[];
@@ -166,19 +168,21 @@ export default defineApp({
       return stand;
     }
   },
-  view: ({ config, data }) => {
+  view: ({ config, data, now }) => {
+    const poem = data.poem.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (config.size === "fill") {
+      const t = clockParts(now, config.timeZone);
+      return <FillFrame kicker={`${t.hour}:${t.minute}`} text={poem.join("\n")} keepLines={poem.length > 1} />;
+    }
     if (config.size === "large")
       return (
         <div style={{ ...sheet, flexDirection: "column", justifyContent: "center", padding: CLEAN_PAD }}>
           <CleanReply text={data.poem} layout="text" />
         </div>
       );
-    const size = data.poem.length <= 80 ? 66 : data.poem.length <= 120 ? 58 : 50;
     return (
-      <div style={{ ...sheet, alignItems: "center", padding: "0 64px" }}>
-        <div style={{ display: "flex", width: "100%", fontSize: size, fontWeight: 500, lineHeight: 1.22, letterSpacing: -1 }}>
-          {data.poem}
-        </div>
+      <div style={{ ...sheet, flexDirection: "column", justifyContent: "center", padding: "0 64px" }}>
+        <FittedRows rows={poem.length ? poem : [data.poem]} width={672} height={420} max={66} weight={500} />
       </div>
     );
   },

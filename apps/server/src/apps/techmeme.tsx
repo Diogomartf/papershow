@@ -1,4 +1,5 @@
-import { clip, decode, defineApp, sheet, wrap } from "./types.ts";
+import { FillFrame, fillBox, fitRows } from "./fit.tsx";
+import { decode, defineApp, linesInto, sheet, wrap } from "./types.ts";
 
 type Story = { cite: string; headline: string; excerpt: string };
 
@@ -29,7 +30,25 @@ let last: Story[] | null = null;
 const serif = { fontFamily: "Source Serif" };
 
 /** The height of the text under the masthead, in panel pixels (Clean's is slimmer); the text is 728 px wide. */
-const BODY_H = { poster: 360, clean: 372, classic: 360, title: 372 };
+const BODY_H = { poster: 360, clean: 372, classic: 360, title: 372, fill: 0 };
+
+const downFrom = (cap: number, floor = 22) => {
+  const out: number[] = [];
+  for (let s = cap; s >= floor; s -= 2) out.push(s);
+  return out;
+};
+
+/** Lines already broken to the measure, so a long headline can't wrap again and off the panel. */
+function Set({ lines, size, weight, lineHeight, tracking = 0 }: { lines: string[]; size: number; weight: number; lineHeight: number; tracking?: number }) {
+  if (!lines.length) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", ...serif, fontWeight: weight, letterSpacing: tracking }}>
+      {lines.map((line, i) => (
+        <div key={i} style={{ fontSize: size, lineHeight, flexShrink: 0 }}>{line}</div>
+      ))}
+    </div>
+  );
+}
 const WIDTH = 728;
 
 export default defineApp({
@@ -58,8 +77,9 @@ export default defineApp({
         { value: "clean", label: "Clean" },
         { value: "classic", label: "Classic" },
         { value: "title", label: "Title" },
+        { value: "fill", label: "Fill" },
       ],
-      hint: "Poster reads from across the room. Clean: the same, under a smaller name with no date. Classic: more, smaller, with where each story is from. Title: only the headlines, as big as they fit.",
+      hint: "Poster reads from across the room. Clean: the same, under a smaller name with no date. Classic: more, smaller, with where each story is from. Title: only the headlines, as big as they fit. Fill: the headlines as large as the panel allows, the name in the corner.",
     },
   ],
   periodMs: 15 * 60_000,
@@ -76,25 +96,43 @@ export default defineApp({
     }
   },
   view: ({ config, data, now }) => {
-    const date = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
     const lead = data[0];
+    if (config.style === "fill") {
+      const headlines = data.map((s) => s.headline);
+      const box = fillBox("Techmeme");
+      // As many as still read large. One that won't fit at 32px is set on its own, and cut if it must be.
+      const pick = config.layout === "list"
+        ? [3, 2, 1].map((n) => headlines.slice(0, n)).find((rows) => rows.length > 0 && !fitRows(rows, box, { max: 96, min: 32, font: "serif" }).clipped)
+        : undefined;
+      const chosen = pick ?? headlines.slice(0, 1);
+      return <FillFrame kicker="Techmeme" text={chosen.join("\n")} font="serif" keepLines={chosen.length > 1} />;
+    }
+    const date = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
     const classic = config.style === "classic";
     const title = config.style === "title";
     const clean = config.style === "clean" || title;
     const bodyH = BODY_H[config.style];
     const n = lead.headline.length;
     // Poster and Clean read from across the room (2–3 m). Top story: the headline as big as fits in about two thirds of the
-    // page, then as much of the excerpt as fits below. Top 3: as many as fit at 32 px or more, as big as they fit.
-    // Title: the headline alone fills the page.
-    const size = title
-      ? ([104, 96, 88, 80, 72, 64, 58, 52, 48, 44].find((s) => wrap(lead.headline, s, WIDTH).length * s * 1.08 <= bodyH - 18) ?? 40)
-      : ([72, 64, 58, 52, 48, 44, 40].find((s) => wrap(lead.headline, s, WIDTH).length * s * 1.1 <= bodyH * 0.66) ?? 40);
+    // page, then as much of the excerpt as fits below. Top stories: as many as fit, as big as they fit.
+    // Title: the headline alone fills the page. A headline or excerpt that still won't fit is cut.
+    const headLh = title ? 1.08 : classic ? 1.15 : 1.1;
+    const cap = title ? 104 : classic ? (n <= 90 ? 44 : n <= 140 ? 38 : 32) : 72;
+    const headMax = title ? bodyH - 18 : classic ? bodyH * 0.62 : bodyH * 0.66;
+    const head = linesInto(lead.headline, WIDTH, headMax, downFrom(cap), headLh);
+    const used = head.lines.length * head.size * headLh + 18;
     const EXCERPT = 28;
-    const room = Math.floor((bodyH - wrap(lead.headline, size, WIDTH).length * size * 1.1 - 18) / (EXCERPT * 1.3));
-    const excerpt = clip(lead.excerpt.replace(/\s*(\.\.\.|…)$/, "…"), room, EXCERPT, WIDTH);
-    const fits = (list: Story[], s: number) => list.reduce((h, t) => h + wrap(t.headline, s, WIDTH).length * s * 1.15 + 32, 0) <= bodyH;
-    const top = classic ? data.slice(0, 3) : [3, 2, 1].map((n) => data.slice(0, n)).find((list) => fits(list, 32)) ?? data.slice(0, 1);
-    const listSize = [48, 44, 40, 36, 32].find((s) => fits(top, s)) ?? 32;
+    const excerptLh = classic ? 1.4 : 1.3;
+    const excerptSize = classic ? 21 : EXCERPT;
+    const room = title ? 0 : Math.max(0, Math.floor((bodyH - used - (classic ? 26 : 0)) / (excerptSize * excerptLh)));
+    const excerpt = room > 0 ? linesInto(lead.excerpt.replace(/\s*(\.\.\.|…)$/, "…"), WIDTH, room * excerptSize * excerptLh, [excerptSize], excerptLh).lines : [];
+    const citeH = classic ? 22 : 0;
+    const fits = (list: Story[], s: number) => list.reduce((h, t) => h + wrap(t.headline, s, WIDTH).length * s * 1.15 + citeH + 20, 0) <= bodyH;
+    const top = classic ? data.slice(0, 3) : [3, 2, 1].map((k) => data.slice(0, k)).find((list) => fits(list, 28)) ?? data.slice(0, 1);
+    const listSize = (classic ? [24] : [48, 44, 40, 36, 32, 28, 24]).find((s) => fits(top, s)) ?? 22;
+    const listLh = classic ? 1.2 : 1.15;
+    const share = Math.max(listSize * listLh, Math.floor((bodyH - top.length * citeH - (top.length - 1) * 20) / top.length));
+    const heads = top.map((s) => linesInto(s.headline, WIDTH, share, [classic ? (s.headline.length > 120 ? 22 : 24) : listSize], listLh));
     return (
       <div style={{ ...sheet, flexDirection: "column", padding: "22px 36px 26px" }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
@@ -107,36 +145,19 @@ export default defineApp({
             {top.map((s, i) => (
               <div key={i} style={{ display: "flex", flexDirection: "column", ...(i ? { borderTop: `${classic ? 1 : 2}px solid #000`, paddingTop: 14 } : {}) }}>
                 {classic ? <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: 0.5, marginBottom: 5 }}>{s.cite}</span> : null}
-                <span
-                  style={{
-                    ...serif,
-                    fontSize: classic ? (s.headline.length > 120 ? 22 : 24) : listSize,
-                    fontWeight: 700,
-                    lineHeight: classic ? 1.2 : 1.15,
-                    letterSpacing: classic ? 0 : -0.5,
-                  }}
-                >
-                  {s.headline}
-                </span>
+                <Set lines={heads[i].lines} size={heads[i].size} weight={700} lineHeight={listLh} tracking={classic ? 0 : -0.5} />
               </div>
             ))}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center", marginTop: 16 }}>
             {classic ? <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: 0.5, marginBottom: 10 }}>{lead.cite}</span> : null}
-            <span
-              style={{
-                ...serif,
-                fontSize: classic ? (n <= 90 ? 44 : n <= 140 ? 38 : 32) : size,
-                fontWeight: 700,
-                lineHeight: classic ? 1.15 : title ? 1.08 : 1.1,
-                letterSpacing: title ? -1 : -0.5,
-              }}
-            >
-              {lead.headline}
-            </span>
-            {classic && lead.excerpt ? <span style={{ ...serif, fontSize: 21, lineHeight: 1.4, marginTop: 16 }}>{lead.excerpt}</span> : null}
-            {!classic && !title && excerpt ? <span style={{ ...serif, fontSize: EXCERPT, lineHeight: 1.3, marginTop: 18 }}>{excerpt}</span> : null}
+            <Set lines={head.lines} size={head.size} weight={700} lineHeight={headLh} tracking={title ? -1 : -0.5} />
+            {excerpt.length ? (
+              <div style={{ marginTop: classic ? 16 : 18 }}>
+                <Set lines={excerpt} size={excerptSize} weight={400} lineHeight={excerptLh} />
+              </div>
+            ) : null}
           </div>
         )}
       </div>

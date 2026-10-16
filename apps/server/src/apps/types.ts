@@ -120,21 +120,64 @@ export const decode = (s: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-/** Splits text into the lines it takes at `size` px in `width` px: for fitting serif type to a box before satori lays it out. */
+/** Source Serif averages about half an em per character, at both weights. */
+const fits = (text: string, size: number, width: number) => text.length * size * 0.5 <= width;
+
+/**
+ * Splits text into the lines it takes at `size` px in `width` px, for fitting serif type to a box before
+ * satori lays it out. A word wider than the box is broken with a hyphen, so it can't run off the panel.
+ */
 export function wrap(text: string, size: number, width: number) {
+  const pieces = (word: string): string[] => {
+    if (fits(word, size, width) || word.length <= 1) return [word];
+    const out: string[] = [];
+    let rest = word;
+    while (rest.length) {
+      if (fits(rest, size, width)) {
+        out.push(rest);
+        break;
+      }
+      let n = rest.length - 1;
+      while (n > 1 && !fits(`${rest.slice(0, n)}-`, size, width)) n--;
+      const take = Math.max(n, 1);
+      out.push(`${rest.slice(0, take)}-`);
+      rest = rest.slice(take);
+    }
+    return out;
+  };
   const out: string[] = [];
   for (const word of text.split(/\s+/).filter(Boolean)) {
-    const line = out.length ? `${out.at(-1)} ${word}` : word;
-    // Source Serif averages about half an em per character, at both weights.
-    if (out.length && line.length * size * 0.5 <= width) out[out.length - 1] = line;
-    else out.push(word);
+    for (const piece of pieces(word)) {
+      const line = out.length ? `${out.at(-1)} ${piece}` : piece;
+      if (out.length && fits(line, size, width)) out[out.length - 1] = line;
+      else out.push(piece);
+    }
   }
   return out;
 }
 
+/** Lines from `wrap`, joined so a hyphen we inserted stays and satori can break there. */
+const joinWrapped = (lines: string[]) =>
+  lines.reduce((s, line) => (s ? (s.endsWith("-") ? s + line : `${s} ${line}`) : line), "");
+
 /** As much of `text` as fits in `rows` lines (see `wrap`), cut at a word with "…"; "" when nothing fits. */
 export function clip(text: string, rows: number, size: number, width: number) {
   const lines = wrap(text, size, width);
-  if (lines.length <= rows) return text;
-  return rows > 0 ? `${lines.slice(0, rows).join(" ").replace(/[\s,;:.]+\S*$/, "")}…` : "";
+  if (lines.length <= rows) return joinWrapped(lines);
+  return rows > 0 ? `${joinWrapped(lines.slice(0, rows)).replace(/[\s,;:.-]+\S*$/, "")}…` : "";
+}
+
+/**
+ * The largest of `sizes` (biggest first) whose wrapped lines are no taller than `maxH`.
+ * At the smallest size, lines that still don't fit are cut, so the block cannot run past the panel.
+ */
+export function linesInto(text: string, width: number, maxH: number, sizes: number[], lineHeight = 1.1): { size: number; lines: string[] } {
+  const rowsAt = (size: number) => Math.max(1, Math.floor(maxH / Math.max(size * lineHeight, 1)));
+  for (const size of sizes) {
+    const lines = wrap(text, size, width);
+    if (lines.length <= rowsAt(size)) return { size, lines };
+  }
+  const size = sizes.at(-1) ?? 16;
+  const rows = rowsAt(size);
+  return { size, lines: wrap(clip(text, rows, size, width), size, width).slice(0, rows) };
 }

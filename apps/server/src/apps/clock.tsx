@@ -1,9 +1,23 @@
 import * as store from "../db.ts";
 import { doodleImage, inkBox } from "../render.ts";
+import { Kicker, textWidth } from "./fit.tsx";
 import { clockParts, defineApp, sheet, type Field } from "./types.ts";
 
 // XL runs the time edge to edge; Large fills the panel with room around it; the others leave more.
 const SCALE = { small: 0.55, medium: 0.78, large: 1, xl: 1.32 } as const;
+
+/** The largest time that still fits the width, AM/PM included. The clock's tracking tightens as the type grows. */
+function timeSize(time: string, period?: string) {
+  const limit = 800 - 48;
+  for (let size = 340; size >= 120; size -= 2) {
+    const tracking = -10 * (size / 236);
+    // Inter Light digits are narrower than the body measure, so the time can go a little larger.
+    let w = textWidth(time, size, "sans", tracking) * 0.92;
+    if (period) w += textWidth(period, size * (40 / 236), "sans") + size * (14 / 236);
+    if (w <= limit && size <= 480 - 48) return size;
+  }
+  return 120;
+}
 
 /** How often the doodles move: a new arrangement each minute, hour or day. */
 const SHUFFLE = { minute: 60_000, hour: 60 * 60_000, day: 24 * 60 * 60_000 } as const;
@@ -103,7 +117,7 @@ export default defineApp({
     timeZone: "Europe/Lisbon",
     hour12: false,
     showDate: true,
-    size: "large" as keyof typeof SCALE,
+    size: "large" as keyof typeof SCALE | "fill",
     doodles: [] as string[],
     count: "4",
     shuffle: "hour" as keyof typeof SHUFFLE,
@@ -123,7 +137,9 @@ export default defineApp({
           { value: "medium", label: "Medium" },
           { value: "large", label: "Large" },
           { value: "xl", label: "XL" },
+          { value: "fill", label: "Fill" },
         ],
+        hint: "Fill: the time as large as it can be, and still on the panel. The date, when shown, sits in the corner.",
       },
       {
         key: "doodles",
@@ -155,17 +171,23 @@ export default defineApp({
   clipS: 60,
   mock: false,
   data: (config, now) => {
-    const k = SCALE[config.size] ?? 1;
+    const k = config.size === "fill" ? 1 : (SCALE[config.size] ?? 1);
     const every = SHUFFLE[config.shuffle] ?? SHUFFLE.hour;
     const seed = `${config.doodles.join()}:${Math.floor(now.getTime() / every)}`;
-    return { doodles: scatter(config.doodles, Number(config.count) || 4, freeSpace(k, config.hour12, config.showDate), seed) };
+    // Fill runs the time edge to edge, so there's no free space left for doodles.
+    const spaces = config.size === "fill" ? [] : freeSpace(k, config.hour12, config.showDate);
+    return { doodles: scatter(config.doodles, Number(config.count) || 4, spaces, seed) };
   },
   view: ({ config, data, now }) => {
     const t = clockParts(now, config.timeZone, config.hour12);
+    const time = `${config.hour12 ? String(Number(t.hour)) : t.hour}:${t.minute}`;
+    const fill = config.size === "fill";
     // XL's widest times (20:08, or 10:08 PM) just fit the width; 12-hour gives up a little to make room for AM/PM.
-    const k = (SCALE[config.size] ?? 1) * (config.size === "xl" && config.hour12 ? 0.93 : 1);
+    // Fill measures the actual time and grows it until the next step would leave the panel.
+    const k = config.size === "fill" ? timeSize(time, config.hour12 ? t.period : undefined) / 236 : SCALE[config.size] * (config.size === "xl" && config.hour12 ? 0.93 : 1);
     return (
-      <div style={{ ...sheet, position: "relative", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ ...sheet, position: "relative", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: fill ? "36px 16px 16px" : 0 }}>
+        {fill && config.showDate ? <Kicker text={t.date} /> : null}
         {data.doodles.map((d, i) => (
           <img
             key={i}
@@ -177,13 +199,13 @@ export default defineApp({
         ))}
         <div style={{ display: "flex", alignItems: "flex-start" }}>
           <span style={{ fontSize: 236 * k, fontWeight: 300, letterSpacing: -10 * k, lineHeight: 1 }}>
-            {`${config.hour12 ? String(Number(t.hour)) : t.hour}:${t.minute}`}
+            {time}
           </span>
           {config.hour12 && t.period ? (
             <span style={{ fontSize: 40 * k, fontWeight: 500, marginTop: 30 * k, marginLeft: 14 * k }}>{t.period}</span>
           ) : null}
         </div>
-        {config.showDate ? <div style={{ fontSize: 38 * k, fontWeight: 500, marginTop: 26 * k }}>{t.date}</div> : null}
+        {!fill && config.showDate ? <div style={{ fontSize: 38 * k, fontWeight: 500, marginTop: 26 * k }}>{t.date}</div> : null}
       </div>
     );
   },

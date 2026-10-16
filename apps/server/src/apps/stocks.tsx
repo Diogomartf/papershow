@@ -1,4 +1,5 @@
 import { ditheredImage, isOriginal } from "../render.ts";
+import { Kicker, fitLine, textWidth } from "./fit.tsx";
 import { Badge, Trend } from "./marks.tsx";
 import { defineApp, money, sheet, wobble } from "./types.ts";
 
@@ -18,24 +19,49 @@ const MOVERS = {
 
 type Mover = { ticker: string; name: string; close: number; change: number };
 
-/** The badge's size and corner, so a logo takes exactly its place. */
-const MARK = 104;
-const MARK_RADIUS = MARK * 0.22;
+type Style = "standard" | "fill";
 
-// Company logos from logo.dev, by ticker. They don't change: each is fetched once, then dithered once.
+/** One scale for the whole list. Fill grows it until the rows, or a price, would leave the panel. */
+function stockMetrics(rows: { price: string; change: string }[], fill: boolean) {
+  const n = Math.max(rows.length, 1);
+  const layout = (scale: number) => {
+    const mark = Math.round(104 * scale);
+    const name = Math.round(40 * scale);
+    const ticker = Math.round(30 * scale);
+    const price = Math.round(50 * scale);
+    const change = Math.round(34 * scale);
+    const gap = Math.round(30 * scale);
+    const pad = fill ? 32 : 44;
+    const priceW = Math.max(0, ...rows.map((r) => textWidth(r.price, price)));
+    const changeW = Math.max(0, ...rows.map((r) => textWidth(r.change, change))) + Math.round(32 * scale);
+    const nameW = 800 - pad * 2 - mark - Math.round(44 * scale) - Math.max(priceW, changeW);
+    const height = n * mark + (n - 1) * gap;
+    return { mark, name, ticker, price, change, gap, pad, nameW, height };
+  };
+  if (!fill) return layout(1);
+  for (let scale = 1.4; scale >= 0.85; scale = Math.round((scale - 0.05) * 100) / 100) {
+    const laid = layout(scale);
+    if (laid.height <= 416 && laid.nameW >= 120) return laid;
+  }
+  return layout(0.85);
+}
+
+const quoted = (m: Mover) => ({ price: money(m.close), change: `${Math.abs(m.change).toFixed(2)}%` });
+
+// Company logos from logo.dev, by ticker. They don't change: each is fetched once, then dithered once per size.
 const logos = new Map<string, Promise<string | null>>();
 
 /** A ticker's logo as a 1-bit data URL, or null to keep the drawn badge (no LOGO_DEV_TOKEN, or logo.dev has none). */
-function logoOf(ticker: string): Promise<string | null> {
+function logoOf(ticker: string, mark: number): Promise<string | null> {
   const token = process.env.LOGO_DEV_TOKEN;
   if (!token) return Promise.resolve(null);
-  const key = `${ticker}${isOriginal() ? ":original" : ""}`;
+  const key = `${ticker}@${mark}${isOriginal() ? ":original" : ""}`;
   let logo = logos.get(key);
   if (!logo) {
     // fallback=404: no made-up monogram; our own badge is the fallback.
     const url = `https://img.logo.dev/ticker/${encodeURIComponent(ticker)}?token=${token}&size=256&format=png&fallback=404`;
     logo = fetch(url, { signal: AbortSignal.timeout(10_000) }).then(
-      async (res) => (res.ok ? ditheredImage(new Uint8Array(await res.arrayBuffer()), MARK, MARK, { radius: MARK_RADIUS }) : null),
+      async (res) => (res.ok ? ditheredImage(new Uint8Array(await res.arrayBuffer()), mark, mark, { radius: Math.round(mark * 0.22) }) : null),
       () => (logos.delete(key), null),
     );
     logos.set(key, logo);
@@ -43,7 +69,10 @@ function logoOf(ticker: string): Promise<string | null> {
   return logo;
 }
 
-const withLogos = (movers: Mover[]) => Promise.all(movers.map(async (m) => ({ ...m, logo: await logoOf(m.ticker) })));
+const withLogos = (movers: Mover[], fill: boolean) => {
+  const { mark } = stockMetrics(movers.map(quoted), fill);
+  return Promise.all(movers.map(async (m) => ({ ...m, logo: await logoOf(m.ticker, mark) })));
+};
 
 const MASSIVE = "https://api.massive.com";
 const key = () => process.env.MASSIVE_API_KEY;
@@ -159,7 +188,7 @@ export default defineApp({
   source: "Massive, logos from logo.dev",
   name: "Stocks",
   description: "Today's biggest movers in the US stock market, from Massive.",
-  defaults: { list: "gainers" },
+  defaults: { list: "gainers", style: "standard" as Style },
   fields: [
     {
       key: "list",
@@ -169,6 +198,16 @@ export default defineApp({
         { value: "gainers", label: "Top gainers" },
         { value: "losers", label: "Top losers" },
       ],
+    },
+    {
+      key: "style",
+      label: "Style",
+      type: "select",
+      options: [
+        { value: "standard", label: "Standard" },
+        { value: "fill", label: "Fill" },
+      ],
+      hint: "Fill: the list as large as it can be, and still on the panel, with Gainers or Losers in the corner.",
     },
   ],
   periodMs: 15 * 60_000,
@@ -182,10 +221,10 @@ export default defineApp({
         const found = await movers(list, now);
         if (!found.length) throw new Error("massive: no movers yet today");
         last.set(list, found);
-        return withLogos(found);
+        return withLogos(found, config.style === "fill");
       } catch (err) {
         const old = last.get(list);
-        if (old) return withLogos(old);
+        if (old) return withLogos(old, config.style === "fill");
         throw err;
       }
     }
@@ -195,28 +234,35 @@ export default defineApp({
         const drift = 0.006 * wobble(s.ticker, t);
         return { ...s, close: s.close * (1 + drift), change: s.change + drift * 100 };
       }),
+      config.style === "fill",
     );
   },
-  view: ({ data }) => (
-    <div style={{ ...sheet, flexDirection: "column", justifyContent: "center", padding: "0 44px", gap: 30 }}>
-      {data.map((s) => (
-        <div key={s.ticker} style={{ display: "flex", alignItems: "center", width: "100%" }}>
-          {s.logo ? <img src={s.logo} width={MARK} height={MARK} /> : <Badge text={s.ticker} size={MARK} />}
-          <div style={{ display: "flex", flexDirection: "column", marginLeft: 24, flex: 1, minWidth: 0, overflow: "hidden" }}>
-            <span style={{ fontSize: 40, fontWeight: 500, letterSpacing: -0.8, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-              {s.name}
-            </span>
-            <span style={{ fontSize: 30, fontWeight: 400, marginTop: 4 }}>{s.ticker}</span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0, marginLeft: 20 }}>
-            <span style={{ fontSize: 50, fontWeight: 500, letterSpacing: -1 }}>{money(s.close)}</span>
-            <div style={{ display: "flex", alignItems: "center", marginTop: 4 }}>
-              <Trend up={s.change >= 0} size={24} />
-              <span style={{ fontSize: 34, fontWeight: 500, marginLeft: 8 }}>{`${Math.abs(s.change).toFixed(2)}%`}</span>
+  view: ({ config, data }) => {
+    const fill = config.style === "fill";
+    const laid = stockMetrics(data.map(quoted), fill);
+    return (
+      <div style={{ ...sheet, position: "relative", flexDirection: "column", justifyContent: "center", padding: fill ? `40px ${laid.pad}px 24px` : `0 ${laid.pad}px`, gap: laid.gap }}>
+        {fill ? <Kicker text={config.list === "losers" ? "Losers" : "Gainers"} /> : null}
+        {data.map((s) => (
+          <div key={s.ticker} style={{ display: "flex", alignItems: "center", width: "100%" }}>
+            {s.logo ? <img src={s.logo} width={laid.mark} height={laid.mark} /> : <Badge text={s.ticker} size={laid.mark} />}
+            <div style={{ display: "flex", flexDirection: "column", marginLeft: 24, flex: 1 }}>
+              {/* 0.8: the measure runs wide on a short name, and this uses the gap before the price. */}
+              <span style={{ fontSize: laid.name, fontWeight: 500, letterSpacing: -0.8 }}>
+                {fitLine(s.name, Math.max(laid.nameW, 40), laid.name, laid.name, "sans", 0.8).text}
+              </span>
+              <span style={{ fontSize: laid.ticker, fontWeight: 400, marginTop: 4 }}>{s.ticker}</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0, marginLeft: 20 }}>
+              <span style={{ fontSize: laid.price, fontWeight: 500, letterSpacing: -1 }}>{money(s.close)}</span>
+              <div style={{ display: "flex", alignItems: "center", marginTop: 4 }}>
+                <Trend up={s.change >= 0} size={Math.round(laid.change * 0.7)} />
+                <span style={{ fontSize: laid.change, fontWeight: 500, marginLeft: 8 }}>{`${Math.abs(s.change).toFixed(2)}%`}</span>
+              </div>
             </div>
           </div>
-        </div>
-      ))}
-    </div>
-  ),
+        ))}
+      </div>
+    );
+  },
 });
