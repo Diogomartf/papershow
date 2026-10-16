@@ -2,8 +2,9 @@
 # Papershow's commands on the Pi. install.sh links this script into /usr/local/bin under each
 # command's name, and the name it's called by picks the command:
 #
-#   paper:update           get the latest main and reinstall (--if-newer: only if main has changed;
-#                          papershow-update.timer runs it that way every night)
+#   paper:update           get the latest main and reinstall (--if-newer is the same check the
+#                          nightly timer uses). If main hasn't changed, it stops. A local edit to a
+#                          tracked file is dropped only when there is something to pull; .env stays.
 #   paper:status           what's running, which version, where to open it, what the panel last drew
 #   paper:logs [server|panel|update] [journalctl options]   follow the logs, both services by default
 #   paper:help             list these commands
@@ -37,12 +38,24 @@ port() {
 
 case "$cmd" in
   update)
+    # Quiet for the nightly check; someone running it can see the fetch.
     if [ "${1:-}" = --if-newer ]; then
       git -C "$repo" fetch --quiet origin
-      if [ "$(git -C "$repo" rev-parse HEAD)" = "$(git -C "$repo" rev-parse '@{upstream}')" ]; then
-        echo "Up to date: $(git -C "$repo" log -1 --format='%h %s')"
-        exit 0
-      fi
+    else
+      git -C "$repo" fetch origin
+    fi
+    # Nothing new: don't reinstall. That restarts the panel and flashes it for the same picture.
+    if [ "$(git -C "$repo" rev-parse HEAD)" = "$(git -C "$repo" rev-parse '@{upstream}')" ]; then
+      echo "Already up to date: $(git -C "$repo" log -1 --format='%h %s')"
+      exit 0
+    fi
+    # The checkout follows main. An edit left in a tracked file stops the pull, and the nightly
+    # update with it. Drop it only when there is something to pull; .env and other untracked files stay.
+    dirty=$(git -C "$repo" status --porcelain --untracked-files=no)
+    if [ -n "$dirty" ]; then
+      echo "Dropping local changes so main can update:"
+      printf '%s\n' "$dirty"
+      git -C "$repo" reset --hard HEAD
     fi
     git -C "$repo" pull --ff-only
     # The new copy of install.sh, so changes to the install itself apply in this run.

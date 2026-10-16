@@ -23,6 +23,8 @@ if [ ! -f "$here/install.sh" ] || [ ! -f "$here/../../package.json" ]; then
   command -v git >/dev/null || sudo apt-get install -y git </dev/null
   if [ -d "$dir/.git" ]; then
     git -C "$dir" fetch --quiet origin </dev/null
+    # Same as paper:update: a local edit to a tracked file must not stop the update. Untracked files stay.
+    git -C "$dir" reset --hard HEAD </dev/null
     git -C "$dir" switch --quiet "$branch" </dev/null
     git -C "$dir" pull --quiet --ff-only </dev/null
   elif command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
