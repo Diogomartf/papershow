@@ -2,7 +2,8 @@ import type { MouseEvent } from "react";
 
 /** Client-side navigation: swap the route without a reload. */
 export function navigate(to: string) {
-  history.pushState(null, "", to);
+  // Marks the entry as reached from inside Papershow, so a page's Back can step back to it.
+  history.pushState({ from: location.pathname }, "", to);
   dispatchEvent(new PopStateEvent("popstate"));
 }
 
