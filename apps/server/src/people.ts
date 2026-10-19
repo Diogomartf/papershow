@@ -305,14 +305,18 @@ const LOG_DAYS = 90;
 /** Repeating the same thing to the same subject within this long updates one entry, not many. */
 const SAME_MS = 15 * 60_000;
 
-/** Note that `personId` did `verb` to `subject`, e.g. note(me, "added-to-show", { item }). */
-export function note(personId: string | null, verb: string, subject: Record<string, unknown> = {}, now = Date.now()) {
+/**
+ * Note that `personId` did `verb` to `subject`, e.g. note(me, "added-to-show", { item }). `settling` names subject
+ * keys that may change between repeats and still be the same thing someone did, like the hours of the night while
+ * they're being set: the entry keeps the last value.
+ */
+export function note(personId: string | null, verb: string, subject: Record<string, unknown> = {}, now = Date.now(), settling: string[] = []) {
   const json = JSON.stringify(subject);
   const last = db.prepare("select id, at, person_id, verb, subject from log order by id desc limit 1").get() as
     | { id: number; at: number; person_id: string | null; verb: string; subject: string }
     | undefined;
   // Moving sliders or redrawing in a row is one thing someone did, not twenty.
-  if (last && last.person_id === personId && last.verb === verb && now - last.at < SAME_MS && sameSubject(last.subject, subject)) {
+  if (last && last.person_id === personId && last.verb === verb && now - last.at < SAME_MS && sameSubject(last.subject, subject, settling)) {
     db.prepare("update log set at = ?, subject = ? where id = ?").run(now, json, last.id);
   } else {
     db.prepare("insert into log (at, person_id, verb, subject) values (?, ?, ?, ?)").run(now, personId, verb, json);
@@ -320,9 +324,13 @@ export function note(personId: string | null, verb: string, subject: Record<stri
 }
 
 /** Same things acted on, going by ids: a rename in between still counts as the same. */
-function sameSubject(stored: string, subject: Record<string, unknown>) {
+function sameSubject(stored: string, subject: Record<string, unknown>, settling: string[] = []) {
   const ids = (s: Record<string, unknown>) =>
-    JSON.stringify(Object.entries(s).map(([k, v]) => [k, v && typeof v === "object" && "id" in v ? (v as Named).id : v]));
+    JSON.stringify(
+      Object.entries(s)
+        .filter(([k]) => !settling.includes(k))
+        .map(([k, v]) => [k, v && typeof v === "object" && "id" in v ? (v as Named).id : v]),
+    );
   return ids(JSON.parse(stored)) === ids(subject);
 }
 

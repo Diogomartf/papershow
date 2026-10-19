@@ -1078,7 +1078,13 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .night-settings .segmented { margin-left: auto; max-width: 100%; }
 .night-settings .segmented { flex-wrap: wrap; justify-content: flex-end; }
 .night-settings .segmented button { padding: 5px 9px; font-size: 13px; }
-.night-settings .hours input { font-size: 13px; width: 6.6em; }
+.hour-input { display: inline-flex; align-items: center; gap: 2px; font-variant-numeric: tabular-nums; }
+.hour-input select {
+  appearance: none; border: 0; border-radius: 6px; padding: 4px 8px;
+  background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer;
+}
+.hour-input select:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 
 /* ── Playlists overview ──────────────────────────── */
 

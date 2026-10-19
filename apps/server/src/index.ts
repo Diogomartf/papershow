@@ -240,7 +240,8 @@ const namedPlaylist = (id: string): people.Named => ({ kind: "playlist", id, nam
 const namedPerson = (p: people.Person) => ({ kind: "person", id: p.id, name: p.name, face: p.face });
 
 /** Note what the signed-in person did, for the log. */
-const note = (c: C, verb: string, subject: Record<string, unknown> = {}) => people.note(c.get("me").id, verb, subject);
+const note = (c: C, verb: string, subject: Record<string, unknown> = {}, settling?: string[]) =>
+  people.note(c.get("me").id, verb, subject, Date.now(), settling);
 
 function signInAs(c: C, personId: string) {
   setCookie(c, COOKIE, people.startSession(personId), {
@@ -803,7 +804,8 @@ app.put("/api/sleep", async (c) => {
   const was = store.getSleep();
   const now = store.setSleep(await c.req.json());
   if (now.away !== was.away) note(c, now.away ? "turned-off" : "turned-on", now.away && now.back ? { back: now.back } : {});
-  else note(c, "changed-night", { enabled: now.enabled, start: now.start, end: now.end });
+  // Trying a few hours before settling on one is one change in the log, with the hours it ended on.
+  else note(c, "changed-night", { enabled: now.enabled, start: now.start, end: now.end }, ["start", "end"]);
   changed();
   return c.json(await state(c));
 });
