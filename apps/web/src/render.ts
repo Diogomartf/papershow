@@ -1,5 +1,5 @@
 import { toSvg } from "drawesome";
-import { dither, pack1bpp, TEXT_FONT, TEXT_LINE, type Scene, type TextItem } from "@papershow/scene";
+import { dither, enhance, pack1bpp, TEXT_FONT, TEXT_LINE, type Scene, type TextItem } from "@papershow/scene";
 
 const fontOf = (t: TextItem) => `${t.bold ? 700 : 450} ${t.size}px ${TEXT_FONT}`;
 
@@ -17,22 +17,51 @@ async function drawTexts(ctx: CanvasRenderingContext2D, texts: TextItem[]) {
   }
 }
 
-async function sceneToCanvas(scene: Scene): Promise<HTMLCanvasElement> {
-  const svg = toSvg(scene.strokes, scene.width, scene.height, scene.background);
+const loadImage = async (src: string) => {
   const img = new Image();
-  img.src = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
-  try {
-    await img.decode();
-  } finally {
-    URL.revokeObjectURL(img.src);
-  }
+  img.src = src;
+  await img.decode();
+  return img;
+};
+
+/** The scene as pixels. For the panel (`mono`), a photo is tuned for 1 bit before the ink goes on top. */
+async function sceneToCanvas(scene: Scene, mono = false): Promise<HTMLCanvasElement> {
   const canvas = document.createElement("canvas");
   canvas.width = scene.width;
   canvas.height = scene.height;
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(img, 0, 0, scene.width, scene.height);
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+  if (scene.photo) {
+    ctx.drawImage(await loadImage(scene.photo), 0, 0, scene.width, scene.height);
+    if (mono) {
+      const data = ctx.getImageData(0, 0, scene.width, scene.height);
+      enhance(data.data, scene.width, scene.height);
+      ctx.putImageData(data, 0, 0);
+    }
+  }
+  // Over a photo the strokes go on without their paper.
+  const svg = toSvg(scene.strokes, scene.width, scene.height, scene.photo ? null : scene.background);
+  const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+  try {
+    ctx.drawImage(await loadImage(url), 0, 0, scene.width, scene.height);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
   if (scene.texts?.length) await drawTexts(ctx, scene.texts);
   return canvas;
+}
+
+/** A picked photo, cropped to fill the panel, small enough to keep in the scene. */
+export async function photoFor(file: Blob, w: number, h: number): Promise<string> {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.max(w / bmp.width, h / bmp.height);
+  const sw = w / scale;
+  const sh = h / scale;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext("2d")!.drawImage(bmp, (bmp.width - sw) / 2, (bmp.height - sh) / 2, sw, sh, 0, 0, w, h);
+  bmp.close();
+  return canvas.toDataURL("image/jpeg", 0.85);
 }
 
 /** Dither a canvas in place to what the e-ink panel will show. */
@@ -52,7 +81,7 @@ const toBlob = (canvas: HTMLCanvasElement) =>
 /** Everything SlideGen stores: colour PNG, 1-bit PNG, and the panel's raw 1bpp frame. */
 export async function renderScene(scene: Scene): Promise<{ png: Blob; mono: Blob; bin: Blob }> {
   const png = await toBlob(await sceneToCanvas(scene));
-  const monoCanvas = toMono(await sceneToCanvas(scene));
+  const monoCanvas = toMono(await sceneToCanvas(scene, true));
   const mono = await toBlob(monoCanvas);
   const pixels = monoCanvas.getContext("2d")!.getImageData(0, 0, scene.width, scene.height).data;
   const bin = new Blob([pack1bpp(pixels, scene.width, scene.height)], { type: "application/octet-stream" });
@@ -61,7 +90,7 @@ export async function renderScene(scene: Scene): Promise<{ png: Blob; mono: Blob
 
 /** For the live e-ink preview: paint the dithered scene onto an existing canvas. */
 export async function paintMono(scene: Scene, target: HTMLCanvasElement) {
-  const mono = toMono(await sceneToCanvas(scene));
+  const mono = toMono(await sceneToCanvas(scene, true));
   target.width = scene.width;
   target.height = scene.height;
   target.getContext("2d")!.drawImage(mono, 0, 0);

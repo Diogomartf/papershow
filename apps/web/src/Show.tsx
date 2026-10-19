@@ -214,6 +214,9 @@ export function Show() {
   const pinned = state?.live.mode === "pin";
   const pinnedUntil = state?.live.mode === "pin" ? (state.live.until ?? null) : null;
   const pinnedSource = state?.live.mode === "pin" ? state.live.source : null;
+  // Something put on from outside the program (Show now, or sent from Draw), and who did it.
+  const outside = pinned && !resting && !showing?.invite;
+  const outsideBy = outside && state ? api.pinnedBy(state.live, state.people, state.me) : "";
   const onTurn = !pinned && !resting ? seq.find((t) => t.at <= now && now < t.endsAt) : undefined;
   const nextTurn = resting
     ? asleep
@@ -458,14 +461,16 @@ export function Show() {
             )}
           </article>
 
-          <article className="pg-now" data-on={!!onTurn || pinned}>
+          <article className="pg-now" data-on={!!onTurn || pinned} data-outside={outside}>
             <div className="pg-frame">
               {nowFrame ? <EinkImage src={nowFrame} /> : <span className="pg-frame-empty">{resting ? "💤" : "📺"}</span>}
               {progress !== undefined && <div className="pg-progress" style={{ ["--p" as string]: progress }} aria-hidden />}
             </div>
             <div className="pg-now-text">
               <div className="pg-now-head">
-                <span className="pg-badge" data-kind={resting ? "rest" : "now"}>{away ? "Off" : resting ? "Asleep" : "Live"}</span>
+                <span className="pg-badge" data-kind={resting ? "rest" : outside ? "outside" : "now"}>
+                  {away ? "Off" : resting ? "Asleep" : outside ? "Outside the program" : "Live"}
+                </span>
                 {left && (
                   <span className="pg-left tabular">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -480,6 +485,12 @@ export function Show() {
                 <h1>{nowTitle}</h1>
                 <span className="pg-now-when tabular">{nowLine}</span>
               </div>
+              {outside && (
+                <p className="pg-outside">
+                  {outsideBy}
+                  {pinnedUntil ? `. The program picks up at ${hhmm(pinnedUntil)}.` : "."}
+                </p>
+              )}
               {pinned && (
                 <button className="pg-big" onClick={() => api.setLive({ mode: "rotate" }).then(accept)}>
                   ↩ Back to the program

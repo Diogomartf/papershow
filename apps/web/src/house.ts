@@ -76,7 +76,29 @@ export const notNow = (id: string) => call<unknown>(`/api/people/${id}`, "DELETE
 export const createInvite = (panel: boolean) => call<Invite>("/api/invites", "POST", { origin: location.origin, panel });
 export const hideInvite = (code: string) => call<unknown>(`/api/invites/${code}/panel`, "DELETE");
 export const inviteQr = (code: string) => `/api/invites/${code}/qr.svg`;
-export const getLog = (opts: { before?: number; person?: string; limit?: number } = {}) => {
+/** The log's topics, each the verbs it covers. */
+export const LOG_TOPICS = [
+  { key: "panel", label: "On the panel", icon: "📺", verbs: ["showed-now", "resumed"] },
+  {
+    key: "program",
+    label: "Program",
+    icon: "📅",
+    verbs: [
+      "changed-program", "added-to-show", "removed-from-show", "changed-show", "reordered-show",
+      "made-playlist", "renamed-playlist", "deleted-playlist", "added-to-playlist", "removed-from-playlist", "changed-playlist",
+    ],
+  },
+  { key: "made", label: "Drawings and apps", icon: "✏️", verbs: ["drew", "redrew", "erased", "made-app", "tuned-app", "deleted-app"] },
+  { key: "night", label: "Night and off", icon: "🌙", verbs: ["changed-night", "turned-off", "turned-on"] },
+  {
+    key: "people",
+    label: "People and invites",
+    icon: "🎟️",
+    verbs: ["set-up", "knocked", "joined", "invited", "let-in", "let-back-in", "not-now", "removed", "made-admin", "made-member", "new-look"],
+  },
+] as const;
+
+export const getLog = (opts: { before?: number; person?: string; verbs?: string; limit?: number } = {}) => {
   const q = new URLSearchParams(Object.entries(opts).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]));
   return call<LogEntry[]>(`/api/log?${q}`);
 };

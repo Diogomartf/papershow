@@ -31,6 +31,8 @@ export type Scene = {
   strokes: Stroke[];
   /** Drawn above the strokes. Older scenes have none. */
   texts?: TextItem[];
+  /** A photo under everything, as a JPEG data URL already cropped to the panel. */
+  photo?: string;
   createdAt: number;
   updatedAt: number;
 };

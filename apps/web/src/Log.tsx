@@ -5,7 +5,7 @@ import { LiveLink } from "./LiveLink";
 import { MeMenu } from "./MeMenu";
 import { useLiveState, useNow } from "./live";
 import { Nav } from "./Nav";
-import { getLog, tint, type LogEntry } from "./house";
+import { getLog, LOG_TOPICS, tint, type LogEntry } from "./house";
 import { LogList } from "./People";
 
 const PAGE = 50;
@@ -14,6 +14,8 @@ export function Log() {
   const { state, skew } = useLiveState();
   const now = useNow(skew, 30_000);
   const [person, setPerson] = useState<string | null>(null);
+  const [topic, setTopic] = useState<string | null>(null);
+  const verbs = LOG_TOPICS.find((t) => t.key === topic)?.verbs.join(",");
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [more, setMore] = useState(false);
 
@@ -24,17 +26,17 @@ export function Log() {
   // Start over when the filter changes, and whenever someone does something new.
   const newest = state?.log[0]?.id;
   useEffect(() => {
-    getLog({ person: person ?? undefined, limit: PAGE }).then((xs) => {
+    getLog({ person: person ?? undefined, verbs, limit: PAGE }).then((xs) => {
       setEntries(xs);
       setMore(xs.length === PAGE);
     });
-  }, [person, newest]);
+  }, [person, verbs, newest]);
 
   const loadMore = useCallback(async () => {
-    const xs = await getLog({ person: person ?? undefined, limit: PAGE, before: entries[entries.length - 1]?.id });
+    const xs = await getLog({ person: person ?? undefined, verbs, limit: PAGE, before: entries[entries.length - 1]?.id });
     setEntries((e) => [...e, ...xs]);
     setMore(xs.length === PAGE);
-  }, [entries, person]);
+  }, [entries, person, verbs]);
 
   const everyone = state?.people ?? [];
 
@@ -66,6 +68,17 @@ export function Log() {
                 </button>
               ))}
           </div>
+          <div className="log-filter" role="radiogroup" aria-label="What">
+            <button role="radio" aria-checked={topic === null} onClick={() => setTopic(null)}>
+              Everything
+            </button>
+            {LOG_TOPICS.map((t) => (
+              <button key={t.key} role="radio" aria-checked={topic === t.key} onClick={() => setTopic(t.key)}>
+                <span aria-hidden>{t.icon}</span> {t.label}
+              </button>
+            ))}
+          </div>
+          {!entries.length && (person || topic) && <p className="muted">Nothing like that yet.</p>}
           <LogList entries={entries} people={everyone} now={now} />
           {more && (
             <button className="ghost log-more" onClick={loadMore}>

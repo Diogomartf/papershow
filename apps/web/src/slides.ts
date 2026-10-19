@@ -61,7 +61,18 @@ export type Turn = {
 };
 
 /** Show now holds `source` on /live until `until`, then the playlists carry on. */
-export type Live = { mode: "rotate" } | { mode: "pin"; source: Source; until?: number | null };
+/** A pin is outside the program: `by` who put it up, and `from` Draw when it was sent straight from there. */
+export type Live =
+  | { mode: "rotate" }
+  | { mode: "pin"; source: Source; until?: number | null; by?: string | null; from?: "draw" | null };
+
+/** Where a pin came from, for the label that says it's outside the program: "Sent from Draw by Ana". */
+export function pinnedBy(live: Live, people: Person[], me?: Person | null): string {
+  if (live.mode !== "pin") return "";
+  const who = live.by ? (live.by === me?.id ? "you" : people.find((p) => p.id === live.by)?.name) : undefined;
+  const how = live.from === "draw" ? "Sent from Draw" : "Put on with Show now";
+  return who ? `${how} by ${who}` : how;
+}
 
 /** Night: hours when the panel sleeps, and what it shows ("off" keeps the last picture). Away: off for days. */
 export type Sleep = {

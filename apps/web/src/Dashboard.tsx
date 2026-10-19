@@ -60,6 +60,8 @@ export function Dashboard() {
   const restsUntil = away ? (asleep ? `until ${dayTime(asleep)}` : "until you turn it on") : `until ${hhmm(asleep ?? 0)}`;
   const pinned = state?.live.mode === "pin";
   const pinnedUntil = state?.live.mode === "pin" ? (state.live.until ?? null) : null;
+  // A Show now or a drawing sent from Draw: on the panel, but not from the program.
+  const outside = pinned && !resting && !showing?.invite;
   const onAir = itemOf(showing?.source);
   const playlistName = (id: string | null) => (id ? (state?.playlists.find((p) => p.id === id)?.name ?? "") : "In the show");
   const seq = state?.sequence ?? [];
@@ -100,8 +102,8 @@ export function Dashboard() {
               <span className="ribbon" aria-hidden />
             </div>
             <div className="dash-caption">
-              <span className="on-air" data-on={!!showing && !resting} data-asleep={resting}>
-                {away ? "Off" : resting ? "Asleep" : showing ? "On air" : "Off air"}
+              <span className="on-air" data-on={!!showing && !resting} data-asleep={resting} data-outside={outside}>
+                {away ? "Off" : resting ? "Asleep" : outside ? "Outside the program" : showing ? "On air" : "Off air"}
               </span>
               <h1>
                 {away ? "Turned off" : resting ? "Good night" : showing?.invite ? "Invite" : onAir?.name ?? (showing ? "…" : "Nothing showing")}
@@ -119,10 +121,8 @@ export function Dashboard() {
                   </>
                 ) : resting
                   ? `${away ? "Off" : "Night"} ${restsUntil}`
-                  : pinned
-                    ? pinnedUntil
-                      ? `Show now · until ${hhmm(pinnedUntil)}`
-                      : "Pinned with Show now"
+                  : pinned && state
+                    ? `${api.pinnedBy(state.live, state.people, state.me)}${pinnedUntil ? ` · until ${hhmm(pinnedUntil)}` : ""}`
                     : currentTurn
                       ? `${playlistName(currentTurn.playlistId)} · ${countdown((clip?.endsAt ?? now) - now)} left`
                       : ""}

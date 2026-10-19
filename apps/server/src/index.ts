@@ -415,6 +415,7 @@ app.get("/api/log", (c) =>
       limit: Number(c.req.query("limit")) || 50,
       before: Number(c.req.query("before")) || undefined,
       personId: c.req.query("person") || undefined,
+      verbs: c.req.query("verbs")?.split(",").filter(Boolean),
     }),
   ),
 );
@@ -816,7 +817,13 @@ app.put("/api/live", async (c) => {
     if (!live.source || !exists(live.source)) return c.json({ error: "no such image or app" }, 404);
     // Show now takes over once, for its turn (`forS`, else 15 minutes), then the playlists carry on.
     const forS = Number(live.forS) > 0 ? Number(live.forS) : SHOW_NOW_S;
-    store.setLive({ mode: "pin", source: { kind: live.source.kind, id: live.source.id }, until: Date.now() + forS * 1000 });
+    store.setLive({
+      mode: "pin",
+      source: { kind: live.source.kind, id: live.source.id },
+      until: Date.now() + forS * 1000,
+      by: c.get("me").id,
+      from: live.from === "draw" ? "draw" : null,
+    });
     note(c, "showed-now", { item: named(live.source) });
     // The panel wakes on its own at the end; open pages hear it then.
     setTimeout(changed, forS * 1000 + 50).unref();

@@ -437,6 +437,8 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
 }
 .viewer footer { display: flex; align-items: center; gap: 14px; padding-top: 18px; }
 .viewer .title { font-weight: 560; }
+.viewer footer a.ghost { padding: 7px 10px; border-radius: 8px; color: var(--ink-2); text-decoration: none; font-weight: 560; }
+.viewer footer a.ghost:hover { background: var(--tint); color: var(--ink); }
 
 /* ── Light switch ──────────────────────────────────── */
 
@@ -2132,13 +2134,19 @@ button.link.danger { color: var(--danger); }
 
 .log-list { list-style: none; margin: 0; padding: 0; display: grid; }
 .log-list li {
-  display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 10px;
+  display: grid; grid-template-columns: 26px 1fr auto auto; align-items: center; gap: 10px;
   padding: 9px 0; border-bottom: 1px solid var(--line);
   font-size: 15px; line-height: 1.35;
 }
 .log-list li:last-child { border-bottom: 0; }
 .log-list time { font-size: 12px; white-space: nowrap; }
 .log-text { min-width: 0; overflow-wrap: anywhere; }
+/* The drawing or app the line is about: a small panel, tap to open it. Lines without one leave the column empty. */
+.log-list time { grid-column: 4; }
+.log-thumb { grid-column: 3; display: block; width: 60px; aspect-ratio: 5 / 3; border-radius: 4px; overflow: hidden; background: var(--paper); box-shadow: 0 0 0 1px var(--line); }
+.log-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; filter: var(--dim); }
+.log-thumb:hover { box-shadow: 0 0 0 2px var(--ink); }
+.lately .log-thumb { width: 44px; }
 .log-filter { display: flex; flex-wrap: wrap; gap: 6px; }
 .log-filter button {
   display: inline-flex; align-items: center; gap: 6px;
@@ -2152,7 +2160,7 @@ button.link.danger { color: var(--danger); }
 /* The Dashboard's corner of it */
 .knock-mini p { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .knock-mini .big-yes { height: 38px; padding: 0 18px; font-size: 15px; }
-.lately .log-list li { font-size: 13px; padding: 7px 0; grid-template-columns: 22px 1fr auto; gap: 8px; }
+.lately .log-list li { font-size: 13px; padding: 7px 0; grid-template-columns: 22px 1fr auto auto; gap: 8px; }
 .lately .face-mini { width: 22px; height: 22px; font-size: 13px; }
 .lately > .link { justify-self: start; font-size: 13px; }
 
@@ -2194,3 +2202,71 @@ fieldset.plain:disabled > * { opacity: .55; }
   }
 }
 .door-center.wide { max-width: 760px; }
+
+/* Draw's Show now: a quiet pill with a small on-air dot, the only red. The dot pulses, it squashes when pressed, beams while sending,
+   and cheers "On air!" once it's up. How long sits beside it as a chip you can change. */
+.show-now {
+  --sn-h: 34px;
+  display: inline-flex; align-items: center; gap: 2px;
+  height: var(--sn-h); padding: 3px;
+  border-radius: 999px;
+  background: var(--tint); color: var(--ink);
+  transition: transform 160ms var(--ease-out), box-shadow 200ms var(--ease-out);
+}
+.show-now:hover {
+  transform: translateY(-1px) rotate(-1deg);
+  background: color-mix(in oklch, var(--ink) 14%, var(--tint));
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--ink) 18%, transparent), 0 6px 14px -8px var(--drop);
+}
+.show-now:has(button:active) { transform: scale(.94); transition-duration: 80ms; }
+.show-now button {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 100%; padding: 0 10px 0 9px;
+  border: 0; border-radius: 999px; background: transparent; color: inherit;
+  font: inherit; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; cursor: pointer;
+}
+.show-now button:disabled { cursor: progress; }
+.show-now button:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.show-now-dot {
+  width: 8px; height: 8px; flex: none; border-radius: 50%;
+  background: var(--on-air); box-shadow: 0 0 0 0 color-mix(in oklch, var(--on-air) 50%, transparent);
+  animation: snPulse 1.8s ease-out infinite;
+}
+.show-now select {
+  appearance: none;
+  height: 100%; padding: 0 22px 0 10px;
+  border: 0; border-radius: 999px;
+  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 8px center;
+  color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color 120ms;
+}
+.show-now select:hover { color: var(--ink); }
+.show-now select:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.show-now select option { color: var(--ink); background: var(--surface); }
+/* Sending: the dot blinks fast, as if transmitting. */
+.show-now[data-beam="sending"] .show-now-dot { animation: snBlink 360ms steps(2) infinite; }
+/* Up: a hop and a burst from the dot. */
+.show-now[data-beam="on"] { animation: snHop 520ms var(--ease-out); }
+.show-now[data-beam="on"] .show-now-dot { animation: snBurst 700ms ease-out 2; }
+.show-now[data-beam="on"] .show-now-word { animation: snPop 320ms var(--ease-out); }
+@keyframes snPulse { 0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--on-air) 45%, transparent); } 70%, 100% { box-shadow: 0 0 0 6px transparent; } }
+@keyframes snBlink { 50% { opacity: .2; } }
+@keyframes snBurst { 0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--on-air) 60%, transparent); } 100% { box-shadow: 0 0 0 12px transparent; } }
+@keyframes snHop { 0% { transform: scale(.94); } 45% { transform: translateY(-4px) rotate(2deg) scale(1.04); } 100% { transform: none; } }
+@keyframes snPop { from { opacity: 0; transform: translateY(4px) scale(.9); } to { opacity: 1; transform: none; } }
+/* Already up as it is: settled, not pressable, the length hidden until there's something new to send. */
+.show-now[data-up="true"], .show-now[data-up="true"]:hover { transform: none; background: var(--tint); box-shadow: none; }
+.show-now[data-up="true"] button { cursor: default; color: var(--ink-2); font-weight: 600; }
+.show-now[data-up="true"] select { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .show-now, .show-now:hover { transition: none; transform: none; }
+  .show-now-dot, .show-now[data-beam] .show-now-dot, .show-now[data-beam="on"], .show-now[data-beam="on"] .show-now-word { animation: none; }
+}
+
+/* Outside the program: a Show now or a drawing sent from Draw has cut in. Ink, not on-air red, and a dashed edge, so it reads as a guest. */
+.on-air[data-outside="true"] { color: var(--ink); }
+.pg-badge[data-kind="outside"] { background: var(--ink); color: var(--surface); }
+.pg-badge[data-kind="outside"]::before { content: "↘"; font-size: 14px; letter-spacing: 0; }
+.pg-now[data-outside="true"] { box-shadow: 0 16px 36px -20px var(--drop); outline: 3px dashed var(--ink); outline-offset: -1px; }
+.pg-outside { margin: 0; font-size: 16px; font-weight: 560; color: var(--ink); }
