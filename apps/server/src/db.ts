@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Scene } from "@papershow/scene";
-import { awayUntil, DEFAULT_SLEEP, sameSource, type Days, type Live, type Program, type Sleep, type Slide, type Source } from "./schedule.ts";
+import { awayUntil, DEFAULT_SLEEP, sameSource, type Days, type Hourly, type Live, type Program, type Sleep, type Slide, type Source } from "./schedule.ts";
 
 const path = process.env.DB ?? new URL("../data/imagegen.db", import.meta.url).pathname;
 mkdirSync(dirname(path), { recursive: true });
@@ -293,7 +293,46 @@ export function program(): Program {
   const clips = listSlides();
   const show = listShow();
   const blocks = listBlocks().map((b) => ({ ...b, slides: blockSlides(show.filter((e) => e.blockId === b.id), clips) }));
-  return { blocks, weekendOwn: weekendOwn() };
+  return { blocks, weekendOwn: weekendOwn(), hourly: hourly() };
+}
+
+/**
+ * The time check on the hour: on unless switched off, with the clock picked, or else the first clock there is.
+ * `durationS` is how long it stays on.
+ */
+export type TimeCheck = { on: boolean; appId: string | null; durationS: number };
+
+const DEFAULT_TIME_CHECK: TimeCheck = { on: true, appId: null, durationS: 60 };
+
+// The apps that can be the time check. Kept here rather than read from the app list, which imports this file.
+const CLOCKS = ["clock", "aiclock"];
+
+/** The time check as set, with `appId` filled in with the clock it will show (null when there's no clock). */
+export function getTimeCheck(): TimeCheck {
+  const row = db.prepare("select value from settings where key = 'time-check'").get() as { value: string } | undefined;
+  const set: TimeCheck = row ? { ...DEFAULT_TIME_CHECK, ...JSON.parse(row.value) } : DEFAULT_TIME_CHECK;
+  const clocks = listApps().filter((a) => CLOCKS.includes(a.kind));
+  // A deleted clock falls back to the first one left.
+  const app = clocks.find((a) => a.id === set.appId) ?? clocks[0];
+  return { ...set, appId: app?.id ?? null };
+}
+
+export function setTimeCheck(patch: Partial<TimeCheck>) {
+  const cur = getTimeCheck();
+  const app = patch.appId ? getApp(patch.appId) : undefined;
+  const next: TimeCheck = {
+    on: typeof patch.on === "boolean" ? patch.on : cur.on,
+    appId: app && CLOCKS.includes(app.kind) ? app.id : cur.appId,
+    durationS: cur.durationS,
+  };
+  db.prepare("insert into settings (key, value) values ('time-check', ?) on conflict(key) do update set value = excluded.value").run(
+    JSON.stringify(next),
+  );
+}
+
+function hourly(): Hourly | null {
+  const t = getTimeCheck();
+  return t.on && t.appId ? { source: { kind: "app", id: t.appId }, durationS: t.durationS } : null;
 }
 
 function blockSlides(entries: ShowEntry[], clips: Slide[]): Slide[] {

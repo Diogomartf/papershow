@@ -1258,6 +1258,8 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 /* Up close the bar drags sideways; the page still scrolls up and down under a finger. */
 .pg-day-bar:not([data-view="1440"]) { cursor: grab; touch-action: pan-y; user-select: none; }
 .pg-day-bar[data-dragging="true"], .pg-day-bar[data-dragging="true"] .pg-slot { cursor: grabbing; }
+/* The time check: a dark notch at the top of every hour, a minute wide but always wide enough to see. */
+.pg-chime { position: absolute; top: 0; bottom: 0; min-width: 3px; margin-left: -1px; background: var(--ink); pointer-events: none; }
 .pg-handover { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--ink); pointer-events: none; }
 /* Up close, the turns are big enough to tap and to carry their names. */
 .pg-day-bar button.pg-slot {
@@ -1291,6 +1293,17 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .pg-colors button[aria-checked="true"] { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--ink); }
 .pg-swatch { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 3px; background: var(--swatch); vertical-align: 0; }
 
+.pg-check {
+  display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 16px;
+  margin-bottom: 18px; padding: 14px 18px;
+  border-radius: 20px; background: var(--surface);
+}
+.pg-check .pg-thumb { width: 64px; }
+.pg-check > div { display: grid; gap: 4px; }
+.pg-check strong { font-size: 18px; font-weight: 700; }
+.pg-check small { font-size: 15px; font-weight: 560; color: var(--ink-2); }
+.pg-check .segmented { justify-self: start; margin-top: 6px; }
+.pg-check[data-off="true"] .pg-thumb { opacity: 0.45; }
 .pg-blocks-head { display: grid; gap: 4px; margin-bottom: 14px; }
 .pg-blocks-head h3 { margin: 0; font-size: 22px; font-weight: 720; letter-spacing: -0.015em; }
 .pg-blocks-head p { margin: 0; font-size: 16px; font-weight: 560; color: var(--ink-2); }

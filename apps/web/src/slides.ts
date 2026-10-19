@@ -39,6 +39,9 @@ export type EntryColor = (typeof ENTRY_COLORS)[number];
 
 export type Days = "weekdays" | "weekend";
 
+/** The time check: a clock that cuts in at the top of every hour, outside the blocks. `appId` is the clock it shows. */
+export type TimeCheck = { on: boolean; appId: string | null; durationS: number };
+
 /** A time of day; what's in it plays from then until the next block, starting over when it runs out. */
 export type Block = { id: string; days: Days; start: string };
 
@@ -99,7 +102,7 @@ export type State = {
   playlists: Playlist[];
   show: ShowEntry[];
   /** The week's blocks; the weekend plays the weekdays' unless it has its own. */
-  program: { weekendOwn: boolean; blocks: Block[] };
+  program: { weekendOwn: boolean; blocks: Block[]; timeCheck: TimeCheck };
   /** The block on air (even under a Show now or the night), and when the next one takes over. */
   block: { id: string; startedAt: number; endsAt: number } | null;
   upcoming: { slideId: string; at: number }[];
@@ -180,6 +183,8 @@ export const moveBlock = (id: string, start: string) => call(`/api/blocks/${id}`
 export const removeBlock = (id: string) => call(`/api/blocks/${id}`, "DELETE");
 /** Plan the weekend on its own (starting from a copy of the weekdays), or play the weekdays every day. */
 export const setWeekendOwn = (weekendOwn: boolean) => call("/api/program", "PUT", { weekendOwn });
+/** Switch the time check on the hour on or off, or pick its clock. */
+export const setTimeCheck = (timeCheck: Partial<TimeCheck>) => call("/api/program", "PUT", { timeCheck });
 
 /** Put a removed block back, with what was in it. */
 export async function restoreBlock(block: Block, entries: ShowEntry[]): Promise<State> {

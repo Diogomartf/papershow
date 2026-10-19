@@ -5,7 +5,8 @@ import { appFrameUrl, getCatalog, listApps, type AppKind } from "./apps";
 import { fileUrl, listImages } from "./store";
 
 export type Source = { kind: "image" | "app"; id: string };
-export type Item = { source: Source; key: string; name: string; thumb: string; label: string };
+/** `appKind` is which app an app instance is, so a page can pick out the clocks. */
+export type Item = { source: Source; key: string; name: string; thumb: string; label: string; appKind?: string };
 
 export const keyOf = (s: Source) => `${s.kind}:${s.id}`;
 export const parseKey = (key: string): Source | null => {
@@ -33,6 +34,7 @@ export async function loadItems() {
         name: a.name,
         thumb: appFrameUrl(a),
         label: name.get(a.kind) ?? "App",
+        appKind: a.kind,
       })),
       ...images.map((i) => ({
         source: { kind: "image" as const, id: i.id },

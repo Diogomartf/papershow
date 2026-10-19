@@ -135,7 +135,7 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
 export function Show() {
   const { state, accept, skew } = useLiveState();
   const now = useNow(skew, 1000);
-  const { items, itemOf } = useItems();
+  const { items, itemOf, catalog } = useItems();
   const toast = useUndoToast();
 
   useEffect(() => {
@@ -199,6 +199,11 @@ export function Show() {
     return out;
   });
   const sleep = state?.sleep;
+  // The time check isn't in any block: it cuts in on the hour, every hour, and the blocks carry on underneath.
+  const timeCheck = state?.program.timeCheck;
+  const clocks = items.filter((i) => catalog.find((k) => k.kind === i.appKind)?.category === "clock");
+  const checking = !!timeCheck?.on && !!timeCheck.appId;
+  const checkClock = timeCheck?.appId ? itemOf({ kind: "app", id: timeCheck.appId }) : undefined;
 
   // ── What's on ──
   const seq = state?.sequence ?? [];
@@ -327,6 +332,8 @@ export function Show() {
     api.removeFromShow(e.id).then(accept);
     toast.show(`Removed ${nameOf(e)}`, () => api.restoreShowEntry(e, index).then(accept));
   };
+  const setCheck = (patch: Partial<api.TimeCheck>) =>
+    api.setTimeCheck(patch).then(accept, failed("Couldn't change the time check"));
   const setWeekend = (own: boolean) =>
     api.setWeekendOwn(own).then((s: State) => {
       accept(s);
@@ -608,6 +615,12 @@ export function Show() {
                       .filter(([a]) => a > 0)
                       .map(([a]) => <span key={`s${b.id}`} className="pg-handover" style={{ left: vpct(a) }} />),
                   )}
+                {checking &&
+                  Array.from({ length: 24 }, (_, h) => sinceDayFrom(h * 60)).flatMap((m) =>
+                    inView([m, timeCheck!.durationS / 60]).map(([a, len]) => (
+                      <span key={`c${m}-${a}`} className="pg-chime" style={{ left: vpct(a), width: vpct(len) }} title={`${clockOf(m)} ${checkClock?.name ?? "Clock"}`} />
+                    )),
+                  )}
                 {/* On top of the turns and the hours: the panel sleeps through them, so the night reads as one stretch. */}
                 {sleepOnBar.flatMap(inView).map(([a, len]) => (
                   <span key={`z${a}`} className="pg-sleep" style={{ left: vpct(a), width: vpct(len) }}>
@@ -623,6 +636,40 @@ export function Show() {
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* The time check, outside the blocks: on the hour, every hour. */}
+          {timeCheck && (
+            <div className="pg-check" data-off={!checking}>
+              <span className="pg-thumb">{checkClock?.thumb ? <img src={checkClock.thumb} alt="" /> : <span>🕐</span>}</span>
+              <div>
+                <strong>Time check on the hour</strong>
+                <small>
+                  {!clocks.length
+                    ? "Make a clock on the Apps page and it shows for a minute at the top of every hour."
+                    : `${checkClock?.name ?? "A clock"} cuts in for ${lasts(timeCheck.durationS * 1000)} at the top of every hour, whatever's on. Then the show carries on.`}
+                </small>
+                {clocks.length > 1 && timeCheck.on && (
+                  <div className="segmented" role="radiogroup" aria-label="Which clock">
+                    {clocks.map((c) => (
+                      <button key={c.key} role="radio" aria-checked={c.source.id === timeCheck.appId} onClick={() => setCheck({ appId: c.source.id })}>
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                className="toggle"
+                role="switch"
+                aria-checked={timeCheck.on}
+                aria-label="Time check on the hour"
+                disabled={!clocks.length}
+                onClick={() => setCheck({ on: !timeCheck.on })}
+              >
+                <span />
+              </button>
             </div>
           )}
 

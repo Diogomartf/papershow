@@ -599,7 +599,7 @@ async function state(c: C) {
     playlists: store.listPlaylists(),
     show: store.listShow(),
     /** The week's blocks; the weekend plays the weekdays' unless it has its own. */
-    program: { weekendOwn: program.weekendOwn, blocks: store.listBlocks() },
+    program: { weekendOwn: program.weekendOwn, blocks: store.listBlocks(), timeCheck: store.getTimeCheck() },
     /** The block on air (even under a Show now or the night), and when it hands over. */
     block: air && { id: air.block.id, startedAt: air.startedAt, endsAt: air.endsAt },
     upcoming: upcoming(program, now, 3),
@@ -745,8 +745,9 @@ app.delete("/api/blocks/:id", async (c) => {
 });
 
 app.put("/api/program", async (c) => {
-  const { weekendOwn } = await c.req.json<{ weekendOwn?: boolean }>();
-  store.setWeekendOwn(!!weekendOwn);
+  const { weekendOwn, timeCheck } = await c.req.json<{ weekendOwn?: boolean; timeCheck?: Partial<store.TimeCheck> }>();
+  if (weekendOwn !== undefined) store.setWeekendOwn(!!weekendOwn);
+  if (timeCheck) store.setTimeCheck(timeCheck);
   note(c, "changed-program");
   changed();
   return c.json(await state(c));
