@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Scene } from "@papershow/scene";
 import { deleteImage, fileUrl, getImage, imageUrl, listImages, type ImageMeta } from "./store";
-import { setLive } from "./slides";
+import { ask, setLive } from "./slides";
 import { mine, tint, useMe } from "./house";
 import { useLiveState } from "./live";
 
@@ -14,9 +14,10 @@ type Props = {
   /** Seconds Show now holds the panel. */
   showFor?: number;
   onLive: (name: string) => void;
+  onFail: (err: unknown) => void;
 };
 
-export function Gallery({ open, refreshKey, currentId, onClose, onOpen, showFor, onLive }: Props) {
+export function Gallery({ open, refreshKey, currentId, onClose, onOpen, showFor, onLive, onFail }: Props) {
   const [items, setItems] = useState<ImageMeta[] | null>(null);
   const { me } = useMe();
   const everyone = useLiveState().state?.people ?? [];
@@ -37,9 +38,16 @@ export function Gallery({ open, refreshKey, currentId, onClose, onOpen, showFor,
     setItems((xs) => xs?.filter((x) => x.id !== id) ?? null);
   };
 
+  /** On the panel now, or, for a guest, ask the household to put it there. */
+  const guest = me.role === "guest";
   const live = async (item: ImageMeta) => {
-    await setLive({ mode: "pin", source: { kind: "image", id: item.id }, forS: showFor, from: "draw" });
-    onLive(item.name);
+    const source = { kind: "image", id: item.id } as const;
+    try {
+      await (guest ? ask(source, showFor, "draw") : setLive({ mode: "pin", source, forS: showFor, from: "draw" }));
+      onLive(item.name);
+    } catch (err) {
+      onFail(err);
+    }
   };
 
   return (
@@ -72,7 +80,7 @@ export function Gallery({ open, refreshKey, currentId, onClose, onOpen, showFor,
                     {item.name}
                   </span>
                   <span className="actions">
-                    <button onClick={() => live(item)}>Show on /live</button>
+                    <button onClick={() => live(item)}>{guest ? "Ask to show" : "Show on /live"}</button>
                     <a href={imageUrl(item.id)} target="_blank" rel="noreferrer">Open ↗</a>
                     {mine(me, item.madeBy) && <button onClick={() => remove(item.id)}>Delete</button>}
                   </span>

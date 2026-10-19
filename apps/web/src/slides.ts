@@ -1,7 +1,7 @@
 // Playlist client: the sequence, what's live, and edits to both.
 // Every mutation answers with the whole new state, so the UI never drifts.
 
-import { signedOut, type LogEntry, type Person } from "./house";
+import { Oops, signedOut, type LogEntry, type Person } from "./house";
 import type { Source } from "./sources";
 
 export type Slide = {
@@ -64,15 +64,20 @@ export type Turn = {
 /** A pin is outside the program: `by` who put it up, and `from` Draw when it was sent straight from there. */
 export type Live =
   | { mode: "rotate" }
-  | { mode: "pin"; source: Source; until?: number | null; by?: string | null; from?: "draw" | null };
+  | { mode: "pin"; source: Source; until?: number | null; by?: string | null; from?: "draw" | null; okBy?: string | null };
 
-/** Where a pin came from, for the label that says it's outside the program: "Sent from Draw by Ana". */
+/** Where a pin came from, for the label that says it's outside the program: "Sent from Draw by Ana", "Leo's, Ana said yes". */
 export function pinnedBy(live: Live, people: Person[], me?: Person | null): string {
   if (live.mode !== "pin") return "";
-  const who = live.by ? (live.by === me?.id ? "you" : people.find((p) => p.id === live.by)?.name) : undefined;
+  const name = (id?: string | null) => (id ? (id === me?.id ? "you" : people.find((p) => p.id === id)?.name) : undefined);
+  const who = name(live.by);
   const how = live.from === "draw" ? "Sent from Draw" : "Put on with Show now";
-  return who ? `${how} by ${who}` : how;
+  const ok = name(live.okBy);
+  return `${who ? `${how} by ${who}` : how}${ok ? `, ${ok} said yes` : ""}`;
 }
+
+/** A guest asked for something to go on the panel; it waits for someone in the household to say yes. */
+export type Ask = { id: string; by: string; source: Source; forS: number; via: "draw" | null; at: number };
 
 /** Night: hours when the panel sleeps, and what it shows ("off" keeps the last picture). Away: off for days. */
 export type Sleep = {
@@ -124,9 +129,11 @@ export type State = {
   /** The last time a display fetched /live. */
   display: { at: number; agent: string } | null;
   me: Person;
-  /** Everyone who's in; admins also see who's knocking and who was removed. */
+  /** Everyone who's in, and who was removed; all but guests also see who's knocking. */
   people: Person[];
-  /** The last few things people did. */
+  /** Guests' asks waiting for a yes; a guest gets only their own. */
+  asks: Ask[];
+  /** The last few things people did. Empty for guests. */
   log: LogEntry[];
 };
 
@@ -137,7 +144,10 @@ async function call(path: string, method = "GET", body?: unknown): Promise<State
     body: body ? JSON.stringify(body) : undefined,
   });
   if (res.status === 401) signedOut();
-  if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Oops(json.error ?? `${method} ${path} → ${res.status}`, res.status, json);
+  }
   return res.json();
 }
 
@@ -151,6 +161,11 @@ export const reorderSlides = (ids: string[]) => call("/api/slides/order", "PUT",
 export const removeSlide = (id: string) => call(`/api/slides/${id}`, "DELETE");
 /** Show now for `forS` seconds (the server's 15 minutes when left out), or back to the playlists. */
 export const setLive = (live: Live & { forS?: number }) => call("/api/live", "PUT", live);
+/** A guest's Show now: ask the household to put it up, for `forS` seconds once they say yes. */
+export const ask = (source: Source, forS?: number, from?: "draw") => call("/api/asks", "POST", { source, forS, from });
+export const sayYes = (id: string) => call(`/api/asks/${id}/yes`, "POST");
+/** Not now, or, for the guest who asked, take it back. */
+export const dropAsk = (id: string) => call(`/api/asks/${id}`, "DELETE");
 export const setSleep = (patch: Partial<Sleep>) => call("/api/sleep", "PUT", patch);
 
 /** New playlists join the end of the show unless `show` is false. */

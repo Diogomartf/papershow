@@ -1,7 +1,7 @@
 // Your face in the top-right corner, and the menu behind it: who you are, everyone else in the house to
-// switch to (a shared tablet changes hands), the house, the log and signing out. Admins also see who's knocking.
+// switch to (a shared tablet changes hands), the house, the log and signing out. The household also sees who's knocking.
 import { useEffect, useRef, useState } from "react";
-import { signOut, tint, useMe } from "./house";
+import { ROLE_NAMES, signOut, tint, useMe } from "./house";
 import { useLiveState } from "./live";
 import { navigate } from "./Nav";
 
@@ -13,7 +13,10 @@ export function MeMenu() {
 
   const self = state?.me ?? me;
   const everyone = state?.people ?? [];
-  const knocking = self.role === "admin" ? everyone.filter((p) => p.status === "knocking") : [];
+  // Knocks and guests' asks wait for anyone in the household; a guest's own ask shows on the Dashboard instead.
+  const knocking = self.role === "guest" ? [] : everyone.filter((p) => p.status === "knocking");
+  const asks = self.role === "guest" ? [] : (state?.asks ?? []);
+  const waiting = knocking.length + asks.length;
   const others = everyone.filter((p) => p.status === "in" && p.id !== self.id);
 
   // Close on a click elsewhere or Escape.
@@ -35,12 +38,12 @@ export function MeMenu() {
         style={tint(self.color)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={knocking.length ? `${self.name}: ${knocking.length} knocking` : self.name}
+        aria-label={waiting ? `${self.name}: ${waiting} waiting for you` : self.name}
         title={self.name}
         onClick={() => setOpen((o) => !o)}
       >
         <span aria-hidden>{self.face}</span>
-        {knocking.length > 0 && <span className="knock-badge">{knocking.length}</span>}
+        {waiting > 0 && <span className="knock-badge">{waiting}</span>}
       </button>
       {open && (
         <div className="me-pop" role="menu">
@@ -50,11 +53,20 @@ export function MeMenu() {
               <span><strong>{p.name}</strong> is knocking</span>
             </button>
           ))}
+          {asks.map((a) => {
+            const p = everyone.find((x) => x.id === a.by);
+            return (
+              <button key={a.id} role="menuitem" className="me-item knock-item" onClick={() => go("/")}>
+                <span className="face-mini" style={tint(p?.color ?? "#ccc")} aria-hidden>{p?.face ?? "👤"}</span>
+                <span><strong>{p?.name ?? "A guest"}</strong> asks to show something</span>
+              </button>
+            );
+          })}
           <div className="me-head">
             <span className="face-badge small" style={tint(self.color)} aria-hidden>{self.face}</span>
             <span>
               <strong>{self.name}</strong>
-              <small>{self.role === "admin" ? "👑 Admin" : "In the house"}</small>
+              <small>{self.role === "admin" ? "👑 Admin" : ROLE_NAMES[self.role]}</small>
             </span>
           </div>
           {others.length > 0 && (
@@ -70,7 +82,7 @@ export function MeMenu() {
           )}
           <hr />
           <button role="menuitem" className="me-item" onClick={() => go("/people")}>The house</button>
-          <button role="menuitem" className="me-item" onClick={() => go("/log")}>Log</button>
+          {self.role !== "guest" && <button role="menuitem" className="me-item" onClick={() => go("/log")}>Log</button>}
           <button
             role="menuitem"
             className="me-item"

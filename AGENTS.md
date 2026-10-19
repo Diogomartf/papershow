@@ -29,7 +29,7 @@ There are no unit tests yet. Check your work by rendering frames and looking at 
 - Server code reads `process.env` when it needs a value, not at import time: `.env` is loaded after modules are imported.
 - Secrets go in `.env` at the repo root, never in code. Document every new key in `.env.example` and in the README's Configuration table.
 - When you add or change an app, update the README's apps table: data source, key, refresh.
-- **People.** Everything under `/api` needs someone signed in (the middleware in `index.ts`); only `/api/hello…` is open, and `/live` never needs anyone. A route that changes a drawing, app or playlist checks `mayChange(c, row.madeBy)`; admin-only settings check `isAdmin(c)`. Anything people would want to see in the log gets a `note(c, verb, { item: named(src) })`, and a sentence for the verb in `says()` in `apps/web/src/house.ts`.
+- **People.** Everything under `/api` needs someone signed in (the middleware in `index.ts`); only `/api/hello…` is open, and `/live` never needs anyone. A route that changes a drawing, app or playlist checks `mayChange(c, row.madeBy)`; admin-only settings check `isAdmin(c)`. Guests can read anything but the log and change only what's in `GUEST_MAY`: a new route is closed to them until you add it there. A route that puts something on the panel or adds something new spends a go with `tooMany(c, "live" | "make")` (admins have no limit; the allowances are `LIMITS` in `people.ts`). Anything people would want to see in the log gets a `note(c, verb, { item: named(src) })`, and a sentence for the verb in `says()` in `apps/web/src/house.ts`.
 
 ## The panel and the Pi
 

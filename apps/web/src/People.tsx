@@ -1,4 +1,5 @@
-// The house: who's knocking, you, everyone else, and inviting someone new.
+// The house: who's knocking, you, everyone else, and inviting someone new. Roles and removing people are on
+// Manage people (Manage.tsx), for admins.
 import { useEffect, useState } from "react";
 import { Keypad } from "./Hello";
 import { LightSwitch } from "./LightSwitch";
@@ -11,7 +12,7 @@ import { says, tint, useMe, when, type Invite, type Person } from "./house";
 import { useUndoToast } from "./Undo";
 
 /** Seen in the last five minutes: around right now. */
-const AROUND_MS = 5 * 60_000;
+export const AROUND_MS = 5 * 60_000;
 
 export function People() {
   const { me, hello, refresh } = useMe();
@@ -26,12 +27,12 @@ export function People() {
   }, []);
 
   const admin = me.role === "admin";
+  const guest = me.role === "guest";
   const everyone = state?.people ?? [];
   const self = state?.me ?? me;
   const knocking = everyone.filter((p) => p.status === "knocking");
   const others = everyone.filter((p) => p.status === "in" && p.id !== self.id);
   const out = everyone.filter((p) => p.status === "out");
-  const admins = everyone.filter((p) => p.status === "in" && p.role === "admin").length;
 
   /** Run an admin action; show what went wrong in a toast instead of failing quietly. */
   const act = async (fn: () => Promise<unknown>, done?: string) => {
@@ -59,7 +60,7 @@ export function People() {
       </header>
 
       <main className="people-main">
-        {admin && knocking.length > 0 && (
+        {!guest && knocking.length > 0 && (
           <section className="people-section">
             <h2>At the door</h2>
             <ul className="knock-list">
@@ -73,6 +74,13 @@ export function People() {
                   <div className="knock-actions">
                     <button className="big-yes" onClick={() => act(() => house.updatePerson(p.id, { status: "in" }), `${p.face} ${p.name} is in! 🎉`)}>
                       Let in
+                    </button>
+                    <button
+                      className="ghost"
+                      title="They can draw and make apps, and ask before anything goes on the panel"
+                      onClick={() => act(() => house.updatePerson(p.id, { status: "in", role: "guest" }), `${p.face} ${p.name} is in as a guest 🎉`)}
+                    >
+                      As a guest
                     </button>
                     <button className="ghost" onClick={() => act(() => house.notNow(p.id))}>
                       Not now
@@ -90,7 +98,13 @@ export function People() {
             <span className="face-badge" style={tint(self.color)} aria-hidden>{self.face}</span>
             <div className="you-text">
               <strong className="you-name">{self.name}</strong>
-              <span className="muted">{self.role === "admin" ? "👑 Admin: you let people in" : "In the house"}</span>
+              <span className="muted">
+                {self.role === "admin"
+                  ? "👑 Admin: you let people in"
+                  : self.role === "guest"
+                    ? "Guest: you draw and make apps, and ask before something goes on the panel"
+                    : "Household"}
+              </span>
             </div>
             <div className="you-actions">
               <button className="ghost" onClick={() => setEditing(editing === "look" ? null : "look")} aria-expanded={editing === "look"}>
@@ -140,29 +154,21 @@ export function People() {
           <div className="section-head">
             <h2>The house</h2>
             {admin && (
-              <button className="primary" onClick={() => act(async () => setInvite(await house.createInvite(false)))}>
-                Invite someone 🎟️
-              </button>
+              <div className="section-actions">
+                <a className="ghost" href="/people/manage" onClick={(e) => (e.preventDefault(), navigate("/people/manage"))}>
+                  Manage people{out.length ? ` · ${out.length} removed` : ""}
+                </a>
+                <button className="primary" onClick={() => act(async () => setInvite(await house.createInvite("member")))}>
+                  Invite someone 🎟️
+                </button>
+              </div>
             )}
           </div>
           {others.length ? (
             <ul className="house-grid">
               {others.map((p) => (
                 <li key={p.id}>
-                  <PersonTile
-                    p={p}
-                    now={now}
-                    admin={admin}
-                    lastAdmin={p.role === "admin" && admins <= 1}
-                    onRole={(role) => act(() => house.updatePerson(p.id, { role }))}
-                    onRemove={() =>
-                      act(async () => {
-                        const next = await house.updatePerson(p.id, { status: "out" });
-                        toast.show(`${p.name} is out`, () => act(() => house.updatePerson(p.id, { status: "in" })));
-                        return next;
-                      })
-                    }
-                  />
+                  <PersonTile p={p} now={now} />
                 </li>
               ))}
             </ul>
@@ -173,51 +179,35 @@ export function People() {
           )}
         </section>
 
-        {admin && out.length > 0 && (
+        {!guest && (
           <section className="people-section">
-            <h2>Removed</h2>
-            <ul className="out-list">
-              {out.map((p) => (
-                <li key={p.id}>
-                  <span className="face-mini" style={tint(p.color)} aria-hidden>{p.face}</span>
-                  <span>{p.name}</span>
-                  <button className="ghost" onClick={() => act(() => house.updatePerson(p.id, { status: "in" }), `${p.name} is back 🎉`)}>
-                    Let back in
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="section-head">
+              <h2>Lately</h2>
+              <a className="ghost" href="/log" onClick={(e) => (e.preventDefault(), navigate("/log"))}>
+                Whole log
+              </a>
+            </div>
+            <LogList entries={state?.log ?? []} people={everyone} now={now} />
           </section>
         )}
-
-        <section className="people-section">
-          <div className="section-head">
-            <h2>Lately</h2>
-            <a className="ghost" href="/log" onClick={(e) => (e.preventDefault(), navigate("/log"))}>
-              Whole log
-            </a>
-          </div>
-          <LogList entries={state?.log ?? []} people={everyone} now={now} />
-        </section>
       </main>
 
       {invite && (
         <InviteSheet
           invite={invite}
-          onPanel={(panel) =>
+          onRole={(role) => act(async () => setInvite(await house.setInviteRole(invite.code, role)))}
+          onPanel={(on) =>
             act(async () => {
-              // On the panel needs an invite made for it; taking it off keeps this one working here.
-              if (panel) setInvite(await house.createInvite(true));
+              // Taking it off the panel keeps it working here.
+              if (on) setInvite(await house.showInvite(invite.code));
               else {
                 await house.hideInvite(invite.code);
-                setInvite({ ...invite, onPanel: false });
+                setInvite({ ...invite, onPanelUntil: null });
               }
             })
           }
-          onClose={() => {
-            if (invite.onPanel) void house.hideInvite(invite.code);
-            setInvite(null);
-          }}
+          // It stays on the panel for its couple of minutes: whoever it's for may still be walking over.
+          onClose={() => setInvite(null)}
         />
       )}
       {toast.node}
@@ -225,21 +215,7 @@ export function People() {
   );
 }
 
-function PersonTile({
-  p,
-  now,
-  admin,
-  lastAdmin,
-  onRole,
-  onRemove,
-}: {
-  p: Person;
-  now: number;
-  admin: boolean;
-  lastAdmin: boolean;
-  onRole: (role: house.Role) => void;
-  onRemove: () => void;
-}) {
+function PersonTile({ p, now }: { p: Person; now: number }) {
   const around = p.seenAt !== null && now - p.seenAt < AROUND_MS;
   return (
     <div className="person-tile">
@@ -251,23 +227,10 @@ function PersonTile({
         {p.name}
         {p.role === "admin" && <span title="Admin"> 👑</span>}
       </strong>
-      <span className="muted">{around ? "Around now" : p.seenAt ? `Seen ${when(p.seenAt, now)}` : "Not seen yet"}</span>
-      {admin && (
-        <div className="person-actions">
-          {p.role === "admin" ? (
-            <button className="link" disabled={lastAdmin} onClick={() => onRole("member")}>
-              Not admin
-            </button>
-          ) : (
-            <button className="link" onClick={() => onRole("admin")}>
-              Make admin
-            </button>
-          )}
-          <button className="link danger" disabled={lastAdmin} onClick={onRemove}>
-            Remove
-          </button>
-        </div>
-      )}
+      <span className="muted">
+        {p.role === "guest" ? "Guest · " : ""}
+        {around ? "Around now" : p.seenAt ? `Seen ${when(p.seenAt, now)}` : "Not seen yet"}
+      </span>
     </div>
   );
 }
@@ -350,9 +313,21 @@ function SecretEditor({ keys, onSave }: { keys: string[]; onSave: (secret: strin
 }
 
 /** The invite as a QR code to scan off this screen, with the option to put it on the panel too. */
-function InviteSheet({ invite, onPanel, onClose }: { invite: Invite; onPanel: (on: boolean) => void; onClose: () => void }) {
+function InviteSheet({
+  invite,
+  onRole,
+  onPanel,
+  onClose,
+}: {
+  invite: Invite;
+  onRole: (role: "member" | "guest") => void;
+  onPanel: (on: boolean) => void;
+  onClose: () => void;
+}) {
   const now = useNow(0, 1000);
   const left = Math.max(0, invite.expiresAt - now);
+  const panelLeft = invite.onPanelUntil ? Math.max(0, invite.onPanelUntil - now) : 0;
+  const mmss = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}`;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     addEventListener("keydown", onKey);
@@ -363,13 +338,25 @@ function InviteSheet({ invite, onPanel, onClose }: { invite: Invite; onPanel: (o
       <div className="scrim" data-on onClick={onClose} />
       <div className="invite-sheet" role="dialog" aria-label="Invite someone">
         <h2>Come in! 🎟️</h2>
-        <p className="muted">Scan with a phone's camera, on the home Wi-Fi.</p>
+        <div className="segmented invite-role" role="radiogroup" aria-label="Joins as">
+          {(["member", "guest"] as const).map((r) => (
+            <button key={r} role="radio" aria-checked={invite.role === r} onClick={() => invite.role !== r && onRole(r)}>
+              {r === "member" ? "Household" : "Guest"}
+            </button>
+          ))}
+        </div>
+        <p className="muted">
+          {invite.role === "guest"
+            ? "Joins as a guest: draws and makes apps, and asks before anything goes on the panel."
+            : "Joins the household: makes things and runs the show."}{" "}
+          Scan with a phone's camera, on the home Wi-Fi.
+        </p>
         {left > 0 ? (
           <>
             <img className="invite-qr" src={house.inviteQr(invite.code)} alt={`QR code for ${invite.url}`} />
             <p className="invite-code">{invite.code}</p>
             <p className="muted tabular">
-              Works for {Math.floor(left / 60_000)}:{String(Math.floor((left % 60_000) / 1000)).padStart(2, "0")} · or open{" "}
+              Works for {mmss(left)} · or open{" "}
               <code>{invite.url.replace(/^https?:\/\//, "")}</code>
             </p>
           </>
@@ -377,18 +364,21 @@ function InviteSheet({ invite, onPanel, onClose }: { invite: Invite; onPanel: (o
           <p className="invite-code">This invite ran out.</p>
         )}
         <div className="invite-actions">
-          <label className="night-row">
-            <span>Show it on the panel</span>
+          {panelLeft > 0 ? (
+            <span className="invite-on-panel">
+              <span className="tabular">On the panel · {mmss(panelLeft)}</span>
+              <button className="link" onClick={() => onPanel(false)}>Take it down</button>
+            </span>
+          ) : (
             <button
-              className="toggle"
-              role="switch"
-              aria-checked={invite.onPanel}
+              className="ghost"
               disabled={left <= 0}
-              onClick={() => onPanel(!invite.onPanel)}
+              title="Put this code on the e-ink for 2 minutes, to scan it there"
+              onClick={() => onPanel(true)}
             >
-              <span />
+              Show on the panel
             </button>
-          </label>
+          )}
           <button className="primary" onClick={onClose}>
             Done
           </button>

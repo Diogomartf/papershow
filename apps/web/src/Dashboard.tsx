@@ -12,7 +12,7 @@ import { frameAt, setLive } from "./slides";
 import { FloatingMenu, MenuDivider, MenuItem, useUndoToast } from "./Undo";
 import { useItems } from "./sources";
 import * as house from "./house";
-import { tint, useMe } from "./house";
+import { reason, tint, useMe } from "./house";
 import { LogList } from "./People";
 
 const hhmm = (t: number) => {
@@ -43,6 +43,7 @@ export function Dashboard() {
   const { itemOf } = useItems();
   const { me } = useMe();
   const admin = me.role === "admin";
+  const guest = me.role === "guest";
   const [menu, setMenu] = useState<{ key: string; el: HTMLElement } | null>(null);
   const toast = useUndoToast();
   const closeMenu = useRef(() => setMenu(null)).current;
@@ -111,7 +112,7 @@ export function Dashboard() {
               <p className="muted">
                 {showing?.invite ? (
                   <>
-                    Code {showing.invite}, until someone joins
+                    Code {showing.invite}, until {hhmm(showing.endsAt ?? now)} or someone joins
                     {admin && (
                       <>
                         {" · "}
@@ -126,7 +127,7 @@ export function Dashboard() {
                     : currentTurn
                       ? `${playlistName(currentTurn.playlistId)} · ${countdown((clip?.endsAt ?? now) - now)} left`
                       : ""}
-                {pinned && !resting && (
+                {pinned && !resting && !guest && (
                   <>
                     {" · "}
                     <button className="link" onClick={() => setLive({ mode: "rotate" }).then(accept)}>Resume now</button>
@@ -138,7 +139,42 @@ export function Dashboard() {
           </div>
 
           <div className="dash-side">
-            {admin &&
+            {state?.asks.map((a) => {
+              const who = state.people.find((p) => p.id === a.by);
+              const name = itemOf(a.source)?.name ?? "something";
+              const answer = (yes: boolean) =>
+                (yes ? api.sayYes(a.id) : api.dropAsk(a.id)).then(accept, (e) => toast.show(reason(e, "That didn't work")));
+              return (
+                <div key={a.id} className="card knock-mini ask-card">
+                  <h2>{guest ? "Waiting for a yes" : "Can I show this?"}</h2>
+                  <img className="next-frame" src={frameAt(a.source, a.at)} alt="" />
+                  <p>
+                    {guest ? (
+                      <>
+                        <strong>{name}</strong> goes on the panel for {mins(a.forS * 1000)} once someone in the house says yes.
+                      </>
+                    ) : (
+                      <>
+                        <span className="face-mini" style={tint(who?.color ?? "#ccc")} aria-hidden>{who?.face ?? "👤"}</span>{" "}
+                        <strong>{who?.name ?? "A guest"}</strong> wants to show <strong>{name}</strong> for {mins(a.forS * 1000)}
+                      </>
+                    )}
+                  </p>
+                  <div className="knock-actions">
+                    {guest ? (
+                      <button className="ghost" onClick={() => answer(false)}>Take it back</button>
+                    ) : (
+                      <>
+                        <button className="big-yes" onClick={() => answer(true)}>Show it</button>
+                        <button className="ghost" onClick={() => answer(false)}>Not now</button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {!guest &&
               state?.people
                 .filter((p) => p.status === "knocking")
                 .map((p) => (
@@ -150,6 +186,9 @@ export function Dashboard() {
                     <div className="knock-actions">
                       <button className="big-yes" onClick={() => house.updatePerson(p.id, { status: "in" }).then((s) => accept(s as api.State))}>
                         Let in
+                      </button>
+                      <button className="ghost" onClick={() => house.updatePerson(p.id, { status: "in", role: "guest" }).then((s) => accept(s as api.State))}>
+                        As a guest
                       </button>
                       <button className="ghost" onClick={() => house.notNow(p.id).then((s) => accept(s as api.State))}>
                         Not now
@@ -196,11 +235,13 @@ export function Dashboard() {
               )}
             </div>
 
-            <div className="card lately">
-              <h2>Lately</h2>
-              <LogList entries={(state?.log ?? []).slice(0, 4)} people={state?.people ?? []} now={now} />
-              <a className="link" href="/log" onClick={(e) => (e.preventDefault(), navigate("/log"))}>Whole log</a>
-            </div>
+            {!guest && (
+              <div className="card lately">
+                <h2>Lately</h2>
+                <LogList entries={(state?.log ?? []).slice(0, 4)} people={state?.people ?? []} now={now} />
+                <a className="link" href="/log" onClick={(e) => (e.preventDefault(), navigate("/log"))}>Whole log</a>
+              </div>
+            )}
           </div>
         </section>
 
@@ -214,9 +255,11 @@ export function Dashboard() {
                   ? `${seq.length} coming up · until ${hhmm(seq[seq.length - 1].endsAt)}`
                   : "Empty"}
               </span>
-              <a className="ghost" href="/show" onClick={(e) => (e.preventDefault(), navigate("/show"))}>
-                Edit show
-              </a>
+              {!guest && (
+                <a className="ghost" href="/show" onClick={(e) => (e.preventDefault(), navigate("/show"))}>
+                  Edit show
+                </a>
+              )}
             </div>
             <ol className="seq-strip">
               {seq.map((t, i) => {
@@ -258,9 +301,24 @@ export function Dashboard() {
           const name = itemOf(turn.source)?.name ?? "clip";
           const clip = turn.clipId ? state.slides.find((x) => x.id === turn.clipId) : undefined;
           const entry = state.show.find((e) => e.id === turn.entryId);
+          const failed = (e: unknown) => toast.show(reason(e, "That didn't work"));
+          if (guest)
+            return (
+              <FloatingMenu anchor={menu.el} onClose={closeMenu}>
+                <MenuItem
+                  icon="show"
+                  onClick={() => {
+                    setMenu(null);
+                    api.ask(turn.source).then((s) => (accept(s), toast.show(`Asked to show ${name} 🙋`)), failed);
+                  }}
+                >
+                  Ask to show
+                </MenuItem>
+              </FloatingMenu>
+            );
           return (
             <FloatingMenu anchor={menu.el} onClose={closeMenu}>
-              <MenuItem icon="show" onClick={() => (setMenu(null), setLive({ mode: "pin", source: turn.source }).then(accept))}>
+              <MenuItem icon="show" onClick={() => (setMenu(null), setLive({ mode: "pin", source: turn.source }).then(accept, failed))}>
                 Show now
               </MenuItem>
               {turn.playlistId && (

@@ -5,9 +5,9 @@ import "@fontsource-variable/inter";
 import { PANEL, PHOTO_FILL, type PhotoAt, type Scene, type TextItem } from "@papershow/scene";
 import { paintMono, photoFor, renderScene } from "./render";
 import { getDraft, getImage, getSaved, imageUrl, putDraft, putImage, putSaved } from "./store";
-import { Oops } from "./house";
+import { Oops, reason, useMe } from "./house";
 import { Gallery } from "./Gallery";
-import { setLive } from "./slides";
+import { ask, setLive } from "./slides";
 import { useLiveState, useNow } from "./live";
 import { Nav } from "./Nav";
 import { useNarrow } from "./media";
@@ -105,6 +105,8 @@ export default function App() {
   // How the drawing looked when last saved, so Show now can tell it's already up as it is.
   const [savedLooks, setSavedLooks] = useState<string | null>(null);
   const { state: live, accept, skew } = useLiveState();
+  // A guest's Show now asks the household first.
+  const guest = useMe().me.role === "guest";
   const now = useNow(skew, 5000);
   const photoInput = useRef<HTMLInputElement>(null);
   // True once the name field is typed in. Until then the name follows the text, instead of staying Untitled.
@@ -210,22 +212,26 @@ export default function App() {
       setScene(current);
       setGalleryKey((k) => k + 1);
       if (tab) tab.location.href = imageUrl(current.id);
-      if (then === "show") {
+      if (then === "show" && guest) {
+        accept(await ask({ kind: "image", id: current.id }, showFor, "draw"));
+        setBeam(null);
+      } else if (then === "show") {
         accept(await setLive({ mode: "pin", source: { kind: "image", id: current.id }, forS: showFor, from: "draw" }));
         setBeam("on");
         window.setTimeout(() => setBeam((b) => (b === "on" ? null : b)), 1800);
       }
       const saved = copied ? "Saved as your own copy" : "Saved";
-      flash(then === "show" ? `${saved} · on the panel for ${forLabel(showFor)}` : tab ? `${saved} · opened in a new tab` : saved);
+      const shown = guest ? "asked to show it 🙋" : `on the panel for ${forLabel(showFor)}`;
+      flash(then === "show" ? `${saved} · ${shown}` : tab ? `${saved} · opened in a new tab` : saved);
     } catch (err) {
       setBeam(null);
       tab?.close();
-      flash("Couldn't save. Try again");
+      flash(reason(err, "Couldn't save. Try again"));
       console.error(err);
     } finally {
       setSaving(false);
     }
-  }, [scene, saving, showFor, accept]);
+  }, [scene, saving, showFor, accept, guest]);
 
   const pickFor = (s: number) => {
     setShowFor(s);
@@ -297,6 +303,8 @@ export default function App() {
   const pin = live?.live.mode === "pin" ? live.live : null;
   const alreadyUp =
     !!pin && pin.source.kind === "image" && pin.source.id === scene.id && (!pin.until || now < pin.until) && looksKey(scene) === savedLooks;
+  // A guest who already asked to show it, just as it is, waits for the answer. Saving a change takes the ask back.
+  const asked = guest && looksKey(scene) === savedLooks && !!live?.asks.some((a) => a.source.kind === "image" && a.source.id === scene.id);
 
   return (
     <div className="app">
@@ -387,12 +395,30 @@ export default function App() {
           <span className="show-now" data-beam={beam ?? undefined} data-up={alreadyUp && !beam}>
             <button
               onClick={() => save("show")}
-              disabled={saving || alreadyUp}
-              title={alreadyUp ? "It's on the panel now. Change something to send it again" : `Save, then put it on the panel for ${forLabel(showFor)}, ahead of the program`}
+              disabled={saving || alreadyUp || asked}
+              title={
+                alreadyUp
+                  ? "It's on the panel now. Change something to send it again"
+                  : asked
+                    ? "Someone in the house says yes, then it goes on the panel"
+                    : guest
+                      ? `Save, then ask someone in the house to put it on the panel for ${forLabel(showFor)}`
+                      : `Save, then put it on the panel for ${forLabel(showFor)}, ahead of the program`
+              }
             >
               <span className="show-now-dot" aria-hidden />
               <span className="show-now-word">
-                {beam === "on" ? "On air!" : beam === "sending" ? "Beaming…" : alreadyUp ? `On air · ${until(pin?.until)}` : "Show now"}
+                {beam === "on"
+                  ? "On air!"
+                  : beam === "sending"
+                    ? guest ? "Asking…" : "Beaming…"
+                    : alreadyUp
+                      ? `On air · ${until(pin?.until)}`
+                      : asked
+                        ? "Asked"
+                        : guest
+                          ? "Ask to show"
+                          : "Show now"}
               </span>
             </button>
             <select value={showFor} onChange={(e) => pickFor(Number(e.target.value))} aria-label="For how long">
@@ -461,7 +487,8 @@ export default function App() {
         onClose={() => setGalleryOpen(false)}
         onOpen={open}
         showFor={showFor}
-        onLive={(name) => flash(`${name} is on the panel for ${forLabel(showFor)}`)}
+        onLive={(name) => flash(guest ? `Asked to show ${name} 🙋` : `${name} is on the panel for ${forLabel(showFor)}`)}
+        onFail={(err) => flash(reason(err, "That didn't work"))}
       />
 
       <div className="toast" data-on={!!toast} role="status">{toast}</div>

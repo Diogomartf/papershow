@@ -1,7 +1,12 @@
 // People in the house: signing in, joining, and the log of who did what.
 import { createContext, useContext, type CSSProperties } from "react";
 
-export type Role = "admin" | "member";
+/** Members are the household. Guests draw and make apps, and ask before anything goes on the panel. */
+export type Role = "admin" | "member" | "guest";
+
+/** What the app calls each role. */
+export const ROLE_NAMES: Record<Role, string> = { admin: "Admin", member: "Household", guest: "Guest" };
+export const ROLES = Object.keys(ROLE_NAMES) as Role[];
 /** Knocking: waiting for an admin to let them in. Out: removed. */
 export type Status = "knocking" | "in" | "out";
 
@@ -32,7 +37,8 @@ export type Hello = {
 
 export type Profile = { name: string; face: string; color: string };
 
-export type Invite = { code: string; expiresAt: number; url: string; onPanel: boolean };
+/** `role`: whoever uses it joins as household ("member") or as a guest. `onPanelUntil`: while it's on the panel, when it comes off. */
+export type Invite = { code: string; expiresAt: number; url: string; onPanelUntil: number | null; role: Role };
 
 export type LogEntry = { id: number; at: number; personId: string | null; verb: string; subject: Record<string, unknown> };
 
@@ -46,6 +52,10 @@ export class Oops extends Error {
     this.body = body;
   }
 }
+
+/** What went wrong, for a toast: the server's own words when it said why (a limit, a guest), else `fallback`. */
+export const reason = (err: unknown, fallback: string) =>
+  err instanceof Oops && typeof err.body.error === "string" ? err.body.error : fallback;
 
 /** Fired when the server says no one's signed in here: the app goes back to "Who's there?". */
 export const SIGNED_OUT = "papershow:signed-out";
@@ -68,17 +78,23 @@ export const setUp = (p: Profile, secret: string[]) => call<Hello>("/api/hello/s
 export const signIn = (id: string, secret: string[]) => call<Hello>("/api/hello/in", "POST", { id, secret });
 export const signOut = () => call<Hello>("/api/hello/out", "POST");
 export const knock = (p: Profile, secret: string[], invite?: string) => call<Hello>("/api/hello/knock", "POST", { ...p, secret, invite });
-export const inviteInfo = (code: string) => call<{ code: string; expiresAt: number; by: Face | null }>(`/api/hello/invite/${code}`);
+export const inviteInfo = (code: string) => call<{ code: string; expiresAt: number; role: Role; by: Face | null }>(`/api/hello/invite/${code}`);
 
 export const updateMe = (patch: Partial<Profile> & { secret?: string[] }) => call<unknown>("/api/me", "PATCH", patch);
 export const updatePerson = (id: string, patch: { status?: "in" | "out"; role?: Role }) => call<unknown>(`/api/people/${id}`, "PATCH", patch);
 export const notNow = (id: string) => call<unknown>(`/api/people/${id}`, "DELETE");
-export const createInvite = (panel: boolean) => call<Invite>("/api/invites", "POST", { origin: location.origin, panel });
+export const createInvite = (role: "member" | "guest") => call<Invite>("/api/invites", "POST", { origin: location.origin, role });
+export const setInviteRole = (code: string, role: "member" | "guest") => call<Invite>(`/api/invites/${code}`, "PATCH", { role });
+/** Someone removed, and everything they did. Can't be undone. */
+export const deleteEverything = (id: string) =>
+  call<{ deleted: { drawings: number; apps: number; playlists: number } }>(`/api/people/${id}/everything`, "DELETE");
+/** Put the invite on the panel for a couple of minutes. */
+export const showInvite = (code: string) => call<Invite>(`/api/invites/${code}/panel`, "PUT");
 export const hideInvite = (code: string) => call<unknown>(`/api/invites/${code}/panel`, "DELETE");
 export const inviteQr = (code: string) => `/api/invites/${code}/qr.svg`;
 /** The log's topics, each the verbs it covers. */
 export const LOG_TOPICS = [
-  { key: "panel", label: "On the panel", icon: "📺", verbs: ["showed-now", "resumed"] },
+  { key: "panel", label: "On the panel", icon: "📺", verbs: ["showed-now", "resumed", "asked-to-show", "said-yes", "said-not-now"] },
   {
     key: "program",
     label: "Program",
@@ -94,7 +110,7 @@ export const LOG_TOPICS = [
     key: "people",
     label: "People and invites",
     icon: "🎟️",
-    verbs: ["set-up", "knocked", "joined", "invited", "let-in", "let-back-in", "not-now", "removed", "made-admin", "made-member", "new-look"],
+    verbs: ["set-up", "knocked", "joined", "invited", "invite-on-panel", "let-in", "let-back-in", "not-now", "removed", "made-admin", "made-member", "made-guest", "new-look", "cleared-out"],
   },
 ] as const;
 
@@ -142,14 +158,18 @@ export function says(e: LogEntry): string {
     case "set-up": return "set up the house 🏠";
     case "knocked": return "knocked on the door 🚪";
     case "joined": return s.by ? `came in with an invite from ${personOf(s.by)} 🎟️` : "came in with an invite 🎟️";
-    case "let-in": return `let ${personOf(s.person)} in 🎉`;
+    case "let-in": return s.guest ? `let ${personOf(s.person)} in as a guest 🎉` : `let ${personOf(s.person)} in 🎉`;
     case "let-back-in": return `let ${personOf(s.person)} back in`;
     case "not-now": return `said "not now" to ${personOf(s.person)}`;
     case "removed": return `removed ${personOf(s.person)}`;
     case "made-admin": return `made ${personOf(s.person)} an admin 👑`;
-    case "made-member": return `made ${personOf(s.person)} a member`;
+    case "made-member": return `made ${personOf(s.person)} household`;
+    case "made-guest": return `made ${personOf(s.person)} a guest`;
     case "new-look": return "got a new look ✨";
-    case "invited": return s.panel ? "put an invite on the panel 🎟️" : "made an invite 🎟️";
+    case "cleared-out": return "deleted someone who was removed, and everything they did 🧹";
+    // Older entries say `panel` when the invite was made straight onto the panel.
+    case "invited": return `${s.panel ? "put an invite on the panel" : "made an invite"}${s.guest ? " for a guest" : ""} 🎟️`;
+    case "invite-on-panel": return `put an invite${s.guest ? " for a guest" : ""} on the panel 🎟️`;
     case "drew": return `drew ${item} ✏️`;
     case "redrew": return `touched up ${item}`;
     case "erased": return `deleted the drawing ${item}`;
@@ -169,6 +189,9 @@ export function says(e: LogEntry): string {
     case "changed-program": return "changed the week's program 📅";
     case "showed-now": return `put ${item} on the panel 📺`;
     case "resumed": return "let the show carry on";
+    case "asked-to-show": return `asked to put ${item} on the panel 🙋`;
+    case "said-yes": return `said yes to ${s.person ? `${personOf(s.person)}'s ` : ""}${item} 📺`;
+    case "said-not-now": return `said "not now" to ${s.person ? `${personOf(s.person)}'s ` : ""}${item}`;
     case "turned-off": return s.back ? `turned the panel off until ${String(s.back)} 💤` : "turned the panel off 💤";
     case "turned-on": return "turned the panel back on ☀️";
     case "changed-night": return s.enabled ? `set the night to ${String(s.start)}–${String(s.end)} 🌙` : "turned the night off";

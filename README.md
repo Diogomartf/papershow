@@ -314,12 +314,15 @@ Anything that edits the show, images, apps or the pin wakes the long-polls, so t
 Papershow is the house's panel, so everyone in the house can use it. Signing in is made for kids and thumbs: tap your face on **Who's there?** (profiles the way Netflix shows them), then tap your 4-digit PIN on a big phone-style number pad (a keyboard works too). The device stays signed in for a year. Each address (`paper.local`, the Tailscale one) keeps its own sign-in.
 
 - **The first person** to open Papershow sets up the house and becomes its admin.
-- **Someone new** taps **I'm new**, picks a name, a face, a colour and a PIN, and knocks. Admins get a **Let in / Not now** card on the Dashboard and a badge on their face in the corner; the knocking screen opens by itself when they're let in.
-- **Invite**: on the People page an admin makes an invite, a QR code and a six-letter code that work for 10 minutes. Scanning it (or typing the code under **I'm new**) skips the knock. **Show it on the panel** puts the invite on the e-ink until someone joins or it runs out; it beats the night, but not Off.
+- **Three kinds of people.** **Admins** run the house: they invite people, set the night and Off, and change anyone's role. **Household** (stored as `member`) make things, run the show, and let in whoever knocks, as household or as a guest. **Guests** draw, see and make apps, and see the Dashboard, but ask before anything goes on the panel; they don't get the Show page, playlists or the log. The server enforces this: a guest may only change their own profile, drawings and apps, and ask.
+- **Someone new** taps **I'm new**, picks a name, a face, a colour and a PIN, and knocks. Anyone in the household (admins too) gets a **Let in / As a guest / Not now** card on the Dashboard and a badge on their face in the corner; the knocking screen opens by itself when they're let in.
+- **Invite**: on the People page an admin taps **Invite someone**: a QR code and a six-letter code that work for 10 minutes, with **Household** or **Guest** at the top for who it lets in as (switching keeps the same code). Scanning it (or typing the code under **I'm new**) skips the knock, and the newcomer joins as what the invite says. Without anyone to say yes: the newcomer is in at once. **Show on the panel** puts the same code and QR on the e-ink for 2 minutes (or until someone joins), to scan it there; **Take it down** ends it sooner, and closing the invite leaves it up for its 2 minutes. It beats the night, but not Off.
+- **Asking to show.** A guest's **Show now** is **Ask to show** (in Draw, its Gallery, Apps and the Dashboard's sequence). The household and admins get a **Can I show this?** card on the Dashboard with the picture, and a badge on their face; **Show it** puts it on the panel for as long as the guest picked, marked with who said yes, and **Not now** drops it. A guest has one ask at a time (a new one replaces it), can take it back, and an ask nobody answers lapses after 30 minutes. If a guest changes a drawing or app that's waiting on an ask, or on the panel by one, the ask goes or it comes off the panel: the yes was for how it looked.
+- **Going easy on the panel.** Everyone but admins has an hourly allowance, so one person can't flood the feed: Show now and asks (household 12, guests 4), and making things: new drawings, apps and playlists, and adding to the show or a playlist (household 40, guests 10). Past it, the action says how many minutes to wait. Kept in memory: a restart forgives.
 - **The library is shared.** Everyone sees and can use every drawing, app and playlist (Show now, add to the show, duplicate), each with its maker's face. Only the maker or an admin changes or deletes one. Saving someone else's drawing in Draw saves your own copy.
-- **The show** is everyone's to edit. Night hours and Off are admins' only.
-- **Admins** can make others admins, and remove people: they're signed out everywhere, and the things they made stay. There's always at least one admin.
-- **The log** records who did what, for 90 days: drawings, apps, playlists, the show, Show now, night and Off, and people coming in. Edits in a row to the same thing count once. Lines about a drawing or app show it small; tap it to open it. The Log page filters by person and by topic (on the panel, program, drawings and apps, night and off, people and invites).
+- **The show** is the household's to edit. Night hours and Off are admins' only.
+- **Admins** manage people on **Manage people** (`/people/manage`): set anyone's role, and remove people: they're signed out everywhere, and the things they made stay. There's always at least one admin. Someone removed can be let back in, or deleted with **Delete everything**: them, their drawings, apps and playlists (and so their places in the show and in others' playlists), and every log line by or about them. It takes a second press and can't be undone; the log keeps only how much went.
+- **The log** records who did what, for 90 days: drawings, apps, playlists, the show, Show now and guests' asks, night and Off, and people coming in. Edits in a row to the same thing count once. Lines about a drawing or app show it small; tap it to open it. The Log page filters by person and by topic (on the panel, program, drawings and apps, night and off, people and invites).
 - Wrong PINs: five tries, then a minute's wait, doubling after each further miss, so 10,000 PINs can't be tried one by one.
 
 Pages paint once, complete: who's signed in, the house's state and the library are fetched together as the page starts, so nothing jumps into place. App frames are rendered once when the server starts, so the first pages after an update don't wait on them.
@@ -328,15 +331,16 @@ Pages paint once, complete: who's signed in, the house's state and the library a
 
 ### Storage
 
-SQLite at `apps/server/data/imagegen.db` (set `DB=/path` to move it). Tables: `images` (scene JSON plus the three rendered files), `apps` (kind, name, settings JSON), `playlists`, `slides` (playlist clips), `show` (entries, durations, repeats, times), `settings` (pin and night), `people` (name, face, colour, hashed PIN, role, status), `sessions` (one per signed-in device, token hashed), `invites`, `log`. Images, apps and playlists have a `made_by`. The draft you're drawing stays in the browser's IndexedDB until you save.
+SQLite at `apps/server/data/imagegen.db` (set `DB=/path` to move it). Tables: `images` (scene JSON plus the three rendered files), `apps` (kind, name, settings JSON), `playlists`, `slides` (playlist clips), `show` (entries, durations, repeats, times), `settings` (pin and night), `people` (name, face, colour, hashed PIN, role, status), `sessions` (one per signed-in device, token hashed), `invites` (with the role they let in as), `asks` (guests' asks to show, waiting for a yes), `log`. Images, apps and playlists have a `made_by`. The draft you're drawing stays in the browser's IndexedDB until you save.
 
 ## Sections
 
-The nav runs Dashboard, Show, Apps, Draw. Your face sits in the top-right corner: its menu switches to someone else in the house (straight to their PIN, for a tablet that changes hands), opens The house and the Log, and signs out. Every page has the light switch (the page dims after sunset on its own; the switch holds until the next sunrise or sunset) and a live thumbnail of the panel, linking to `/live`.
+The nav runs Dashboard, Show, Apps, Draw (guests get no Show). Your face sits in the top-right corner: its menu lists who's knocking and guests' asks, switches to someone else in the house (straight to their PIN, for a tablet that changes hands), opens The house and the Log (not for guests), and signs out. Every page has the light switch (the page dims after sunset on its own; the switch holds until the next sunrise or sunset) and a live thumbnail of the panel, linking to `/live`.
 
 ### Dashboard (`/`)
 
 What's on the panel now: the frame, its name, which playlist it's from, and a progress bar for the current clip. When the panel changes picture, the frame plays a full e-ink refresh (old picture inverted, black, white, black, new picture inverted, then settled) instead of cutting. Below it:
+- **Can I show this?**: a guest's ask, with **Show it** and **Not now**, for the household. A guest sees their own, with **Take it back**. Guests don't get the Lately card or the sequence's Remove.
 - **Up next**: the next clip and how it will look when it airs. It's rendered ahead, so a clock shows the right time.
 - **Device**: a power button that turns the panel off for a holiday or a weekend out. Off takes a press and hold; the card goes dark, the panel preview plays the deep clean, and the rest of the Dashboard dims. It stays off until you press it again, or until an optional **Back on** date (at the night's wake-up time). Also the night hours and what the panel shows while asleep, and when a display last fetched `/live`.
 - **Sequence**: the next hour or so of the loop, with what plays when.
@@ -391,7 +395,11 @@ A drawing board the size of the panel. Pens, eraser, undo and swatches come from
 
 ### People (`/people`)
 
-Who's knocking (for admins, with **Let in** and **Not now**), you (**New look**, **New PIN**, **Sign out**), everyone else with a green dot if they're around now, and what's happened lately. Admins also get **Invite someone** and, per person, **Make admin** and **Remove**; removed people are listed with **Let back in**. Signing in, knocking and joining (`/join/<code>`) happen on the front door before any of this.
+Who's knocking (for the household and admins, with **Let in**, **As a guest** and **Not now**), you (**New look**, **New PIN**, **Sign out**), everyone else with a green dot if they're around now, and what's happened lately (not for guests). Admins also get **Invite someone** and **Manage people**.
+
+### Manage people (`/people/manage`)
+
+Admins only. Everyone in the house with their role (**Admin**, **Household**, **Guest**) and **Remove**; below, who was removed, with **Let back in** and **Delete everything**. Signing in, knocking and joining (`/join/<code>`) happen on the front door before any of this.
 
 ### Log (`/log`)
 
@@ -442,12 +450,14 @@ Long-poll: send `?wait=1` with `If-None-Match: <etag>`. The server holds the req
 | `GET /api/hello` | The sign-in screen: whether the house is set up, who's in (faces), the PIN pad's keys, the faces and colours to pick from, and who this device is signed in as. `?wait=1` long-polls (the knocking screen). |
 | `POST /api/hello/setup`, `POST /api/hello/knock` | Set up the house as its first admin, or knock (`{ name, face, color, secret, invite? }`; a working `invite` lets you straight in). Both sign this device in. |
 | `POST /api/hello/in`, `POST /api/hello/out` | Sign in (`{ id, secret }`; a miss answers `401` with `triesLeft` and `lockedUntil`) or out. |
-| `GET /api/hello/invite/:code` | Whether an invite still works, and who sent it. |
+| `GET /api/hello/invite/:code` | Whether an invite still works, who sent it, and the `role` it lets in as. |
 | `PATCH /api/me` | Your name, face, colour or PIN (`secret`, four digits as strings). |
-| `PATCH /api/people/:id`, `DELETE /api/people/:id` | Admins: let in or remove (`{ status: "in" \| "out" }`), make admin or not (`{ role }`); delete is Not now, for someone knocking. |
-| `POST /api/invites`, `DELETE /api/invites/:code/panel`, `GET /api/invites/:code/qr.svg` | Admins: a 10-minute invite (`{ origin, panel }`), taking it off the panel, its QR code. |
-| `GET /api/log?before=&person=&limit=` | The log, newest first. |
-| `GET /api/state`, `GET /api/state/wait` | Everything the app shows: on air, show, playlists, clips, sequence, night, you, people, the last few log entries. `wait` long-polls up to 25 s. |
+| `DELETE /api/people/:id/everything` | Admins: delete someone removed, with their drawings, apps, playlists and log lines. Answers with what went (`deleted`). |
+| `PATCH /api/people/:id`, `DELETE /api/people/:id` | Let someone knocking in (`{ status: "in", role?: "member" \| "guest" }`; household and admins), or, admins only, remove (`{ status: "out" }`) and change roles (`{ role: "admin" \| "member" \| "guest" }`); delete is Not now, for someone knocking. |
+| `POST /api/invites`, `PATCH /api/invites/:code`, `PUT`/`DELETE /api/invites/:code/panel`, `GET /api/invites/:code/qr.svg` | Admins: a 10-minute invite (`{ origin, role?: "member" \| "guest" }`), changing its `role`, putting it on the panel for 2 minutes or taking it off, its QR code. |
+| `POST /api/asks`, `POST /api/asks/:id/yes`, `DELETE /api/asks/:id` | A guest's Show now: ask (`{ source, forS?, from? }`); the household says yes (it goes live for `forS`) or Not now (delete), and the guest can take it back (delete). |
+| `GET /api/log?before=&person=&limit=` | The log, newest first. Not for guests. |
+| `GET /api/state`, `GET /api/state/wait` | Everything the app shows: on air, show, playlists, clips, sequence, night, you, people, guests' asks, the last few log entries (none for guests). `wait` long-polls up to 25 s. |
 | `GET /api/images`, `GET /api/images/:id` | Saved drawings; one drawing with its scene. |
 | `GET /api/images/:id/:kind` | `png`, `mono` or `bin` file. |
 | `PUT /api/images/:id`, `DELETE /api/images/:id` | Save (multipart: `scene`, `png`, `mono`, `bin`) or delete. |
@@ -463,7 +473,7 @@ Long-poll: send `?wait=1` with `If-None-Match: <etag>`. The server holds the req
 | `PUT /api/live` | Show a source now (`{ mode: "pin", source, forS }`, for `forS` seconds, 15 minutes if left out) or go back to the loop (`{ mode: "rotate" }`). |
 | `PUT /api/sleep` | Night and away: `{ enabled, start, end, screen: "moon" \| "blank" \| "off", away, back: "YYYY-MM-DD" \| null }`. Any subset. |
 
-Edits answer with the whole new state, so the UI never drifts from the server. Without a session, `/api` answers `401`; changing something that isn't yours, or an admin's setting, `403`.
+Edits answer with the whole new state, so the UI never drifts from the server. Without a session, `/api` answers `401`; changing something that isn't yours, an admin's setting, or anything outside a guest's list as a guest, `403`; past the hour's allowance, `429` with `retryAt`.
 
 ## Configuration
 

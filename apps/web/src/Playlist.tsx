@@ -11,7 +11,7 @@ import { useLiveState, useNow } from "./live";
 import { FloatingMenu, MenuDivider, MenuItem, useUndoToast } from "./Undo";
 import type { Playlist as PlaylistT, Slide, State } from "./slides";
 import { navigate } from "./Nav";
-import { mine, tint, useMe } from "./house";
+import { mine, reason, tint, useMe } from "./house";
 
 /** Timeline zoom, in pixels per minute. */
 const ZOOMS = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96];
@@ -122,7 +122,7 @@ export function Playlist({ id }: { id: string | null }) {
       api.addSlide(source, pid, at).then((s) => {
         accept(s);
         setSelected(s.slides.filter((x) => x.playlistId === pid)[at]?.id ?? null);
-      });
+      }, failed);
     } else if (slideId) {
       const ids = slides.map((s) => s.id).filter((id) => id !== slideId);
       ids.splice(at, 0, slideId);
@@ -189,7 +189,11 @@ export function Playlist({ id }: { id: string | null }) {
   };
 
   /** Show now: on /live for `forS` (a clip's own length; else the server's 15 minutes), then the playlists carry on. */
-  const pin = (source: Source, forS?: number) => api.setLive({ mode: "pin", source, forS }).then(accept);
+  const pin = (source: Source, forS?: number) => api.setLive({ mode: "pin", source, forS }).then(accept, failed);
+  /** The server said no, say to wait out a limit: tell them why. */
+  function failed(e: unknown) {
+    toast.show(reason(e, "That didn't work"));
+  }
 
   /** Swap a clip with its neighbour: reordering without dragging. */
   const move = (id: string, dir: -1 | 1) => {
@@ -510,7 +514,7 @@ export function Playlist({ id }: { id: string | null }) {
                           api.addSlide(item.source, pid).then((s) => {
                             accept(s);
                             toast.show(`Added ${item.name}`);
-                          })
+                          }, failed)
                         }
                         role="button"
                         tabIndex={0}

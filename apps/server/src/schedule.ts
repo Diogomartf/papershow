@@ -29,10 +29,13 @@ export type Slide = {
  * Either the program running, or something put on /live with Show now: until `until`, when the program takes
  * over again by itself (no `until`: until you resume it).
  */
-/** A pin is outside the program: `by` who put it up, and `from` Draw when it was sent straight from there. */
+/**
+ * A pin is outside the program: `by` who put it up, and `from` Draw when it was sent straight from there.
+ * A guest's goes up when someone in the household says yes: `okBy` is who did.
+ */
 export type Live =
   | { mode: "rotate" }
-  | { mode: "pin"; source: Source; until?: number | null; by?: string | null; from?: "draw" | null };
+  | { mode: "pin"; source: Source; until?: number | null; by?: string | null; from?: "draw" | null; okBy?: string | null };
 
 export type Showing = {
   source: Source;

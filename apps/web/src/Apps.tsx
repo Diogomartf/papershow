@@ -6,8 +6,8 @@ import { MeMenu } from "./MeMenu";
 import { Nav, navigate } from "./Nav";
 import * as appsApi from "./apps";
 import type { AppInstance, AppKind, Field } from "./apps";
-import { addToShow, setLive } from "./slides";
-import { mine, tint, useMe } from "./house";
+import { addToShow, ask, setLive } from "./slides";
+import { mine, reason, tint, useMe } from "./house";
 import { useLiveState } from "./live";
 
 /** The form's state, tagged with the app it belongs to so it can never be saved onto another. */
@@ -64,6 +64,8 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
   const makerOf = (madeBy: string | null) => everyone.find((p) => p.id === madeBy);
   // Anyone can show, add or duplicate an app; only its maker or an admin changes it.
   const canChange = !current || mine(me, current.madeBy);
+  // Guests ask before something goes on the panel, and don't add to the show.
+  const guest = me.role === "guest";
   const maker = current && makerOf(current.madeBy);
   const kindId = current?.kind ?? newKind;
   const kind = useMemo(() => catalog.find((k) => k.kind === kindId), [catalog, kindId]);
@@ -151,22 +153,25 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
     setTimeout(() => setToast((t) => (t === msg ? null : t)), 2400);
   };
 
-  const create = async () => {
+  /** Run `fn`; if the server says no (a limit, say), show why. */
+  const tried = (fn: () => Promise<unknown>) => () => fn().catch((e) => flash(reason(e, "That didn't work")));
+
+  const create = tried(async () => {
     if (!kind || !draft) return;
     const app = await appsApi.createApp(kind.kind, { name: draft.name, config: draft.config });
     setApps((list) => [app, ...(list ?? [])]);
     navigate(`/apps/${app.id}`);
     flash(`Created ${app.name}`);
-  };
+  });
 
   /** A copy of this app with the same settings, to tweak from there. */
-  const duplicate = async () => {
+  const duplicate = tried(async () => {
     if (!current || !kind || !draft) return;
     const app = await appsApi.createApp(kind.kind, { name: `${draft.name} copy`, config: draft.config });
     setApps((list) => [app, ...(list ?? [])]);
     navigate(`/apps/${app.id}`);
     flash(`Duplicated ${draft.name}`);
-  };
+  });
 
   const remove = async () => {
     if (!current) return;
@@ -328,24 +333,38 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
                 </div>
               ) : (
                 <div className="settings-actions">
-                  <button
-                    className="primary"
-                    onClick={async () => {
-                      await setLive({ mode: "pin", source: { kind: "app", id: current!.id } });
-                      flash(`${draft.name} is on /live for 15 minutes`);
-                    }}
-                  >
-                    Show now
-                  </button>
-                  <button
-                    className="ghost"
-                    onClick={async () => {
-                      await addToShow({ source: { kind: "app", id: current!.id } });
-                      flash(`Added ${draft.name} to the show`);
-                    }}
-                  >
-                    Add to show
-                  </button>
+                  {guest ? (
+                    <button
+                      className="primary"
+                      onClick={tried(async () => {
+                        await ask({ kind: "app", id: current!.id });
+                        flash(`Asked to show ${draft.name} 🙋`);
+                      })}
+                    >
+                      Ask to show
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        className="primary"
+                        onClick={tried(async () => {
+                          await setLive({ mode: "pin", source: { kind: "app", id: current!.id } });
+                          flash(`${draft.name} is on /live for 15 minutes`);
+                        })}
+                      >
+                        Show now
+                      </button>
+                      <button
+                        className="ghost"
+                        onClick={tried(async () => {
+                          await addToShow({ source: { kind: "app", id: current!.id } });
+                          flash(`Added ${draft.name} to the show`);
+                        })}
+                      >
+                        Add to show
+                      </button>
+                    </>
+                  )}
                   <button className="ghost" onClick={duplicate}>Duplicate</button>
                   {canChange && <button className="ghost danger" onClick={remove}>Delete</button>}
                 </div>

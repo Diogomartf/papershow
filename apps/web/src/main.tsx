@@ -7,15 +7,17 @@ import { booting, loadEverything } from "./boot.ts";
 import { Dashboard } from "./Dashboard.tsx";
 import { Hello } from "./Hello.tsx";
 import { Log } from "./Log.tsx";
+import { Manage } from "./Manage.tsx";
 import { navigate } from "./Nav.tsx";
 import { People } from "./People.tsx";
-import { hello as getHello, Me, SIGNED_OUT, signOut, type Hello as HelloData } from "./house";
+import { hello as getHello, Me, SIGNED_OUT, signOut, useMe, type Hello as HelloData } from "./house";
 import { Playlist } from "./Playlist.tsx";
 import { Show } from "./Show.tsx";
 import { Viewer } from "./Viewer.tsx";
 
 function Router() {
   const [path, setPath] = useState(location.pathname);
+  const guest = useMe().me.role === "guest";
   useEffect(() => {
     const onPop = () => setPath(location.pathname);
     addEventListener("popstate", onPop);
@@ -27,6 +29,13 @@ function Router() {
     if (path.startsWith("/join/")) navigate("/");
   }, [path]);
 
+  // The show, the playlists and the log are the household's: a guest lands on the Dashboard.
+  const offLimits = guest && /^\/(show|library|playlists?|slides|log)\b/.test(path);
+  useEffect(() => {
+    if (offLimits) history.replaceState(null, "", "/");
+  }, [offLimits]);
+  if (offLimits) return <Dashboard />;
+
   const viewing = path.match(/^\/i\/([\w-]+)/);
   if (viewing) return <Viewer id={viewing[1]} />;
   // /show is what runs; /playlist/:id is one playlist. Older paths still land somewhere sensible.
@@ -37,6 +46,7 @@ function Router() {
   const app = path.match(/^\/apps(?:\/([\w-]+))?/);
   if (app) return <Apps id={app[1] ?? null} />;
   if (path.startsWith("/draw")) return <App />;
+  if (path.startsWith("/people/manage")) return <Manage />;
   if (path.startsWith("/people")) return <People />;
   if (path.startsWith("/log")) return <Log />;
   return <Dashboard />;

@@ -7,6 +7,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Scene } from "@papershow/scene";
 import { APPS, appFrame, appFrameAt, catalog, configFor, forgetApp, previewFrame } from "./apps/index.ts";
 import { watchModels } from "./ai.ts";
+import * as asks from "./asks.ts";
 import * as store from "./db.ts";
 import { inviteFrame, qrSvg } from "./invite.tsx";
 import * as people from "./people.ts";
@@ -90,8 +91,8 @@ async function liveNow(now = Date.now()): Promise<LiveNow | null> {
     };
   }
 
-  // An invite someone put on the panel, until it's used or runs out. It beats the night: someone's
-  // standing there with their phone.
+  // An invite someone put on the panel, for a couple of minutes or until it's used. It beats the night:
+  // someone's standing there with their phone.
   const invite = people.panelInvite(now);
   if (invite) {
     const frame = await inviteFrame(invite);
@@ -99,12 +100,12 @@ async function liveNow(now = Date.now()): Promise<LiveNow | null> {
       source: null,
       slideId: null,
       clip: null,
-      endsAt: invite.expiresAt,
+      endsAt: invite.onPanelUntil,
       asleep: null,
       away: false,
       invite: invite.code,
-      showNow: invite.expiresAt,
-      etag: `"invite-${invite.code}"`,
+      showNow: invite.onPanelUntil,
+      etag: `"invite-${invite.code}-${invite.role}"`,
       file: (k) => frame[k],
     };
   }
@@ -225,11 +226,52 @@ app.use("/api/*", async (c, next) => {
   return next();
 });
 
+// Guests draw, make apps and ask for things to go on the panel. The show, the playlists, the log and the
+// house's settings stay with the household, so everything a guest may change is listed here.
+const GUEST_MAY: [string, RegExp][] = [
+  ["PATCH", /^\/api\/me$/],
+  ["PUT", /^\/api\/images\/[\w-]+$/],
+  ["DELETE", /^\/api\/images\/[\w-]+$/],
+  ["POST", /^\/api\/apps(\/preview)?$/],
+  ["PATCH", /^\/api\/apps\/[\w-]+$/],
+  ["DELETE", /^\/api\/apps\/[\w-]+$/],
+  ["POST", /^\/api\/asks$/],
+  ["DELETE", /^\/api\/asks\/[\w-]+$/],
+];
+
+app.use("/api/*", async (c, next) => {
+  if (c.get("me")?.role !== "guest") return next();
+  const { method, path } = c.req;
+  const reading = method === "GET" && path !== "/api/log";
+  if (reading || GUEST_MAY.some(([m, re]) => m === method && re.test(path))) return next();
+  return c.json({ error: "Guests can't change this. Ask someone in the house?" }, 403);
+});
+
 const isAdmin = (c: C) => c.get("me").role === "admin";
+const isGuest = (c: C) => c.get("me").role === "guest";
 /** Anyone can use anything; only its maker or an admin changes or deletes it. */
 const mayChange = (c: C, madeBy: string | null | undefined) => isAdmin(c) || !madeBy || madeBy === c.get("me").id;
 const notYours = (c: C) => c.json({ error: "Only its maker or an admin can change this" }, 403);
 const adminsOnly = (c: C) => c.json({ error: "Only an admin can do this" }, 403);
+
+/** Spend one of the hour's goes at `bucket`; when they're used up, the answer that says how long to wait. */
+function tooMany(c: C, bucket: people.Bucket) {
+  const until = people.spend(c.get("me"), bucket);
+  if (until === null) return null;
+  const min = Math.max(1, Math.ceil((until - Date.now()) / 60_000));
+  return c.json({ error: `That's a lot for one hour. Try again in ${min} min`, retryAt: until }, 429);
+}
+
+/**
+ * A guest changed a drawing or app of theirs. If it's on the panel by their ask, or waiting on one, the
+ * household said yes to how it looked before: it comes off, and they ask again.
+ */
+function guestChanged(c: C, src: Source) {
+  if (!isGuest(c)) return;
+  asks.dropAsksFor(src);
+  const live = store.getLive();
+  if (live.mode === "pin" && live.okBy && live.source.kind === src.kind && live.source.id === src.id) store.setLive({ mode: "rotate" });
+}
 
 /** How the log names things: with the name they had then. */
 function named(src: Source): people.Named {
@@ -317,7 +359,7 @@ app.post("/api/hello/knock", async (c) => {
   if (typeof j === "string") return c.json({ error: j }, 400);
   const invite = body.invite ? people.getInvite(body.invite) : undefined;
   if (body.invite && !invite) return c.json({ error: "That invite has run out. Knock instead?" }, 410);
-  const me = people.createPerson(j.profile, j.secret, "member", invite ? "in" : "knocking");
+  const me = people.createPerson(j.profile, j.secret, invite?.role ?? "member", invite ? "in" : "knocking");
   if (invite) {
     people.useInvite(invite.code, me.id);
     const host = invite.madeBy ? people.getPerson(invite.madeBy) : undefined;
@@ -333,11 +375,11 @@ app.get("/api/hello/invite/:code", (c) => {
   const invite = people.getInvite(c.req.param("code"));
   if (!invite) return c.json({ error: "This invite has run out" }, 404);
   const host = invite.madeBy ? people.getPerson(invite.madeBy) : undefined;
-  return c.json({ code: invite.code, expiresAt: invite.expiresAt, by: host ? people.toFace(host) : null });
+  return c.json({ code: invite.code, expiresAt: invite.expiresAt, role: invite.role, by: host ? people.toFace(host) : null });
 });
 
-/** Admins see who's knocking too. Removed people stay listed, so the log can still show their faces. */
-const peopleFor = (c: C) => people.listPeople().filter((p) => isAdmin(c) || p.status !== "knocking");
+/** The household and admins see who's knocking too. Removed people stay listed, so the log can still show their faces. */
+const peopleFor = (c: C) => people.listPeople().filter((p) => !isGuest(c) || p.status !== "knocking");
 
 app.patch("/api/me", async (c) => {
   const me = c.get("me");
@@ -352,25 +394,57 @@ app.patch("/api/me", async (c) => {
 });
 
 app.patch("/api/people/:id", async (c) => {
-  if (!isAdmin(c)) return adminsOnly(c);
   const p = people.getPerson(c.req.param("id"));
   if (!p) return c.notFound();
   const { status, role } = await c.req.json<{ status?: people.Status; role?: people.Role }>();
+  // Anyone in the household can answer the door, as household or as a guest. The rest is for admins.
+  const answeringDoor = p.status === "knocking" && status === "in" && role !== "admin";
+  if (!isAdmin(c) && !answeringDoor) return adminsOnly(c);
   if (status && !["in", "out"].includes(status)) return c.json({ error: "Let them in or out" }, 400);
-  if (role && !["admin", "member"].includes(role)) return c.json({ error: "Admin or member" }, 400);
-  const losesAdmin = p.role === "admin" && (status === "out" || role === "member");
+  if (role && !people.ROLES.includes(role)) return c.json({ error: "Admin, household or guest" }, 400);
+  const losesAdmin = p.role === "admin" && (status === "out" || (!!role && role !== "admin"));
   if (losesAdmin && !people.otherAdmins(p.id)) return c.json({ error: "Someone has to stay an admin" }, 400);
   people.updatePerson(p.id, { status, role });
   const who = { person: namedPerson(p) };
-  if (status && status !== p.status) note(c, status === "out" ? "removed" : p.status === "knocking" ? "let-in" : "let-back-in", who);
-  if (role && role !== p.role) note(c, role === "admin" ? "made-admin" : "made-member", who);
+  // Letting someone in as a guest is one thing done, not two.
+  const lettingIn = p.status === "knocking" && status === "in";
+  if (status && status !== p.status) note(c, status === "out" ? "removed" : lettingIn ? "let-in" : "let-back-in", lettingIn && role === "guest" ? { ...who, guest: true } : who);
+  if (role && role !== p.role && !lettingIn) note(c, `made-${role}`, who);
   changed();
   return c.json(await state(c));
 });
 
+/**
+ * Delete someone who was removed, and everything they did: their drawings, apps and playlists (and with them
+ * their places in the show and in others' playlists), and every log line by or about them. Can't be undone.
+ */
+app.delete("/api/people/:id/everything", async (c) => {
+  if (!isAdmin(c)) return adminsOnly(c);
+  const p = people.getPerson(c.req.param("id"));
+  if (!p) return c.notFound();
+  if (p.status !== "out") return c.json({ error: "Remove them first" }, 400);
+  const theirs = <T extends { madeBy: string | null }>(xs: T[]) => xs.filter((x) => x.madeBy === p.id);
+  const images = theirs(store.listImages());
+  const apps = theirs(store.listApps());
+  const playlists = theirs(store.listPlaylists());
+  for (const i of images) store.deleteImage(i.id);
+  for (const a of apps) {
+    store.deleteApp(a.id);
+    forgetApp(a.id);
+  }
+  for (const pl of playlists) store.deletePlaylist(pl.id);
+  // Whatever they put on the panel comes off too.
+  const live = store.getLive();
+  if (live.mode === "pin" && live.by === p.id) store.setLive({ mode: "rotate" });
+  people.forgetPerson(p.id);
+  // Only how much went: the point is that nothing of them is left, their name included.
+  note(c, "cleared-out", { drawings: images.length, apps: apps.length, playlists: playlists.length });
+  changed();
+  return c.json({ ...(await state(c)), deleted: { drawings: images.length, apps: apps.length, playlists: playlists.length } });
+});
+
 /** Not now: someone knocking goes away. They can knock again. */
 app.delete("/api/people/:id", async (c) => {
-  if (!isAdmin(c)) return adminsOnly(c);
   const p = people.getPerson(c.req.param("id"));
   if (!p || p.status !== "knocking") return c.json({ error: "Only someone still knocking can be turned away" }, 400);
   people.deletePerson(p.id);
@@ -379,18 +453,37 @@ app.delete("/api/people/:id", async (c) => {
   return c.json(await state(c));
 });
 
-/** A 10-minute invite, shown as a QR code on the admin's screen and, with `panel`, on the panel too. */
+/** A 10-minute invite, for the household or a guest, shown as a QR code on the admin's screen. */
 app.post("/api/invites", async (c) => {
   if (!isAdmin(c)) return adminsOnly(c);
-  const { origin, panel } = await c.req.json<{ origin?: string; panel?: boolean }>();
+  const { origin, role } = await c.req.json<{ origin?: string; role?: string }>();
   if (!origin || !/^https?:\/\/[^/\s]+$/.test(origin)) return c.json({ error: "Which address should the invite open?" }, 400);
-  const invite = people.createInvite(c.get("me").id, origin, !!panel);
-  note(c, "invited", { panel: !!panel });
-  if (panel) {
-    changed();
-    // When it runs out, the panel goes back to the show by itself; open pages hear it then.
-    setTimeout(changed, people.INVITE_MS + 50).unref();
-  }
+  const guest = role === "guest";
+  const invite = people.createInvite(c.get("me").id, origin, guest ? "guest" : "member");
+  note(c, "invited", { guest });
+  return c.json(invite);
+});
+
+/** Who the invite lets in as: household or guest. */
+app.patch("/api/invites/:code", async (c) => {
+  if (!isAdmin(c)) return adminsOnly(c);
+  const { role } = await c.req.json<{ role?: string }>();
+  if (role !== "member" && role !== "guest") return c.json({ error: "Household or guest" }, 400);
+  const invite = people.setInviteRole(c.req.param("code"), role);
+  if (!invite) return c.json({ error: "This invite has run out" }, 410);
+  if (invite.onPanelUntil) changed();
+  return c.json(invite);
+});
+
+/** The same invite on the panel too, for a couple of minutes, so someone can scan it there. */
+app.put("/api/invites/:code/panel", async (c) => {
+  if (!isAdmin(c)) return adminsOnly(c);
+  const invite = people.showInvite(c.req.param("code"));
+  if (!invite) return c.json({ error: "This invite has run out" }, 410);
+  note(c, "invite-on-panel", { guest: invite.role === "guest" });
+  changed();
+  // When its time is up, the panel goes back to the show by itself; open pages hear it then.
+  setTimeout(changed, invite.onPanelUntil! - Date.now() + 50).unref();
   return c.json(invite);
 });
 
@@ -451,6 +544,10 @@ app.put("/api/images/:id", async (c) => {
   if (scene.id !== c.req.param("id")) return c.json({ error: "id mismatch" }, 400);
   const was = store.getImageMeta(scene.id);
   if (was && !mayChange(c, was.madeBy)) return notYours(c);
+  if (!was) {
+    const wait = tooMany(c, "make");
+    if (wait) return wait;
+  } else guestChanged(c, { kind: "image", id: was.id });
   const bytes = async (k: string) => new Uint8Array(await (form.get(k) as File).arrayBuffer());
   store.putImage(scene, { png: await bytes("png"), mono: await bytes("mono"), bin: await bytes("bin") }, c.get("me").id);
   note(c, was ? "redrew" : "drew", { item: named({ kind: "image", id: scene.id }) });
@@ -486,6 +583,8 @@ app.post("/api/apps", async (c) => {
   const { kind, name, config } = await c.req.json<{ kind: string; name?: string; config?: Record<string, unknown> }>();
   const def = APPS[kind];
   if (!def) return c.json({ error: "no such app" }, 404);
+  const wait = tooMany(c, "make");
+  if (wait) return wait;
   const row = store.createApp(kind, uniqueName(name?.trim() || def.name), configFor(def, config), c.get("me").id);
   note(c, "made-app", { item: named({ kind: "app", id: row.id }) });
   changed();
@@ -502,6 +601,7 @@ app.patch("/api/apps/:id", async (c) => {
   if (!row) return c.notFound();
   if (!mayChange(c, row.madeBy)) return notYours(c);
   const patch = await c.req.json<{ name?: string; config?: Record<string, unknown> }>();
+  guestChanged(c, { kind: "app", id: row.id });
   store.updateApp(row.id, {
     name: patch.name?.trim() || undefined,
     config: patch.config && configFor(APPS[row.kind], patch.config),
@@ -612,8 +712,10 @@ async function state(c: C) {
     display: lastSeen,
     me: c.get("me"),
     people: peopleFor(c),
-    /** The last few things people did; /api/log has the rest. */
-    log: people.listLog({ limit: 8 }),
+    /** Guests' asks to go on the panel, waiting for a yes. A guest sees only their own. */
+    asks: asks.listAsks(now).filter((a) => exists(a.source) && (!isGuest(c) || a.by === c.get("me").id)),
+    /** The last few things people did; /api/log has the rest. Not for guests. */
+    log: isGuest(c) ? [] : people.listLog({ limit: 8 }),
   };
 }
 
@@ -631,6 +733,8 @@ app.post("/api/slides", async (c) => {
   if (!source || !exists(source)) return c.json({ error: "no such image or app" }, 404);
   const playlist = (body.playlistId && store.getPlaylist(body.playlistId)) || store.listPlaylists()[0];
   if (!mayChange(c, playlist.madeBy)) return notYours(c);
+  const wait = tooMany(c, "make");
+  if (wait) return wait;
   store.addSlide(source, playlist.id, body.at, clipLength(source));
   note(c, "added-to-playlist", { item: named(source), playlist: namedPlaylist(playlist.id) });
   changed();
@@ -678,6 +782,8 @@ app.delete("/api/slides/:id", async (c) => {
 
 app.post("/api/playlists", async (c) => {
   const { name, show = true } = await c.req.json<{ name?: string; show?: boolean }>();
+  const wait = tooMany(c, "make");
+  if (wait) return wait;
   const p = store.createPlaylist(name?.trim() || `Playlist ${store.listPlaylists().length + 1}`, c.get("me").id);
   // A new playlist joins the end of what's on now unless asked not to.
   if (show) store.addShowEntry(blockNow(), { playlistId: p.id });
@@ -761,6 +867,8 @@ app.put("/api/program", async (c) => {
 app.post("/api/show", async (c) => {
   const body = await c.req.json<{ blockId?: string; playlistId?: string; source?: Source; at?: number }>();
   const blockId = body.blockId && store.getBlock(body.blockId) ? body.blockId : blockNow();
+  const wait = tooMany(c, "make");
+  if (wait) return wait;
   if (body.playlistId) {
     if (!store.getPlaylist(body.playlistId)) return c.json({ error: "no such playlist" }, 404);
     store.addShowEntry(blockId, { playlistId: body.playlistId }, body.at);
@@ -816,6 +924,8 @@ app.put("/api/live", async (c) => {
   const live = await c.req.json<Live & { forS?: number }>();
   if (live.mode === "pin") {
     if (!live.source || !exists(live.source)) return c.json({ error: "no such image or app" }, 404);
+    const wait = tooMany(c, "live");
+    if (wait) return wait;
     // Show now takes over once, for its turn (`forS`, else 15 minutes), then the playlists carry on.
     const forS = Number(live.forS) > 0 ? Number(live.forS) : SHOW_NOW_S;
     store.setLive({
@@ -832,6 +942,50 @@ app.put("/api/live", async (c) => {
     if (store.getLive().mode === "pin") note(c, "resumed");
     store.setLive({ mode: "rotate" });
   }
+  changed();
+  return c.json(await state(c));
+});
+
+// ── Asks: a guest's Show now, waiting for the household ─────────────────────
+
+/** A guest asks for a drawing or app to go on the panel; the household sees it on the Dashboard. */
+app.post("/api/asks", async (c) => {
+  const body = await c.req.json<{ source?: Source; forS?: number; from?: string }>();
+  if (!body.source || !exists(body.source)) return c.json({ error: "no such image or app" }, 404);
+  const wait = tooMany(c, "live");
+  if (wait) return wait;
+  const source: Source = { kind: body.source.kind, id: body.source.id };
+  const forS = Number(body.forS) > 0 ? Number(body.forS) : SHOW_NOW_S;
+  asks.addAsk(c.get("me").id, source, forS, body.from === "draw" ? "draw" : null);
+  note(c, "asked-to-show", { item: named(source) });
+  changed();
+  // Nobody answered: it lapses by itself, and open pages hear it then.
+  setTimeout(changed, asks.ASK_MS + 50).unref();
+  return c.json(await state(c));
+});
+
+/** Yes: it goes on the panel now, for as long as the guest asked, as theirs. */
+app.post("/api/asks/:id/yes", async (c) => {
+  const ask = asks.getAsk(c.req.param("id"));
+  if (!ask || !exists(ask.source)) return c.json({ error: "That ask has lapsed" }, 404);
+  const guest = people.getPerson(ask.by);
+  store.setLive({ mode: "pin", source: ask.source, until: Date.now() + ask.forS * 1000, by: ask.by, from: ask.via, okBy: c.get("me").id });
+  asks.dropAsk(ask.id);
+  note(c, "said-yes", { item: named(ask.source), ...(guest && { person: namedPerson(guest) }) });
+  setTimeout(changed, ask.forS * 1000 + 50).unref();
+  changed();
+  return c.json(await state(c));
+});
+
+/** Not now, from the household; or taken back by the guest who asked. */
+app.delete("/api/asks/:id", async (c) => {
+  const ask = asks.getAsk(c.req.param("id"));
+  if (!ask) return c.json(await state(c));
+  const own = ask.by === c.get("me").id;
+  if (isGuest(c) && !own) return c.json({ error: "That's someone else's" }, 403);
+  const guest = people.getPerson(ask.by);
+  asks.dropAsk(ask.id);
+  if (!own) note(c, "said-not-now", { item: named(ask.source), ...(guest && { person: namedPerson(guest) }) });
   changed();
   return c.json(await state(c));
 });

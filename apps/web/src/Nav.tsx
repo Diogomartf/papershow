@@ -1,4 +1,5 @@
 import type { MouseEvent } from "react";
+import { useMe } from "./house";
 
 /** Client-side navigation: swap the route without a reload. */
 export function navigate(to: string) {
@@ -23,11 +24,13 @@ const SECTIONS = [
 export type Section = (typeof SECTIONS)[number]["id"] | "people" | "log";
 
 export function Nav({ current }: { current: Section }) {
+  // Guests don't run the show, so they don't get its page.
+  const guest = useMe().me.role === "guest";
   return (
     <nav className="nav">
       <img className="mark" src="/icon-nav.png" alt="" />
       <span className="wordmark" role="img" aria-label="Papershow" />
-      {SECTIONS.map((s) => (
+      {SECTIONS.filter((s) => !(guest && s.id === "show")).map((s) => (
         <a key={s.id} href={s.href} aria-current={current === s.id ? "page" : undefined} onClick={go(s.href)}>
           {s.label}
         </a>

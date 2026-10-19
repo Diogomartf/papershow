@@ -8,6 +8,7 @@ import { useLiveState, useNow } from "./live";
 import * as api from "./slides";
 import { ENTRY_COLORS, type Block, type Days, type EntryColor, type ShowEntry, type State, type Turn } from "./slides";
 import { Grip } from "./Grip";
+import { reason } from "./house";
 import { useSortable } from "./sortable";
 import { useItems, type Item } from "./sources";
 import { useUndoToast } from "./Undo";
@@ -271,7 +272,7 @@ export function Show() {
       accept(s);
       const until = s.live.mode === "pin" && s.live.until ? new Date(s.live.until) : null;
       toast.show(`${name} is on the panel${until ? ` until ${hhmm(until.getTime())}` : ""} 📺`);
-    });
+    }, refused);
   const airTurn = (t: Turn) => air(t.source, Math.max(60, Math.round((t.endsAt - t.at) / 1000)), turnName(t));
   const airEntry = (e: ShowEntry) => {
     if (e.source) return air(e.source, e.durationS, nameOf(e));
@@ -281,6 +282,10 @@ export function Show() {
 
   // ── Changing the program ──
   const failed = (msg: string) => () => toast.show(msg);
+  /** The server said why it won't (a limit, say): show that. */
+  function refused(e: unknown) {
+    toast.show(reason(e, "That didn't work"));
+  }
   const addTime = () => {
     // An hour or three after the last block, or the first free hour of the day.
     const taken = new Set(blocks.map((b) => b.start));
@@ -309,7 +314,7 @@ export function Show() {
       accept(s);
       setAdding(null);
       toast.show(`Added ${name} 🎉`);
-    });
+    }, refused);
   const move = (e: ShowEntry, dir: -1 | 1) => {
     const ids = entriesOf(e.blockId).map((x) => x.id);
     const i = ids.indexOf(e.id);
