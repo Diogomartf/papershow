@@ -416,14 +416,16 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
 
 .viewer {
   height: 100%;
-  display: grid; grid-template-rows: 1fr auto; place-items: center;
+  display: grid; grid-template-rows: auto 1fr auto; place-items: center;
   padding: 24px;
   background:
     var(--light),
     linear-gradient(180deg, var(--wall-lit), var(--wall));
 }
+.viewer-back { justify-self: start; min-height: 64px; padding: 0 28px; font-size: 22px; }
+.viewer-back span { font-size: 26px; line-height: 1; }
 .viewer img {
-  max-width: 100%; max-height: calc(100dvh - 140px);
+  max-width: 100%; max-height: calc(100dvh - 228px);
   width: auto; height: auto;
   image-rendering: pixelated;
   /* hung on the wall in the same thin frame as the panel */
@@ -1673,6 +1675,9 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
   /* Draw's six buttons don't fit beside the name: their own row, wrapping if they must; Text is just its T */
   .bar-right.draw-actions { flex: 1 1 100%; flex-wrap: wrap; row-gap: 6px; }
   .draw-actions .text-label { display: none; }
+  /* The photo's buttons still fit a phone-sized panel, still big enough for a thumb */
+  .photo-tools { bottom: 8px; gap: 4px; padding: 4px; border-radius: 18px; }
+  .photo-tools button { min-width: 44px; height: 44px; padding: 0 10px; font-size: 15px; border-radius: 13px; }
   .stage { padding-top: 12px; grid-template-rows: auto auto; align-content: start; }
   /* Drawesome sizes its bar to its widest panel; scale it to the phone (zoom keeps taps aligned) */
   .panel [class*="Draw_toolbar"] { zoom: .76; }
@@ -1730,6 +1735,64 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
 
 /* Drawesome clips its root; let the toolbar hang below the panel onto the shelf. */
 .panel [class*="Draw_root"] { overflow: visible; }
+
+/* ── The photo under the drawing ───────────────────── */
+
+/* In the bar: the photo, small, with Move and Remove beside it */
+.photo-card {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 3px 3px 3px 4px; border-radius: 11px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.photo-card img { width: 40px; height: 26px; object-fit: cover; border-radius: 5px; margin-right: 2px; }
+.photo-card button.ghost { padding: 5px 9px; }
+.photo-card button[aria-pressed="true"] { background: var(--tint); color: var(--ink); }
+
+/* Before the pens in the page, so it sits under them; placed and turned from its centre */
+.photo-clip { position: absolute; inset: 0; overflow: clip; pointer-events: none; }
+.photo { position: absolute; max-width: none; pointer-events: none; user-select: none; -webkit-user-drag: none; }
+.photo[data-hidden="true"] { opacity: 0; }
+/* Not clipped: the corners can sit out on the frame when the photo fills the panel */
+.photo-layer { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.photo-layer[data-active="true"] { pointer-events: auto; cursor: grab; touch-action: none; }
+.photo-layer[data-active="true"]:active { cursor: grabbing; }
+.photo-frame { position: absolute; pointer-events: none; box-shadow: 0 0 0 2px #e89a3c; }
+/* Figma's corners: a small square to resize, and just outside it, a bigger unseen patch with the turning cursor */
+.photo-corner, .photo-rotate { position: absolute; touch-action: none; }
+.photo-corner { z-index: 2; width: 12px; height: 12px; background: #fff; border: 2px solid #e89a3c; border-radius: 2px; }
+.photo-corner::after { content: ""; position: absolute; inset: -8px; } /* a bigger target for fingers */
+.photo-rotate { z-index: 1; width: 32px; height: 32px; cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g fill='none' stroke-linecap='round' stroke-linejoin='round'><path d='M6 15a7 7 0 1 1 3 4' stroke='white' stroke-width='4.5'/><path d='M6 15a7 7 0 1 1 3 4' stroke='black' stroke-width='2'/><path d='M3 11l3 4 4-3' stroke='white' stroke-width='4.5'/><path d='M3 11l3 4 4-3' stroke='black' stroke-width='2'/></g></svg>") 12 12, crosshair; }
+/* The angle while turning, as Figma shows it */
+.photo-angle {
+  position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+  padding: 4px 10px; border-radius: 8px;
+  background: #e89a3c; color: #fff; font-size: 15px; font-weight: 680; font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* Big, thumb-sized buttons along the bottom of the panel */
+.photo-tools {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  display: flex; gap: 6px; padding: 6px;
+  border-radius: 22px; background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line), 0 10px 24px -10px var(--drop);
+  white-space: nowrap; cursor: default;
+}
+.photo-tools button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-width: 56px; height: 56px; padding: 0 18px;
+  border: 0; border-radius: 16px;
+  background: var(--tint); color: var(--ink);
+  font: inherit; font-size: 18px; font-weight: 680;
+  transition: transform 160ms var(--ease-out), background-color 120ms ease-out;
+  -webkit-tap-highlight-color: transparent;
+}
+.photo-tools button span[aria-hidden] { font-size: 26px; line-height: 1; }
+.photo-tools button:hover:not(:disabled) { background: color-mix(in srgb, var(--tint) 100%, var(--ink) 8%); }
+.photo-tools button:active:not(:disabled) { transform: scale(0.94); }
+.photo-tools button:disabled { opacity: .35; }
+.photo-tools .photo-done { background: var(--accent); color: var(--on-accent); }
+.photo-tools .photo-done:hover { background: color-mix(in srgb, var(--accent) 86%, black); }
 
 /* ── Text on the drawing ───────────────────────────── */
 

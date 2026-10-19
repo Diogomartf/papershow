@@ -31,11 +31,49 @@ export type Scene = {
   strokes: Stroke[];
   /** Drawn above the strokes. Older scenes have none. */
   texts?: TextItem[];
-  /** A photo under everything, as a JPEG data URL already cropped to the panel. */
+  /** A photo under everything, as a JPEG data URL. Older scenes saved it already cropped to the panel. */
   photo?: string;
+  /** Where the photo sits. Without it, the photo fills the panel. */
+  photoAt?: PhotoAt;
   createdAt: number;
   updatedAt: number;
 };
+
+/** Where a photo sits on the panel: its centre in panel pixels, its size, and how far it's turned. */
+export type PhotoAt = {
+  x: number;
+  y: number;
+  /** 1 fills the panel edge to edge, cropping what doesn't fit. Smaller leaves paper around it. */
+  scale: number;
+  /** Degrees clockwise, 0 to 360. */
+  angle: number;
+};
+
+export const PHOTO_FILL: PhotoAt = { x: PANEL.w / 2, y: PANEL.h / 2, scale: 1, angle: 0 };
+
+/** A `w`×`h` photo's sides as they lie across the panel: swapped when it's nearer sideways than upright. */
+const across = (w: number, h: number, angle: number) => (Math.round(angle / 90) % 2 ? [h, w] : [w, h]);
+
+/**
+ * The scale that fills the panel with a `w`×`h` photo, in panel pixels per photo pixel.
+ * At an angle in between it's the fill for the nearest straight one.
+ */
+const coverOf = (w: number, h: number, angle: number) => {
+  const [sw, sh] = across(w, h, angle);
+  return Math.max(PANEL.w / sw, PANEL.h / sh);
+};
+
+/** A `w`×`h` photo's size on the panel, before it's turned. */
+export function photoSize(w: number, h: number, at: PhotoAt) {
+  const k = coverOf(w, h, at.angle) * at.scale;
+  return { w: w * k, h: h * k };
+}
+
+/** The scale at which the whole photo just fits on the panel. */
+export function photoFit(w: number, h: number, angle: number) {
+  const [sw, sh] = across(w, h, angle);
+  return Math.min(PANEL.w / sw, PANEL.h / sh) / coverOf(w, h, angle);
+}
 
 export type DitherMode = "atkinson" | "floyd" | "threshold";
 

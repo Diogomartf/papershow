@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Draw, type DrawHandle, type Stroke } from "drawesome";
 import "drawesome/styles.css";
 import "@fontsource-variable/inter";
-import { PANEL, type Scene, type TextItem } from "@papershow/scene";
+import { PANEL, PHOTO_FILL, type PhotoAt, type Scene, type TextItem } from "@papershow/scene";
 import { paintMono, photoFor, renderScene } from "./render";
 import { getDraft, getImage, getSaved, imageUrl, putDraft, putImage, putSaved } from "./store";
 import { Oops } from "./house";
@@ -14,6 +14,7 @@ import { useNarrow } from "./media";
 import { LightSwitch } from "./LightSwitch";
 import { MeMenu } from "./MeMenu";
 import { TextLayer } from "./TextLayer";
+import { PhotoLayer } from "./PhotoLayer";
 import { shortId } from "./id";
 
 // Ink mode: greys dither, colours become greys.
@@ -81,7 +82,7 @@ function nameFromText(texts: TextItem[] | undefined): string {
 type View = "ink" | "eink";
 
 /** What the panel would show of a drawing: two scenes with the same key look the same. */
-const looksKey = (s: Scene) => JSON.stringify([s.strokes, s.texts ?? [], s.photo ?? null]);
+const looksKey = (s: Scene) => JSON.stringify([s.strokes, s.texts ?? [], s.photo ?? null, s.photo ? (s.photoAt ?? PHOTO_FILL) : null]);
 
 export default function App() {
   const draw = useRef<DrawHandle>(null);
@@ -94,6 +95,8 @@ export default function App() {
   const [galleryKey, setGalleryKey] = useState(0);
   // Text mode: clicks on the panel type instead of draw.
   const [typing, setTyping] = useState(false);
+  // Photo mode: dragging on the panel moves and resizes the photo instead of drawing.
+  const [placing, setPlacing] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   const narrow = useNarrow();
   const [showFor, setShowFor] = useState(savedShowFor);
@@ -149,6 +152,10 @@ export default function App() {
     setScene((s) => (s ? { ...s, strokes, updatedAt: Date.now() } : s));
   }, []);
 
+  const onPhotoAt = useCallback((photoAt: PhotoAt) => {
+    setScene((s) => (s ? { ...s, photoAt, updatedAt: Date.now() } : s));
+  }, []);
+
   const onTexts = useCallback((texts: TextItem[]) => {
     setScene((s) => (s ? { ...s, texts, name: nameEdited.current ? s.name : nameFromText(texts), updatedAt: Date.now() } : s));
   }, []);
@@ -159,7 +166,10 @@ export default function App() {
     const el = panel.current;
     if (!el) return;
     const onDown = (e: PointerEvent) => {
-      if ((e.target as HTMLElement).closest('[class*="Draw_toolbar"]')) setTyping(false);
+      if ((e.target as HTMLElement).closest('[class*="Draw_toolbar"]')) {
+        setTyping(false);
+        setPlacing(false);
+      }
     };
     el.addEventListener("pointerdown", onDown, true);
     return () => el.removeEventListener("pointerdown", onDown, true);
@@ -226,13 +236,15 @@ export default function App() {
     }
   };
 
-  /** A photo goes under the drawing; picking none, or a second time, replaces it. */
+  /** A photo goes under the drawing, filling the panel, ready to be moved, resized and turned. */
   const onPhoto = async (file: File | undefined) => {
     if (!file || !scene) return;
     try {
-      const photo = await photoFor(file, scene.width, scene.height);
+      const photo = await photoFor(file);
       const name = nameEdited.current || scene.name !== UNTITLED ? scene.name : file.name.replace(/\.[^.]+$/, "");
-      setScene((s) => (s ? { ...s, photo, name, updatedAt: Date.now() } : s));
+      setScene((s) => (s ? { ...s, photo, photoAt: PHOTO_FILL, name, updatedAt: Date.now() } : s));
+      setTyping(false);
+      setPlacing(true);
     } catch (err) {
       flash("Couldn't open that picture");
       console.error(err);
@@ -245,6 +257,7 @@ export default function App() {
     setSavedLooks(looksKey(s));
     setScene(adopt(s));
     draw.current?.setStrokes(s.strokes);
+    setPlacing(false);
     setGalleryOpen(false);
   };
 
@@ -253,6 +266,7 @@ export default function App() {
     const s = newScene();
     setScene(s);
     setTyping(false);
+    setPlacing(false);
     draw.current?.setStrokes([]);
   };
 
@@ -264,8 +278,14 @@ export default function App() {
       }
       // T for text, Escape back to drawing, unless you're typing somewhere.
       if ((e.target as HTMLElement).closest("input, textarea, [contenteditable]") || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key.toLowerCase() === "t") setTyping((t) => !t);
-      if (e.key === "Escape") setTyping(false);
+      if (e.key.toLowerCase() === "t") {
+        setTyping((t) => !t);
+        setPlacing(false);
+      }
+      if (e.key === "Escape") {
+        setTyping(false);
+        setPlacing(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -310,20 +330,41 @@ export default function App() {
           <button
             className="ghost text-toggle"
             aria-pressed={typing}
-            onClick={() => setTyping((t) => !t)}
+            onClick={() => {
+              setTyping((t) => !t);
+              setPlacing(false);
+            }}
             title={typing ? "Back to drawing (Esc)" : "Type on the panel (T)"}
           >
             <span aria-hidden className="text-glyph">T</span> <span className="text-label">Text</span>
           </button>
           <button className="ghost" onClick={startNew}>New</button>
           {scene.photo ? (
-            <button
-              className="ghost"
-              onClick={() => setScene({ ...scene, photo: undefined, updatedAt: Date.now() })}
-              title="Take the photo off, keep the drawing"
-            >
-              No photo
-            </button>
+            // The photo on the drawing, and what you can do with it, together.
+            <span className="photo-card">
+              <img src={scene.photo} alt="" />
+              <button
+                className="ghost"
+                aria-pressed={placing}
+                onClick={() => {
+                  setPlacing((p) => !p);
+                  setTyping(false);
+                }}
+                title={placing ? "Back to drawing (Esc)" : "Move, resize or turn the photo"}
+              >
+                Move
+              </button>
+              <button
+                className="ghost"
+                onClick={() => {
+                  setScene({ ...scene, photo: undefined, photoAt: undefined, updatedAt: Date.now() });
+                  setPlacing(false);
+                }}
+                title="Take the photo off, keep the drawing"
+              >
+                Remove
+              </button>
+            </span>
           ) : (
             <button className="ghost" onClick={() => photoInput.current?.click()} title="Put a photo on the panel, and draw on it if you like">
               Photo
@@ -374,9 +415,17 @@ export default function App() {
             className="panel"
             ref={panel}
             data-typing={typing}
-            // The photo sits under the strokes as the panel's paper; the e-ink preview shows its dithered self instead.
-            style={scene.photo && view === "ink" ? { backgroundImage: `url(${scene.photo})`, backgroundSize: "100% 100%" } : undefined}
           >
+            {scene.photo && (
+              <PhotoLayer
+                photo={scene.photo}
+                at={scene.photoAt ?? PHOTO_FILL}
+                onChange={onPhotoAt}
+                active={placing}
+                onDone={() => setPlacing(false)}
+                hidden={view === "eink"}
+              />
+            )}
             <Draw
               ref={draw}
               board={{ w: scene.width, h: scene.height }}
@@ -398,7 +447,9 @@ export default function App() {
         </div>
         <div className="shelf" aria-hidden>
           <span className="engraving">
-            {typing ? "Click to type · drag to move · Esc to draw" : `Waveshare 7.5″ · ${scene.width}×${scene.height} · 1-bit`}
+            {placing
+              ? "Drag to move · pinch or scroll to resize · Esc to draw"
+              : typing ? "Click to type · drag to move · Esc to draw" : `Waveshare 7.5″ · ${scene.width}×${scene.height} · 1-bit`}
           </span>
         </div>
       </main>

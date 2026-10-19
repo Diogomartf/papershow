@@ -440,7 +440,8 @@ app.get("/api/images/:id/:kind", (c) => {
   c.header("ETag", etag);
   c.header("Cache-Control", "no-cache");
   if (c.req.header("if-none-match") === etag) return c.body(null, 304);
-  c.header("Content-Type", KINDS[kind]);
+  // A drawing over a photo keeps its colour copy as a JPEG, under the same name.
+  c.header("Content-Type", file.data[0] === 0xff && file.data[1] === 0xd8 ? "image/jpeg" : KINDS[kind]);
   return c.body(file.data);
 });
 

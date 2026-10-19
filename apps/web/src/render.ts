@@ -1,5 +1,5 @@
 import { toSvg } from "drawesome";
-import { dither, enhance, pack1bpp, TEXT_FONT, TEXT_LINE, type Scene, type TextItem } from "@papershow/scene";
+import { dither, enhance, pack1bpp, PANEL, PHOTO_FILL, photoSize, TEXT_FONT, TEXT_LINE, type Scene, type TextItem } from "@papershow/scene";
 
 const fontOf = (t: TextItem) => `${t.bold ? 700 : 450} ${t.size}px ${TEXT_FONT}`;
 
@@ -24,6 +24,36 @@ const loadImage = async (src: string) => {
   return img;
 };
 
+/** The last photo, decoded. The e-ink preview repaints on every stroke, so it isn't decoded again each time. */
+let lastImage: { src: string; image: Promise<HTMLImageElement> } | null = null;
+/** The last photo tuned for 1 bit at the size it's drawn: kept for the same reason. */
+let lastTuned: { key: string; canvas: HTMLCanvasElement } | null = null;
+
+function photoImage(src: string) {
+  if (lastImage?.src !== src) lastImage = { src, image: loadImage(src) };
+  return lastImage.image;
+}
+
+/**
+ * The photo at `w`×`h`, with its levels, contrast and edges tuned for 1 bit. Tuned on its own,
+ * not with the paper around it: the margins of a smaller photo would throw off its levels.
+ */
+function tunedPhoto(img: HTMLImageElement, src: string, w: number, h: number) {
+  const key = `${w}x${h} ${src}`;
+  if (lastTuned?.key === key) return lastTuned.canvas;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h);
+  enhance(data.data, w, h);
+  ctx.putImageData(data, 0, 0);
+  lastTuned = { key, canvas };
+  return canvas;
+}
+
 /** The scene as pixels. For the panel (`mono`), a photo is tuned for 1 bit before the ink goes on top. */
 async function sceneToCanvas(scene: Scene, mono = false): Promise<HTMLCanvasElement> {
   const canvas = document.createElement("canvas");
@@ -31,12 +61,20 @@ async function sceneToCanvas(scene: Scene, mono = false): Promise<HTMLCanvasElem
   canvas.height = scene.height;
   const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
   if (scene.photo) {
-    ctx.drawImage(await loadImage(scene.photo), 0, 0, scene.width, scene.height);
-    if (mono) {
-      const data = ctx.getImageData(0, 0, scene.width, scene.height);
-      enhance(data.data, scene.width, scene.height);
-      ctx.putImageData(data, 0, 0);
-    }
+    const img = await photoImage(scene.photo);
+    const at = scene.photoAt ?? PHOTO_FILL;
+    const size = photoSize(img.naturalWidth, img.naturalHeight, at);
+    const w = Math.max(1, Math.round(size.w));
+    const h = Math.max(1, Math.round(size.h));
+    // Paper first: a photo made smaller doesn't cover it all.
+    ctx.fillStyle = scene.background;
+    ctx.fillRect(0, 0, scene.width, scene.height);
+    ctx.save();
+    ctx.translate(at.x, at.y);
+    ctx.rotate((at.angle * Math.PI) / 180);
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(mono ? tunedPhoto(img, scene.photo, w, h) : img, -w / 2, -h / 2, w, h);
+    ctx.restore();
   }
   // Over a photo the strokes go on without their paper.
   const svg = toSvg(scene.strokes, scene.width, scene.height, scene.photo ? null : scene.background);
@@ -50,16 +88,20 @@ async function sceneToCanvas(scene: Scene, mono = false): Promise<HTMLCanvasElem
   return canvas;
 }
 
-/** A picked photo, cropped to fill the panel, small enough to keep in the scene. */
-export async function photoFor(file: Blob, w: number, h: number): Promise<string> {
+/**
+ * A picked photo, whole, small enough to keep in the scene: its short side at most the panel's width,
+ * which fills the panel whichever way it's turned.
+ */
+export async function photoFor(file: Blob): Promise<string> {
   const bmp = await createImageBitmap(file);
-  const scale = Math.max(w / bmp.width, h / bmp.height);
-  const sw = w / scale;
-  const sh = h / scale;
+  const k = Math.min(1, PANEL.w / Math.min(bmp.width, bmp.height), (3 * PANEL.w) / Math.max(bmp.width, bmp.height));
   const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  canvas.getContext("2d")!.drawImage(bmp, (bmp.width - sw) / 2, (bmp.height - sh) / 2, sw, sh, 0, 0, w, h);
+  canvas.width = Math.round(bmp.width * k);
+  canvas.height = Math.round(bmp.height * k);
+  const ctx = canvas.getContext("2d")!;
+  // Phone photos are several times the panel's size: a plain bilinear shrink turns their detail into jaggies.
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
   bmp.close();
   return canvas.toDataURL("image/jpeg", 0.85);
 }
@@ -73,14 +115,18 @@ function toMono(canvas: HTMLCanvasElement): HTMLCanvasElement {
   return canvas;
 }
 
-const toBlob = (canvas: HTMLCanvasElement) =>
+const toBlob = (canvas: HTMLCanvasElement, type = "image/png", quality?: number) =>
   new Promise<Blob>((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("PNG encode failed"))), "image/png"),
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error(`${type} encode failed`))), type, quality),
   );
 
-/** Everything SlideGen stores: colour PNG, 1-bit PNG, and the panel's raw 1bpp frame. */
+/**
+ * Everything SlideGen stores: the colour picture, 1-bit PNG, and the panel's raw 1bpp frame.
+ * Over a photo the colour picture is a JPEG: as a PNG it's about three times the size, and it's only for looking at.
+ */
 export async function renderScene(scene: Scene): Promise<{ png: Blob; mono: Blob; bin: Blob }> {
-  const png = await toBlob(await sceneToCanvas(scene));
+  const colour = await sceneToCanvas(scene);
+  const png = scene.photo ? await toBlob(colour, "image/jpeg", 0.9) : await toBlob(colour);
   const monoCanvas = toMono(await sceneToCanvas(scene, true));
   const mono = await toBlob(monoCanvas);
   const pixels = monoCanvas.getContext("2d")!.getImageData(0, 0, scene.width, scene.height).data;

@@ -16,7 +16,7 @@ db.exec(`
     id         text primary key,
     name       text not null,
     scene      text not null,
-    png        blob not null,  -- colour, as drawn
+    png        blob not null,  -- colour, as drawn (a JPEG when it has a photo)
     mono       blob not null,  -- 1-bit PNG, what the panel shows
     bin        blob not null,  -- 1bpp packed, straight to the EPD
     updated_at integer not null
