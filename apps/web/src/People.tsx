@@ -399,6 +399,29 @@ function InviteSheet({ invite, onPanel, onClose }: { invite: Invite; onPanel: (o
 }
 
 /** Who did what, newest first. */
+/** The drawing or app a log line is about, as it looks now, and where it opens. Deleted ones show nothing. */
+function LogThumb({ item }: { item: unknown }) {
+  const [gone, setGone] = useState(false);
+  const it = item as { kind?: string; id?: string; name?: string } | undefined;
+  if (gone || !it?.id || (it.kind !== "image" && it.kind !== "app")) return null;
+  const href = it.kind === "image" ? `/i/${it.id}` : `/apps/${it.id}`;
+  const src = it.kind === "image" ? `/api/images/${it.id}/mono.png` : `/api/apps/${it.id}/mono.png`;
+  return (
+    <a
+      className="log-thumb"
+      href={href}
+      title={`Open ${it.name ?? "it"}`}
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+        e.preventDefault();
+        navigate(href);
+      }}
+    >
+      <img src={src} alt="" loading="lazy" onError={() => setGone(true)} />
+    </a>
+  );
+}
+
 export function LogList({ entries, people: everyone, now }: { entries: house.LogEntry[]; people: Person[]; now: number }) {
   if (!entries.length) return <p className="muted people-empty">Nothing yet.</p>;
   const byId = new Map(everyone.map((p) => [p.id, p]));
@@ -412,6 +435,7 @@ export function LogList({ entries, people: everyone, now }: { entries: house.Log
             <span className="log-text">
               <strong>{p?.name ?? "Someone"}</strong> {says(e)}
             </span>
+            <LogThumb item={e.subject.item} />
             <time className="muted" dateTime={new Date(e.at).toISOString()} title={new Date(e.at).toLocaleString()}>
               {when(e.at, now)}
             </time>

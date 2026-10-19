@@ -11,10 +11,12 @@ type Props = {
   currentId: string;
   onClose: () => void;
   onOpen: (scene: Scene) => void;
+  /** Seconds Show now holds the panel. */
+  showFor?: number;
   onLive: (name: string) => void;
 };
 
-export function Gallery({ open, refreshKey, currentId, onClose, onOpen, onLive }: Props) {
+export function Gallery({ open, refreshKey, currentId, onClose, onOpen, showFor, onLive }: Props) {
   const [items, setItems] = useState<ImageMeta[] | null>(null);
   const { me } = useMe();
   const everyone = useLiveState().state?.people ?? [];
@@ -36,7 +38,7 @@ export function Gallery({ open, refreshKey, currentId, onClose, onOpen, onLive }
   };
 
   const live = async (item: ImageMeta) => {
-    await setLive({ mode: "pin", source: { kind: "image", id: item.id } });
+    await setLive({ mode: "pin", source: { kind: "image", id: item.id }, forS: showFor, from: "draw" });
     onLive(item.name);
   };
 

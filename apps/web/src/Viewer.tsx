@@ -35,6 +35,7 @@ export function Viewer({ id }: { id: string }) {
           <button role="radio" aria-checked={mode === "mono"} onClick={() => setMode("mono")}>E-ink</button>
           <button role="radio" aria-checked={mode === "png"} onClick={() => setMode("png")}>Ink</button>
         </div>
+        <a className="ghost" href={`/draw?open=${encodeURIComponent(image.id)}`}>Open in Draw</a>
         <a className="primary" href={src} download={file}>Download PNG</a>
       </footer>
     </div>

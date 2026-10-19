@@ -3,11 +3,12 @@ import { Draw, type DrawHandle, type Stroke } from "drawesome";
 import "drawesome/styles.css";
 import "@fontsource-variable/inter";
 import { PANEL, type Scene, type TextItem } from "@papershow/scene";
-import { paintMono, renderScene } from "./render";
-import { getDraft, getSaved, imageUrl, putDraft, putImage, putSaved } from "./store";
+import { paintMono, photoFor, renderScene } from "./render";
+import { getDraft, getImage, getSaved, imageUrl, putDraft, putImage, putSaved } from "./store";
 import { Oops } from "./house";
 import { Gallery } from "./Gallery";
 import { setLive } from "./slides";
+import { useLiveState, useNow } from "./live";
 import { Nav } from "./Nav";
 import { useNarrow } from "./media";
 import { LightSwitch } from "./LightSwitch";
@@ -21,6 +22,33 @@ const SWATCHES = ["#111111", "#555555", "#999999", "#d4d4d4", "#ffffff", "#e5484
 const SWATCHES_EINK = ["#000000", "#ffffff"];
 
 const UNTITLED = "Untitled";
+
+/** How long Show now holds the panel, in seconds. A quick doodle is up for five minutes unless you pick otherwise. */
+const SHOW_FOR = [
+  { s: 60, label: "1 min" },
+  { s: 5 * 60, label: "5 min" },
+  { s: 10 * 60, label: "10 min" },
+  { s: 30 * 60, label: "30 min" },
+  { s: 60 * 60, label: "1 hour" },
+  { s: 3 * 60 * 60, label: "3 hours" },
+];
+const SHOW_FOR_KEY = "draw-show-for";
+
+function savedShowFor(): number {
+  try {
+    const s = Number(localStorage.getItem(SHOW_FOR_KEY));
+    if (SHOW_FOR.some((o) => o.s === s)) return s;
+  } catch {
+    // No storage (a private window): the default will do.
+  }
+  return 5 * 60;
+}
+
+/** "until 18:45", for a Show now that's up. */
+const until = (t: number | null | undefined) =>
+  t ? `until ${new Date(t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}` : "now";
+
+const forLabel = (s: number) => SHOW_FOR.find((o) => o.s === s)?.label ?? `${Math.round(s / 60)} min`;
 
 const newScene = (): Scene => {
   const now = Date.now();
@@ -52,6 +80,9 @@ function nameFromText(texts: TextItem[] | undefined): string {
 
 type View = "ink" | "eink";
 
+/** What the panel would show of a drawing: two scenes with the same key look the same. */
+const looksKey = (s: Scene) => JSON.stringify([s.strokes, s.texts ?? [], s.photo ?? null]);
+
 export default function App() {
   const draw = useRef<DrawHandle>(null);
   const preview = useRef<HTMLCanvasElement>(null);
@@ -65,6 +96,14 @@ export default function App() {
   const [typing, setTyping] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   const narrow = useNarrow();
+  const [showFor, setShowFor] = useState(savedShowFor);
+  // Show now: "sending" while it saves and goes up, then "on" for a moment to celebrate.
+  const [beam, setBeam] = useState<"sending" | "on" | null>(null);
+  // How the drawing looked when last saved, so Show now can tell it's already up as it is.
+  const [savedLooks, setSavedLooks] = useState<string | null>(null);
+  const { state: live, accept, skew } = useLiveState();
+  const now = useNow(skew, 5000);
+  const photoInput = useRef<HTMLInputElement>(null);
   // True once the name field is typed in. Until then the name follows the text, instead of staying Untitled.
   const nameEdited = useRef(false);
 
@@ -78,10 +117,25 @@ export default function App() {
 
   useEffect(() => {
     document.title = "Draw · Papershow";
+    // /draw?open=<id> (from a picture's own page) opens that drawing, as saved.
+    const id = new URLSearchParams(location.search).get("open");
+    if (id) {
+      history.replaceState(null, "", "/draw");
+      getImage(id).then(
+        ({ scene }) => {
+          putSaved(scene);
+          setSavedLooks(looksKey(scene));
+          setScene(adopt(scene));
+        },
+        () => setScene(newScene()),
+      );
+      return;
+    }
     // Coming back to Draw starts a new canvas, unless the last one has changes that weren't saved.
-    Promise.all([getDraft(), getSaved()]).then(([d, saved]) =>
-      setScene(adopt(d && JSON.stringify(d) !== saved ? d : newScene())),
-    );
+    Promise.all([getDraft(), getSaved()]).then(([d, saved]) => {
+      if (saved) setSavedLooks(looksKey(JSON.parse(saved) as Scene));
+      setScene(adopt(d && JSON.stringify(d) !== saved ? d : newScene()));
+    });
   }, []);
 
   // Keep the draft and the e-ink preview in step with the drawing.
@@ -126,6 +180,7 @@ export default function App() {
     // await is a popup as far as Safari is concerned.
     const tab = then === "open" ? window.open("", "_blank") : null;
     setSaving(true);
+    if (then === "show") setBeam("sending");
     try {
       let current = { ...scene, strokes: draw.current?.getStrokes() ?? scene.strokes, updatedAt: Date.now() };
       const files = await renderScene(current);
@@ -141,24 +196,53 @@ export default function App() {
         copied = true;
       }
       await putSaved(current);
+      setSavedLooks(looksKey(current));
       setScene(current);
       setGalleryKey((k) => k + 1);
       if (tab) tab.location.href = imageUrl(current.id);
-      if (then === "show") await setLive({ mode: "pin", source: { kind: "image", id: current.id } });
+      if (then === "show") {
+        accept(await setLive({ mode: "pin", source: { kind: "image", id: current.id }, forS: showFor, from: "draw" }));
+        setBeam("on");
+        window.setTimeout(() => setBeam((b) => (b === "on" ? null : b)), 1800);
+      }
       const saved = copied ? "Saved as your own copy" : "Saved";
-      flash(then === "show" ? `${saved} · on the panel for 15 minutes` : tab ? `${saved} · opened in a new tab` : saved);
+      flash(then === "show" ? `${saved} · on the panel for ${forLabel(showFor)}` : tab ? `${saved} · opened in a new tab` : saved);
     } catch (err) {
+      setBeam(null);
       tab?.close();
       flash("Couldn't save. Try again");
       console.error(err);
     } finally {
       setSaving(false);
     }
-  }, [scene, saving]);
+  }, [scene, saving, showFor, accept]);
+
+  const pickFor = (s: number) => {
+    setShowFor(s);
+    try {
+      localStorage.setItem(SHOW_FOR_KEY, String(s));
+    } catch {
+      // Not remembered, but still used this time.
+    }
+  };
+
+  /** A photo goes under the drawing; picking none, or a second time, replaces it. */
+  const onPhoto = async (file: File | undefined) => {
+    if (!file || !scene) return;
+    try {
+      const photo = await photoFor(file, scene.width, scene.height);
+      const name = nameEdited.current || scene.name !== UNTITLED ? scene.name : file.name.replace(/\.[^.]+$/, "");
+      setScene((s) => (s ? { ...s, photo, name, updatedAt: Date.now() } : s));
+    } catch (err) {
+      flash("Couldn't open that picture");
+      console.error(err);
+    }
+  };
 
   const open = (s: Scene) => {
     // As saved: only changes to it keep it on the board when you come back.
     putSaved(s);
+    setSavedLooks(looksKey(s));
     setScene(adopt(s));
     draw.current?.setStrokes(s.strokes);
     setGalleryOpen(false);
@@ -188,6 +272,11 @@ export default function App() {
   }, [save]);
 
   if (!scene) return null;
+
+  // Already on the panel, just as it is: sending it again would only flash the panel. A change, or its time running out, frees it.
+  const pin = live?.live.mode === "pin" ? live.live : null;
+  const alreadyUp =
+    !!pin && pin.source.kind === "image" && pin.source.id === scene.id && (!pin.until || now < pin.until) && looksKey(scene) === savedLooks;
 
   return (
     <div className="app">
@@ -227,13 +316,50 @@ export default function App() {
             <span aria-hidden className="text-glyph">T</span> <span className="text-label">Text</span>
           </button>
           <button className="ghost" onClick={startNew}>New</button>
+          {scene.photo ? (
+            <button
+              className="ghost"
+              onClick={() => setScene({ ...scene, photo: undefined, updatedAt: Date.now() })}
+              title="Take the photo off, keep the drawing"
+            >
+              No photo
+            </button>
+          ) : (
+            <button className="ghost" onClick={() => photoInput.current?.click()} title="Put a photo on the panel, and draw on it if you like">
+              Photo
+            </button>
+          )}
+          <input
+            ref={photoInput}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              onPhoto(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
           <button className="ghost" onClick={() => setGalleryOpen(true)}>Gallery</button>
           <button className="ghost" onClick={() => save("open")} disabled={saving} title="Save, then open the picture in a new tab">
             Open
           </button>
-          <button className="ghost" onClick={() => save("show")} disabled={saving} title="Save, then put it on the panel for 15 minutes">
-            Show now
-          </button>
+          <span className="show-now" data-beam={beam ?? undefined} data-up={alreadyUp && !beam}>
+            <button
+              onClick={() => save("show")}
+              disabled={saving || alreadyUp}
+              title={alreadyUp ? "It's on the panel now. Change something to send it again" : `Save, then put it on the panel for ${forLabel(showFor)}, ahead of the program`}
+            >
+              <span className="show-now-dot" aria-hidden />
+              <span className="show-now-word">
+                {beam === "on" ? "On air!" : beam === "sending" ? "Beaming…" : alreadyUp ? `On air · ${until(pin?.until)}` : "Show now"}
+              </span>
+            </button>
+            <select value={showFor} onChange={(e) => pickFor(Number(e.target.value))} aria-label="For how long">
+              {SHOW_FOR.map((o) => (
+                <option key={o.s} value={o.s}>{o.label}</option>
+              ))}
+            </select>
+          </span>
           <button className="primary" onClick={() => save()} disabled={saving}>
             {saving ? "Saving…" : "Save"}
             <kbd>⌘S</kbd>
@@ -244,7 +370,13 @@ export default function App() {
 
       <main className="stage">
         <div className="device">
-          <div className="panel" ref={panel} data-typing={typing}>
+          <div
+            className="panel"
+            ref={panel}
+            data-typing={typing}
+            // The photo sits under the strokes as the panel's paper; the e-ink preview shows its dithered self instead.
+            style={scene.photo && view === "ink" ? { backgroundImage: `url(${scene.photo})`, backgroundSize: "100% 100%" } : undefined}
+          >
             <Draw
               ref={draw}
               board={{ w: scene.width, h: scene.height }}
@@ -277,7 +409,8 @@ export default function App() {
         currentId={scene.id}
         onClose={() => setGalleryOpen(false)}
         onOpen={open}
-        onLive={(name) => flash(`${name} is on /live for 15 minutes`)}
+        showFor={showFor}
+        onLive={(name) => flash(`${name} is on the panel for ${forLabel(showFor)}`)}
       />
 
       <div className="toast" data-on={!!toast} role="status">{toast}</div>

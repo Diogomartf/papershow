@@ -335,9 +335,10 @@ function sameSubject(stored: string, subject: Record<string, unknown>, settling:
 }
 
 /** The log, newest first: `limit` entries before `before` (an entry id), optionally one person's. */
-export function listLog({ limit = 50, before, personId }: { limit?: number; before?: number; personId?: string } = {}): LogEntry[] {
-  const where = [before ? "id < ?" : "", personId ? "person_id = ?" : ""].filter(Boolean);
-  const args = [before, personId].filter((x) => x !== undefined && x !== null && x !== "") as (string | number)[];
+/** Newest first. `verbs` keeps only those kinds of thing, for the log's topic filter. */
+export function listLog({ limit = 50, before, personId, verbs }: { limit?: number; before?: number; personId?: string; verbs?: string[] } = {}): LogEntry[] {
+  const where = [before ? "id < ?" : "", personId ? "person_id = ?" : "", verbs?.length ? `verb in (${verbs.map(() => "?").join(", ")})` : ""].filter(Boolean);
+  const args = [before, personId, ...(verbs ?? [])].filter((x) => x !== undefined && x !== null && x !== "") as (string | number)[];
   const rows = db
     .prepare(`select * from log ${where.length ? `where ${where.join(" and ")}` : ""} order by id desc limit ?`)
     .all(...args, Math.min(200, Math.max(1, limit))) as { id: number; at: number; person_id: string | null; verb: string; subject: string }[];
