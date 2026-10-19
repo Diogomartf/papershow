@@ -10,7 +10,7 @@ import { watchModels } from "./ai.ts";
 import * as store from "./db.ts";
 import { inviteFrame, qrSvg } from "./invite.tsx";
 import * as people from "./people.ts";
-import { awayUntil, kept, sequence, showing, sleepUntil, upcoming, type Live, type Showing, type Source } from "./schedule.ts";
+import { awayUntil, blockAt, justAired, sequence, showing, sleepUntil, upcoming, type Days, type Live, type Showing, type Source } from "./schedule.ts";
 import { sleepFrame } from "./sleep.tsx";
 
 // Secrets such as GROQ_API_KEY and MASSIVE_API_KEY live in .env at the repo root (not committed).
@@ -127,10 +127,7 @@ async function liveNow(now = Date.now()): Promise<LiveNow | null> {
     };
   }
 
-  const slides = store.loopSlides();
-  const reps = store.repeats();
-  // Between clips the panel keeps the one that just ended. A bare 204 would keep the white off frame instead.
-  const s = showing(store.getLive(), slides, now, reps) ?? kept(slides, now, reps);
+  const s = showing(store.getLive(), store.program(), now);
   if (!s) return null;
   const f = await sourceFrame(s.source, now).catch((err) => {
     console.error("render failed", s.source, err);
@@ -577,20 +574,18 @@ function clipLength(source: Source) {
 async function state(c: C) {
   const now = Date.now();
   const slides = store.listSlides();
-  const loop = store.loopSlides();
-  const repeats = store.repeats();
+  const program = store.program();
   const live = await liveNow(now);
-  const onAir = loop.find((x) => x.id === live?.slideId);
-  // A repeat's clip airs as "<entry>" (single) or "<entry>~<clip>" (a playlist's).
-  const repeat = repeats.find((r) => live?.slideId === r.id || live?.slideId?.startsWith(`${r.id}~`));
+  const air = blockAt(program, now);
+  const onAir = air?.block.slides.find((x) => x.id === live?.slideId);
   return {
     now,
     live: store.getLive(),
     showing: live && {
       source: live.source,
       slideId: live.slideId,
-      entryId: onAir?.entryId ?? repeat?.id ?? null,
-      clipId: onAir?.clipId ?? (repeat && live?.slideId?.includes("~") ? live.slideId.split("~")[1] : null),
+      entryId: onAir?.entryId ?? null,
+      clipId: onAir?.clipId ?? null,
       endsAt: live.endsAt,
       clip: live.clip,
       etag: live.etag,
@@ -603,8 +598,14 @@ async function state(c: C) {
     slides,
     playlists: store.listPlaylists(),
     show: store.listShow(),
-    upcoming: upcoming(loop, now, 3, repeats),
-    sequence: sequence(loop, now, 60, repeats),
+    /** The week's blocks; the weekend plays the weekdays' unless it has its own. */
+    program: { weekendOwn: program.weekendOwn, blocks: store.listBlocks() },
+    /** The block on air (even under a Show now or the night), and when it hands over. */
+    block: air && { id: air.block.id, startedAt: air.startedAt, endsAt: air.endsAt },
+    upcoming: upcoming(program, now, 3),
+    sequence: sequence(program, now, 60),
+    /** The turn that just handed off, so the guide can show what played before this. */
+    previous: justAired(program, now),
     display: lastSeen,
     me: c.get("me"),
     people: peopleFor(c),
@@ -675,8 +676,8 @@ app.delete("/api/slides/:id", async (c) => {
 app.post("/api/playlists", async (c) => {
   const { name, show = true } = await c.req.json<{ name?: string; show?: boolean }>();
   const p = store.createPlaylist(name?.trim() || `Playlist ${store.listPlaylists().length + 1}`, c.get("me").id);
-  // A new playlist joins the end of the show unless asked not to.
-  if (show) store.addShowEntry({ playlistId: p.id });
+  // A new playlist joins the end of what's on now unless asked not to.
+  if (show) store.addShowEntry(blockNow(), { playlistId: p.id });
   note(c, "made-playlist", { playlist: namedPlaylist(p.id) });
   changed();
   return c.json({ ...(await state(c)), created: p.id });
@@ -709,16 +710,59 @@ app.delete("/api/playlists/:id", async (c) => {
   return c.json(await state(c));
 });
 
+// ── The program: blocks of the day, for weekdays and the weekend ──────────
+
+/** The block on air now, for things added without saying where. There's always one to add to. */
+function blockNow() {
+  const air = blockAt(store.program());
+  return air?.block.id ?? store.listBlocks()[0]?.id ?? store.addBlock("weekdays", "06:00")!.id;
+}
+
+app.post("/api/blocks", async (c) => {
+  const { days, start } = await c.req.json<{ days?: Days; start?: string }>();
+  if (days !== "weekdays" && days !== "weekend") return c.json({ error: "weekdays or weekend" }, 400);
+  const b = store.addBlock(days, start ?? "");
+  if (!b) return c.json({ error: "there's already something at that time" }, 409);
+  note(c, "changed-program");
+  changed();
+  return c.json({ ...(await state(c)), created: b.id });
+});
+
+app.patch("/api/blocks/:id", async (c) => {
+  const { start } = await c.req.json<{ start?: string }>();
+  if (!store.getBlock(c.req.param("id"))) return c.notFound();
+  if (!store.moveBlock(c.req.param("id"), start ?? "")) return c.json({ error: "there's already something at that time" }, 409);
+  note(c, "changed-program");
+  changed();
+  return c.json(await state(c));
+});
+
+app.delete("/api/blocks/:id", async (c) => {
+  store.deleteBlock(c.req.param("id"));
+  note(c, "changed-program");
+  changed();
+  return c.json(await state(c));
+});
+
+app.put("/api/program", async (c) => {
+  const { weekendOwn } = await c.req.json<{ weekendOwn?: boolean }>();
+  store.setWeekendOwn(!!weekendOwn);
+  note(c, "changed-program");
+  changed();
+  return c.json(await state(c));
+});
+
 // ── The show: playlists, images and apps, in the order they run ───────────
 
 app.post("/api/show", async (c) => {
-  const body = await c.req.json<{ playlistId?: string; source?: Source; at?: number }>();
+  const body = await c.req.json<{ blockId?: string; playlistId?: string; source?: Source; at?: number }>();
+  const blockId = body.blockId && store.getBlock(body.blockId) ? body.blockId : blockNow();
   if (body.playlistId) {
     if (!store.getPlaylist(body.playlistId)) return c.json({ error: "no such playlist" }, 404);
-    store.addShowEntry({ playlistId: body.playlistId }, body.at);
+    store.addShowEntry(blockId, { playlistId: body.playlistId }, body.at);
     note(c, "added-to-show", { playlist: namedPlaylist(body.playlistId) });
   } else if (body.source && exists(body.source)) {
-    store.addShowEntry({ source: body.source }, body.at, clipLength(body.source));
+    store.addShowEntry(blockId, { source: body.source }, body.at, clipLength(body.source));
     note(c, "added-to-show", { item: named(body.source) });
   } else return c.json({ error: "add a playlist, image or app" }, 400);
   changed();

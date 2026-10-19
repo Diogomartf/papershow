@@ -211,7 +211,7 @@ export function Dashboard() {
               <h2>Sequence</h2>
               <span className="muted">
                 {seq.length
-                  ? `${seq.length} in the loop · ${mins(seq[seq.length - 1].endsAt - seq[0].at)} around`
+                  ? `${seq.length} coming up · until ${hhmm(seq[seq.length - 1].endsAt)}`
                   : "Empty"}
               </span>
               <a className="ghost" href="/show" onClick={(e) => (e.preventDefault(), navigate("/show"))}>
@@ -280,7 +280,7 @@ export function Dashboard() {
                     toast.show(`Removed ${name} from ${playlistName(clip.playlistId)}`, () => api.restoreSlide(clip, index).then(accept));
                   } else if (entry) {
                     // An image or app on its own in the show.
-                    const index = state.show.findIndex((e) => e.id === entry.id);
+                    const index = state.show.filter((e) => e.blockId === entry.blockId).findIndex((e) => e.id === entry.id);
                     accept(await api.removeFromShow(entry.id));
                     toast.show(`Removed ${name} from the show`, () => api.restoreShowEntry(entry, index).then(accept));
                   }

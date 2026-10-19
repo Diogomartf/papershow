@@ -32,6 +32,18 @@
   --face-ink: #1f1d19;  /* on the bright face tiles, in either light */
   --danger: #b4231b;
   --danger-tint: rgba(180,35,27,.08);
+  /* Parts of the day on the Show page */
+  /* What people pick to tell show entries apart; --night is the panel asleep, so no entry is blue. */
+  --c-yellow: #f7d86e;
+  --c-sage: #bcd9a4;
+  --c-orange: #f4b16a;
+  --c-pink: #eda3b0;
+  --c-lilac: #cdb8ec;
+  --c-teal: #92d3c8;
+  --c-sand: #e2cfa6;
+  --c-lime: #d8e58a;
+  --c-plum: #dba6d2;
+  --night: #a9bce8;
   --track: #efe8d6;
   --tick: #cfc3a6;
   --fade: rgba(250,246,234,.95);
@@ -92,6 +104,16 @@
   --here: #4cc27e;
   --danger: #ec7b6c;
   --danger-tint: rgba(236,123,108,.12);
+  --c-yellow: #7a6222;
+  --c-sage: #4a6337;
+  --c-orange: #7e4f26;
+  --c-pink: #74414d;
+  --c-lilac: #594877;
+  --c-teal: #2e6158;
+  --c-sand: #6a5a3a;
+  --c-lime: #5b6624;
+  --c-plum: #6b3f63;
+  --night: #34446c;
   --track: #1f1a15;
   --tick: #4a3f33;
   --fade: rgba(38,32,26,.95);
@@ -743,8 +765,7 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .clip-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .clip-dur { flex: none; font: 11px/1 var(--mono); color: var(--ink-2); }
 .clip[data-size="s"] .clip-name { display: none; }
-.clip[data-size="xs"] .clip-label, .clip[data-size="xs"] .clip-flag { display: none; }
-.clip-flag { position: absolute; top: 4px; left: 6px; font-size: 12px; color: var(--ink-2); }
+.clip[data-size="xs"] .clip-label { display: none; }
 
 .clip-handle {
   position: absolute; right: 0; top: 0; bottom: 0;
@@ -813,7 +834,7 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .field label { font: 600 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 .stepper { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--tint); }
 .stepper span { min-width: 64px; text-align: center; font-weight: 560; }
-.stepper button, .days button, .hours button {
+.stepper button, .hours button {
   border: 0; background: transparent;
   min-width: 28px; height: 28px; padding: 0 8px;
   border-radius: 6px;
@@ -821,8 +842,8 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 }
 .stepper button:hover:not(:disabled) { background: var(--surface); color: var(--ink); }
 .stepper button:disabled { opacity: .35; cursor: default; }
-.days, .hours { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--tint); }
-.days button[aria-pressed="true"], .hours button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.hours { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--tint); }
+.hours button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
 .hours { gap: 6px; padding-right: 8px; }
 .hours input { border: 0; background: var(--surface); border-radius: 6px; padding: 4px 6px; font-variant-numeric: tabular-nums; }
 .toggle {
@@ -1062,105 +1083,430 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 /* ── Playlists overview ──────────────────────────── */
 
 .pl-overview { min-height: 0; overflow-y: auto; padding: 24px 24px 48px; scrollbar-width: none; }
-.pl-head, .pl-rows { max-width: 860px; margin: 0 auto; }
-.pl-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
-.pl-head h1 { margin: 0 0 4px; font-size: 26px; font-weight: 640; letter-spacing: -0.02em; }
-.pl-head p { margin: 0; }
-.pl-rows { list-style: none; padding: 0; display: grid; gap: 10px; }
-.pl-rows li {
-  /* The controls drop below the name when they'd squeeze it: a single item has many. */
-  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
-  padding: 12px 14px 12px 8px;
-  border-radius: 14px;
+/* ── Show: the week's program ──────────────────────
+   Big and friendly: chunky tiles and buttons you can't miss, each part of the day its own colour. */
+
+.pg { --pg-r: 24px; }
+.pg > section { max-width: 980px; margin-inline: auto; }
+
+.pg-tv {
+  display: grid;
+  /* Before, small; what's live; the next two. */
+  grid-template-columns: minmax(0, .75fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  margin-bottom: 36px;
+}
+.pg-now, .pg-side {
+  border-radius: var(--pg-r);
   background: var(--surface);
-  box-shadow: 0 0 0 1px var(--line), 0 8px 24px -16px var(--drop);
+  box-shadow: 0 0 0 1px var(--line), 0 12px 32px -20px var(--drop);
 }
-.pl-rows li[data-onair="true"] { box-shadow: 0 0 0 1.5px var(--signal), 0 8px 24px -16px var(--drop); }
-/* With a turn to count down, the signal border becomes progress: a faint track, filled as time passes. */
-.pl-rows li[data-turn="true"] {
+.pg-now { display: grid; gap: 12px; padding: 14px; }
+.pg-now[data-on="true"] { box-shadow: 0 0 0 3px var(--on-air), 0 16px 36px -20px var(--drop); }
+.pg-frame {
   position: relative;
-  box-shadow: 0 0 0 1px color-mix(in oklch, var(--signal) 30%, transparent), 0 8px 24px -16px var(--drop);
+  aspect-ratio: 5 / 3;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--paper);
+  box-shadow: 0 0 0 1px var(--line);
 }
-.pl-rows svg.turn { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-.pl-rows svg.turn rect {
-  fill: none; stroke: var(--signal); stroke-width: 2; stroke-linecap: round;
-  transition: stroke-dasharray 1s linear;
+.pg-frame img { display: block; width: 100%; height: 100%; object-fit: cover; filter: var(--dim); }
+.pg-frame-empty { display: grid; place-items: center; height: 100%; font-size: 64px; }
+.pg-progress {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 8px;
+  background: color-mix(in oklch, var(--on-air) 20%, transparent);
 }
-.on-air .left { color: var(--ink-3); letter-spacing: .06em; }
-.pl-rows li[data-off="true"] .pl-main { opacity: .5; }
-.pl-order { display: grid; gap: 2px; cursor: grab; touch-action: none; }
-/* Rows drag to reorder: the others glide aside, the one held lifts. */
-.pl-rows li { transition: transform .18s ease; cursor: grab; }
-.pl-rows li .pl-row-actions, .pl-rows li input { cursor: auto; }
-.pl-rows li[data-dragging="true"] { cursor: grabbing; box-shadow: 0 0 0 1.5px var(--ink-3), 0 18px 40px -18px var(--drop); user-select: none; }
-.pl-order button { border: 0; background: transparent; width: 24px; height: 22px; border-radius: 6px; color: var(--ink-3); font-size: 12px; }
-.pl-order button:hover:not(:disabled) { background: var(--tint); color: var(--ink); }
-.pl-order button:disabled { opacity: .3; cursor: default; }
-.pl-main {
-  flex: 1 1 260px; min-width: 0;
-  display: grid; gap: 4px; justify-items: start;
-  padding: 2px 4px; border: 0; background: none; text-align: left;
+.pg-progress::after {
+  content: ""; position: absolute; inset: 0; transform-origin: left;
+  transform: scaleX(var(--p)); background: var(--on-air);
+  transition: transform 1s linear;
 }
-.pl-title { display: inline-flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 620; letter-spacing: -0.01em; }
-.pl-main .muted { font-size: 13px; }
-.pl-strip { display: flex; gap: 6px; margin-top: 6px; min-height: 36px; align-items: center; }
-.pl-strip img { width: 60px; aspect-ratio: 5 / 3; border-radius: 3px; background: var(--paper); box-shadow: 0 0 0 1px var(--line); filter: var(--dim); }
-.pl-more { font: 600 11px var(--mono); color: var(--ink-3); padding-left: 2px; }
-.pl-row-actions { display: flex; align-items: center; gap: 4px; flex: none; margin-left: auto; }
-.pl-row-actions .toggle { margin-right: 8px; }
-.pl-row-actions .ghost:disabled { opacity: .35; cursor: default; }
-.pl-main.single { display: flex; align-items: center; gap: 12px; cursor: default; }
-.pl-main.single > span { display: grid; gap: 4px; }
-.single-thumb { width: 96px; aspect-ratio: 5 / 3; border-radius: 4px; background: var(--paper); box-shadow: 0 0 0 1px var(--line); filter: var(--dim); }
-.pl-row-actions .stepper { margin-right: 8px; }
-.pl-empty { padding: 18px; text-align: center; }
+.pg-now-text { display: grid; gap: 6px; justify-items: start; }
+.pg-now-head { justify-self: stretch; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.pg-now-when { font-size: 16px; font-weight: 560; color: var(--ink-2); white-space: nowrap; }
+.pg-left { display: inline-flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.pg-now h1 { margin: 2px 0 0; font-size: 28px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.1; text-wrap: balance; }
+.pg-now .pg-big { margin-top: 8px; }
 
-.show-add { max-width: 860px; margin: 28px auto 0; display: grid; gap: 16px; }
-.show-add h2 { margin: 0; font-size: 15px; font-weight: 620; }
-.add-group h3 { margin: 0 0 8px; font: 600 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
-.add-playlists, .add-items { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-/* Playlists to add: a card with a glimpse of the first clips, stacked like a deck. */
-.add-playlists button {
-  width: 132px; display: grid; gap: 3px; justify-items: start; text-align: left;
-  padding: 6px; border: 0; border-radius: 10px; background: transparent;
-  font-size: 13px; font-weight: 560;
+.pg-side { display: grid; align-content: start; gap: 8px; padding: 14px; font-size: 16px; }
+.pg-side strong { font-size: 19px; font-weight: 680; letter-spacing: -0.01em; line-height: 1.2; }
+.pg-side > span.tabular { font-weight: 600; color: var(--ink-2); }
+.pg-side-frame {
+  width: 100%; aspect-ratio: 5 / 3; border-radius: 12px;
+  background: var(--paper); box-shadow: 0 0 0 1px var(--line); filter: var(--dim);
 }
-.add-playlists button:hover { background: var(--tint); }
-.pl-deck { position: relative; width: 100%; aspect-ratio: 5 / 3; margin-bottom: 2px; }
-/* The first clip in front at bottom left; the next ones peek out behind, up and to the right. */
-.pl-deck img {
-  position: absolute; inset: 8px 8px 0 0;
-  width: calc(100% - 8px); height: calc(100% - 8px);
-  border-radius: 4px; background: var(--paper); box-shadow: 0 0 0 1px var(--line), 0 1px 3px rgba(0,0,0,.12);
-  filter: var(--dim);
-  transform: translate(calc(var(--i) * 4px), calc(var(--i) * -4px));
+.pg-side[data-role="before"] { opacity: .8; gap: 6px; padding: 12px; font-size: 14px; }
+.pg-side[data-role="before"] strong { font-size: 16px; }
+.pg-side[data-role="before"] > .pg-span { font-size: 15px; }
+.pg-side > .pg-span { font-size: 17px; font-weight: 700; color: var(--ink); }
+/* Putting the next things on the panel: an on-air outline, quieter than the live card it would replace. */
+.pg-make-live {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; margin-top: 4px; padding: 0 14px;
+  border: 0; border-radius: 14px;
+  background: transparent; color: var(--on-air);
+  box-shadow: inset 0 0 0 2px color-mix(in oklch, var(--on-air) 45%, transparent);
+  font: inherit; font-size: 16px; font-weight: 680; white-space: nowrap;
+  transition: background-color 120ms ease-out, transform 160ms var(--ease-out);
 }
-.pl-deck-empty {
-  position: absolute; inset: 8px 8px 0 0;
+.pg-make-live:hover { background: color-mix(in oklch, var(--on-air) 10%, transparent); }
+.pg-make-live:active { transform: scale(0.96); }
+/* With a mouse it shows when you point at the card, keeping its room so nothing shifts; touch screens always show it. */
+@media (hover: hover) {
+  .pg-side .pg-make-live { opacity: 0; transition: opacity 160ms ease-out, background-color 120ms ease-out; }
+  .pg-side:hover .pg-make-live, .pg-side:focus-within .pg-make-live { opacity: 1; }
+}
+.pg-live-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--on-air); flex: none; }
+.pg-quiet { margin: 8px 0; font-size: 16px; color: var(--ink-3); }
+
+.pg-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px; border-radius: 999px;
+  font-size: 13px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase;
+  background: var(--tint); color: var(--ink-2);
+  justify-self: start;
+}
+.pg-badge[data-kind="now"] { background: var(--on-air); color: #fff; }
+.pg-badge[data-kind="now"]::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #fff; animation: pulse 2s ease-in-out infinite; }
+.pg-badge[data-kind="next"] { background: color-mix(in oklch, var(--signal) 22%, transparent); color: var(--ink); }
+
+/* Big buttons: a full finger wide, words and a picture. */
+.pg-big {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 56px; padding: 0 22px;
+  border: 0; border-radius: 18px;
+  background: var(--tint); color: var(--ink);
+  font: inherit; font-size: 18px; font-weight: 680;
+  transition: transform 160ms var(--ease-out), background-color 120ms ease-out;
+}
+.pg-big:hover:not(:disabled) { background: color-mix(in srgb, var(--tint) 100%, var(--ink) 8%); }
+.pg-big:active:not(:disabled) { transform: scale(0.96); }
+.pg-big:disabled { opacity: .35; cursor: default; }
+.pg-go { background: var(--accent); color: var(--on-accent); }
+.pg-go:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 86%, black); }
+.pg-soft { background: var(--surface); box-shadow: 0 0 0 2px var(--line); }
+.pg-danger { background: var(--danger-tint); color: var(--danger); }
+.pg-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger-tint) 100%, var(--danger) 12%); }
+
+.pg-week { display: grid; gap: 18px; }
+.pg-week-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
+.pg-week-head h2 { margin: 0; font-size: 30px; font-weight: 720; letter-spacing: -0.02em; }
+.pg-tabs { display: flex; gap: 10px; }
+.pg-tabs button {
+  position: relative;
+  display: grid; justify-items: start; gap: 2px;
+  min-height: 64px; padding: 10px 22px;
+  border: 0; border-radius: 18px;
+  background: var(--surface); color: var(--ink-2);
+  box-shadow: 0 0 0 2px var(--line);
+  font: inherit; font-size: 19px; font-weight: 700; text-align: left;
+  transition: transform 160ms var(--ease-out);
+}
+.pg-tabs button:active { transform: scale(0.97); }
+.pg-tabs button small { font-size: 13px; font-weight: 560; color: var(--ink-3); }
+.pg-tabs button[aria-selected="true"] { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+.pg-tabs button[aria-selected="true"] small { color: inherit; opacity: .75; }
+.pg-tabs em {
+  position: absolute; top: -9px; right: 10px;
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--on-air); color: #fff;
+  font-size: 11px; font-style: normal; font-weight: 750; letter-spacing: .04em; text-transform: uppercase;
+}
+
+/* A block's things, told apart by colour on the day bar and on their tiles. */
+[data-swatch="yellow"] { --swatch: var(--c-yellow); }
+[data-swatch="sage"] { --swatch: var(--c-sage); }
+[data-swatch="orange"] { --swatch: var(--c-orange); }
+[data-swatch="pink"] { --swatch: var(--c-pink); }
+[data-swatch="lilac"] { --swatch: var(--c-lilac); }
+[data-swatch="teal"] { --swatch: var(--c-teal); }
+[data-swatch="sand"] { --swatch: var(--c-sand); }
+[data-swatch="lime"] { --swatch: var(--c-lime); }
+[data-swatch="plum"] { --swatch: var(--c-plum); }
+
+.pg-day { margin-bottom: 34px; }
+.pg-day-bar { position: relative; height: 44px; border-radius: 16px; background: var(--track); overflow: hidden; }
+/* Blocks: the ground the turns sit on, with a strong line where one hands over to the next. */
+.pg-seg {
+  position: absolute; top: 0; bottom: 0;
+  border: 0; padding: 0;
+  background: var(--surface);
+}
+.pg-seg[data-on="true"] { background: color-mix(in oklch, var(--on-air) 12%, var(--surface)); }
+/* Turns: a hairline where one hands over to the next. */
+.pg-slot {
+  position: absolute; top: 0; bottom: 0;
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--ink) 25%, transparent);
+  background: var(--swatch); pointer-events: none;
+}
+.pg-sleep {
+  position: absolute; top: 0; bottom: 0;
+  display: grid; place-items: center; font-size: 20px;
+  background: var(--night);
+  pointer-events: none;
+}
+.pg-hour { position: absolute; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, var(--ink) 18%, transparent); pointer-events: none; }
+.pg-hour[data-major="true"] { width: 2px; margin-left: -1px; background: color-mix(in srgb, var(--ink) 45%, transparent); }
+.pg-day-now { position: absolute; top: 0; bottom: 0; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--on-air); box-shadow: 0 0 0 2px var(--surface); }
+.pg-day-ticks { position: relative; height: 14px; margin-top: 8px; font: 600 12px/1 var(--mono); color: var(--ink-3); }
+.pg-day-ticks span { position: absolute; transform: translateX(-50%); }
+.pg-day-ticks span:first-child { transform: none; }
+.pg-day-ticks span:last-child { transform: translateX(-100%); }
+
+.pg-day-bar[data-view="1440"] { cursor: zoom-in; }
+/* Up close the bar drags sideways; the page still scrolls up and down under a finger. */
+.pg-day-bar:not([data-view="1440"]) { cursor: grab; touch-action: pan-y; user-select: none; }
+.pg-day-bar[data-dragging="true"], .pg-day-bar[data-dragging="true"] .pg-slot { cursor: grabbing; }
+.pg-handover { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--ink); pointer-events: none; }
+/* Up close, the turns are big enough to tap and to carry their names. */
+.pg-day-bar button.pg-slot {
+  display: flex; align-items: center; padding: 0 8px; border: 0;
+  font: inherit; font-size: 14px; font-weight: 650; color: var(--ink); text-align: left;
+  pointer-events: auto; cursor: pointer;
+}
+.pg-day-bar .pg-slot span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.pg-day-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-bottom: 12px; }
+.pg-views { display: flex; gap: 4px; padding: 4px; border-radius: 16px; background: var(--track); }
+.pg-views button {
+  min-height: 44px; padding: 0 18px; border: 0; border-radius: 12px;
+  background: none; color: var(--ink-2); font: inherit; font-size: 16px; font-weight: 650;
+}
+.pg-views button[aria-checked="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line), 0 4px 12px -8px var(--drop); }
+.pg-move { display: flex; align-items: center; gap: 8px; font-size: 17px; }
+.pg-move > button:not(.pg-link) {
+  width: 44px; height: 44px; border: 0; border-radius: 12px;
+  background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-size: 16px;
+}
+.pg-link { border: 0; background: none; padding: 8px 12px; border-radius: 12px; color: var(--ink); font: inherit; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Picking an entry's colour, in its sheet. */
+.pg-colors { display: flex; flex-wrap: wrap; gap: 10px; }
+.pg-colors button {
+  width: 44px; height: 44px; border: 0; border-radius: 14px;
+  background: var(--swatch); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 15%, transparent);
+  font-size: 20px; font-weight: 800; color: var(--ink);
+}
+.pg-colors button[aria-checked="true"] { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--ink); }
+.pg-swatch { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 3px; background: var(--swatch); vertical-align: 0; }
+
+.pg-blocks-head { display: grid; gap: 4px; margin-bottom: 14px; }
+.pg-blocks-head h3 { margin: 0; font-size: 22px; font-weight: 720; letter-spacing: -0.015em; }
+.pg-blocks-head p { margin: 0; font-size: 16px; font-weight: 560; color: var(--ink-2); }
+.pg-blocks { list-style: none; margin: 0; padding: 0; display: grid; gap: 18px; }
+.pg-block {
+  display: grid; gap: 16px;
+  padding: 20px;
+  border-radius: var(--pg-r);
+  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
+  box-shadow: inset 0 0 0 2px var(--line);
+  scroll-margin: 80px;
+}
+.pg-block { position: relative; }
+.pg-block[data-on="true"] { box-shadow: inset 0 0 0 2px var(--line), 0 16px 36px -22px var(--drop); }
+/* The block on now: a quiet tag in its corner, not a red border that reads as an error. */
+.pg-block-live {
+  position: absolute; top: 14px; right: 14px; z-index: 4;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px;
+  background: var(--ink); color: var(--surface);
+  font-size: 12px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase;
+}
+.pg-block-live > span { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pg-live 1.6s ease-in-out infinite; }
+.pg-block-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.pg-when { display: grid; gap: 2px; margin-right: auto; }
+.pg-part { font-size: 15px; font-weight: 720; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); }
+.pg-range { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pg-time {
+  padding: 2px 10px; margin-left: -10px;
+  border: 0; border-radius: 12px;
+  background: transparent; color: var(--ink);
+  font: inherit; font-size: 36px; font-weight: 750; letter-spacing: -0.02em;
+  cursor: pointer;
+}
+.pg-time:hover, .pg-time:focus { background: var(--surface); }
+.pg-until { font-size: 22px; font-weight: 600; color: var(--ink-2); }
+
+.pg-tiles, .pg-pick {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px;
+}
+.pg-tile {
+  width: 100%; height: 100%;
+  display: grid; align-content: start; gap: 6px; justify-items: start;
+  padding: 10px 10px 12px;
+  border: 0; border-radius: 18px;
+  background: var(--surface); color: var(--ink);
+  box-shadow: 0 0 0 1px var(--line), 0 8px 20px -16px var(--drop);
+  text-align: left; font: inherit;
+  transition: transform 160ms var(--ease-out), box-shadow 120ms ease-out;
+}
+.pg-tile:hover { box-shadow: 0 0 0 2px var(--ink-3), 0 8px 20px -16px var(--drop); }
+.pg-tile:active { transform: scale(0.97); }
+/* Tiles are picked up to sort them: no text selection, image dragging or press-and-hold menu getting in the way. */
+.pg-tiles .pg-tile { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.pg-tiles .pg-tile img { -webkit-user-drag: none; pointer-events: none; }
+.pg-tile { position: relative; }
+.pg-tile .grip { position: absolute; top: 4px; right: 4px; z-index: 3; }
+.pg-tiles li[data-sort-id] .pg-tile { cursor: grab; }
+
+/* Dragging to sort (sortable.ts): the item floats under the pointer, a ghost marks where it lands. */
+.sort-float {
+  position: fixed; top: 0; left: 0; z-index: 50;
+  pointer-events: none;
+}
+.sort-float > * {
+  width: 100%; height: 100%; cursor: grabbing;
+  transform: rotate(-2deg) scale(1.04);
+  box-shadow: 0 0 0 2px var(--ink), 0 22px 44px -16px var(--drop);
+}
+.sort-ghost {
+  border-radius: 18px;
+  background: var(--ghost);
+  box-shadow: 0 0 0 1.5px var(--ghost-edge) inset, 0 0 18px 2px var(--ghost-glow);
+}
+.grip {
   display: grid; place-items: center;
-  border-radius: 4px; border: 1px dashed var(--line);
-  color: var(--ink-3); font-size: 12px; font-weight: 500;
+  width: 18px; height: 23px; border-radius: 7px;
+  color: var(--ink-3); background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
+  /* Grabbing the grip picks up at once, even by touch, so it mustn't scroll the page. */
+  touch-action: none; cursor: grab;
 }
-.add-playlists button.new .pl-deck-empty { font-size: 22px; font-weight: 400; }
-.add-items button {
-  width: 132px; display: grid; gap: 3px; justify-items: start; text-align: left;
-  padding: 6px; border: 0; border-radius: 10px; background: transparent;
-  font-size: 13px; font-weight: 560;
+.grip:hover { color: var(--ink); }
+.pg-tile strong { font-size: 17px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.pg-tile small { font-size: 14px; font-weight: 560; color: var(--ink-2); }
+/* On the tile playing now: a red dot in a box like the grip's, in the opposite corner. */
+.pg-live-dot-box {
+  position: absolute; top: 4px; left: 4px; z-index: 3;
+  display: grid; place-items: center; width: 23px; height: 23px; border-radius: 7px;
+  background: var(--surface); box-shadow: 0 0 0 1px var(--line);
 }
-.add-items button:hover { background: var(--tint); }
-.add-items img { width: 100%; aspect-ratio: 5 / 3; border-radius: 4px; background: var(--paper); box-shadow: 0 0 0 1px var(--line); filter: var(--dim); }
-.add-items small { font-size: 11px; }
-.plus { color: var(--ink-3); }
-.add-playlists small { font-size: 11px; font-weight: 450; }
+.pg-live-dot-box > span { width: 9px; height: 9px; border-radius: 50%; background: var(--on-air); animation: pg-live 1.6s ease-in-out infinite; }
+@keyframes pg-live { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) {
+  .pg-live-dot-box > span, .pg-block-live > span { animation: none; }
+}
+/* The tile playing now glows a little red, like on air, without a border that reads as an error. */
+.pg-tile[data-on="true"] { box-shadow: 0 0 0 1px color-mix(in srgb, var(--on-air) 25%, var(--line)), 0 3px 14px -2px color-mix(in srgb, var(--on-air) 38%, transparent); }
+.pg-tile[data-off="true"] { opacity: .55; }
+.pg-thumb {
+  position: relative;
+  display: grid; place-items: center;
+  width: 100%; aspect-ratio: 5 / 3; margin-bottom: 4px;
+  border-radius: 10px; background: var(--paper);
+  box-shadow: 0 0 0 1px var(--line);
+  color: var(--ink-3); font-size: 15px; font-weight: 600;
+}
+.pg-thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; filter: var(--dim); }
+/* A playlist: its first pictures in a pile, each a step up and to the right, so it reads as more than one thing. */
+.pg-thumb[data-stack="true"] { background: none; box-shadow: none; margin-top: 10px; width: calc(100% - 10px); }
+.pg-deck { position: absolute; inset: 0; border-radius: inherit; }
+.pg-deck img {
+  position: absolute; inset: 0;
+  background: var(--paper); box-shadow: 0 0 0 1px var(--line), 0 4px 10px -6px var(--drop);
+  transform-origin: 50% 100%;
+  transition: transform 260ms var(--ease-out);
+}
+.pg-deck img[data-i="1"] { transform: translate(5px, -5px); }
+.pg-deck img[data-i="2"] { transform: translate(10px, -10px); }
+/* Hovering the picture fans the pile out like a hand of cards: a bit of each one shows. */
+@media (hover: hover) {
+  .pg-thumb:hover .pg-deck { z-index: 2; }
+  .pg-thumb:hover .pg-deck[data-n="2"] img[data-i="0"] { transform: translateX(-10%) rotate(-6deg); }
+  .pg-thumb:hover .pg-deck[data-n="2"] img[data-i="1"] { transform: translateX(12%) rotate(6deg); }
+  .pg-thumb:hover .pg-deck[data-n="3"] img[data-i="0"] { transform: translateX(-16%) rotate(-9deg); }
+  .pg-thumb:hover .pg-deck[data-n="3"] img[data-i="1"] { transform: translateY(-6%) rotate(0deg); }
+  .pg-thumb:hover .pg-deck[data-n="3"] img[data-i="2"] { transform: translateX(16%) rotate(9deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pg-deck img { transition: none; }
+}
+.pg-off {
+  position: absolute; top: 8px; left: 8px;
+  padding: 3px 10px; border-radius: 999px;
+  background: var(--ink); color: var(--on-accent);
+  font-size: 12px; font-weight: 750; text-transform: uppercase; letter-spacing: .05em;
+}
+.pg-add { background: transparent; box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--ink) 18%, transparent); }
+.pg-add .pg-thumb { background: transparent; box-shadow: none; font-size: 54px; font-weight: 300; color: var(--ink-2); }
+.pg-add:hover { background: var(--surface); }
 
-/* Repeat: a single item can interrupt the loop on the clock */
-.repeat button { padding: 5px 9px; font-size: 13px; white-space: nowrap; }
-.pl-row-actions .repeat { margin-right: 8px; }
-.times-input {
-  min-width: 12ch; max-width: 34ch; margin-right: 8px; padding: 6px 10px; font: inherit; font-size: 13px;
-  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: inherit;
+.pg-block-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; font-size: 15px; font-weight: 560; color: var(--ink-2); }
+.pg-link-danger { border: 0; background: none; padding: 10px 12px; margin: -10px -12px; border-radius: 12px; color: var(--danger); font: inherit; font-weight: 650; }
+.pg-link-danger:hover { background: var(--danger-tint); }
+.pg-empty { padding: 32px; border-radius: var(--pg-r); text-align: center; font-size: 18px; color: var(--ink-2); box-shadow: inset 0 0 0 3px var(--line); }
+.pg-week-foot { display: flex; flex-wrap: wrap; gap: 12px; }
+.pg-week-foot .pg-big { min-height: 64px; padding: 0 28px; font-size: 20px; }
+
+/* Sheets: tap a tile, get big buttons for it. */
+.pg-scrim {
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; place-items: center; padding: 24px;
+  background: rgba(30, 20, 5, .4);
+  animation: pg-fade 160ms ease-out;
 }
-.pl-confirm { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; color: var(--ink-2); padding-left: 4px; }
+.pg-sheet {
+  width: min(560px, 100%); max-height: calc(100dvh - 48px); overflow-y: auto;
+  display: grid; gap: 14px; padding: 20px;
+  border-radius: 26px; background: var(--wall-lit);
+  box-shadow: 0 30px 60px -20px rgba(0,0,0,.4);
+  animation: pg-rise 220ms var(--ease-out);
+}
+.pg-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pg-sheet-head h2 { margin: 0; font-size: 24px; font-weight: 720; letter-spacing: -0.02em; }
+.pg-close { flex: none; width: 48px; height: 48px; border: 0; border-radius: 50%; background: var(--tint); color: var(--ink); font-size: 20px; }
+.pg-sheet-hero { display: grid; gap: 8px; font-size: 16px; font-weight: 600; color: var(--ink-2); }
+.pg-sheet-hero img { width: 100%; aspect-ratio: 5 / 3; object-fit: cover; border-radius: 14px; background: var(--paper); box-shadow: 0 0 0 1px var(--line); filter: var(--dim); }
+/* A playlist's whole contents in the sheet, in play order. */
+.pg-gallery {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px;
+}
+.pg-gallery li { display: grid; gap: 4px; align-content: start; }
+.pg-gallery li[data-off="true"] { opacity: .5; }
+.pg-gallery img, .pg-gallery-empty {
+  width: 100%; aspect-ratio: 5 / 3; object-fit: cover; border-radius: 10px;
+  background: var(--paper); box-shadow: 0 0 0 1px var(--line); filter: var(--dim);
+}
+.pg-gallery-empty { display: grid; place-items: center; }
+.pg-gallery strong { font-size: 15px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-gallery small { font-size: 13px; font-weight: 560; color: var(--ink-2); }
+.pg-actions { display: grid; gap: 10px; }
+.pg-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 10px; }
+.pg-lengths { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.pg-lengths button {
+  min-height: 52px; border: 0; border-radius: 14px;
+  background: var(--surface); color: var(--ink); box-shadow: 0 0 0 2px var(--line);
+  font: inherit; font-size: 15px; font-weight: 680;
+}
+.pg-lengths button[aria-checked="true"] { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+.pg-pick-label { margin: 6px 0 0; font-size: 15px; font-weight: 720; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); }
+.pg-pick { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+@keyframes pg-fade { from { opacity: 0; } }
+@keyframes pg-rise { from { opacity: 0; transform: translateY(16px); } }
+@media (prefers-reduced-motion: reduce) {
+  .pg-scrim, .pg-sheet { animation: none; }
+}
+@media (max-width: 720px) {
+  .pg-tv { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  /* On a phone, what's live gets the whole width on top, with before and the next two side by side under it. */
+  .pg-side { padding: 10px; font-size: 14px; }
+  .pg-side strong { font-size: 16px; }
+  .pg-make-live { padding: 0 8px; font-size: 15px; white-space: normal; }
+  .pg-now { grid-column: 1 / -1; order: -1; }
+  .pg-now h1 { font-size: 30px; }
+  .pg-week-head h2 { font-size: 24px; }
+  .pg-tabs { flex: 1 1 100%; }
+  .pg-tabs button { flex: 1; min-width: 0; padding: 10px 14px; }
+  .pg-block { padding: 16px; }
+  .pg-time { font-size: 30px; }
+  .pg-tiles, .pg-pick { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .pg-lengths { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pg-scrim { place-items: end stretch; padding: 0; }
+  .pg-sheet { width: 100%; border-radius: 26px 26px 0 0; max-height: 88dvh; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+}
 
 /* ── Apps ──────────────────────────────────────────── */
 
@@ -1334,15 +1680,8 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
   .inspector-actions { margin-left: 0; }
   .clip-x { opacity: .9; transform: none; } /* no hover on touch */
 
-  /* Show */
-  .pl-overview { padding: 16px 14px 40px; }
-  .pl-head h1 { font-size: 24px; }
-  .pl-rows li { flex-wrap: wrap; gap: 10px; padding: 12px; }
-  .pl-main { flex: 1 1 calc(100% - 40px); }
-  .pl-row-actions { flex: 1 1 100%; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
-  .pl-row-actions .times-input { flex: 1 1 100%; max-width: none; margin-right: 0; }
-  .single-thumb { width: 80px; }
-  .add-items button { width: calc((100vw - 52px) / 2); }
+  /* Show: see after its own rules */
+  .pl-overview { padding: 16px 16px 40px; }
 
   /* Apps: your apps and new kinds become rows you swipe; stage, then settings */
   .apps-main { grid-template-columns: minmax(0, 1fr); }
@@ -1828,6 +2167,11 @@ fieldset.plain:disabled > * { opacity: .55; }
 /* With a knock and the log in it, the side column can outgrow the room above the sequence: scroll it, don't spill it. */
 @media (min-width: 721px) {
   /* min-height: 0 lets the column shrink to the room above the desk and scroll, instead of running under it. */
-  .dash-side { max-height: 100%; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; padding-top: 6px; margin-top: -6px; align-content: safe end; }
+  /* The cards' borders and drop shadows are box-shadows outside the box: pad the column so the scroll doesn't clip them,
+     and pull it back by the same amount so it lines up as before. */
+  .dash-side {
+    box-sizing: content-box; max-height: calc(100% - 24px); min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none;
+    padding: 6px 12px 18px; margin: -6px -12px 0; align-content: safe end;
+  }
 }
 .door-center.wide { max-width: 760px; }

@@ -294,17 +294,17 @@ Photos and logos are prepared for e-ink one by one before layout (`ditheredImage
 
 ### What's on air
 
-`apps/server/src/schedule.ts` is a pure function: given the show, the time and any pin, it says what's on `/live` and when that changes. It doesn't need a timer, so every client asking at the same moment gets the same answer.
+`apps/server/src/schedule.ts` is a pure function: given the program, the time and any pin, it says what's on `/live` and when that changes. It doesn't need a timer, so every client asking at the same moment gets the same answer.
 
-- **The show** is a list, played top to bottom and then again. Each entry is either a **playlist** (its clips in order) or a **single drawing or app** with its own duration.
-- **Playlists** hold clips. Each clip has a duration, weekdays and an optional time window (for example 07:00–09:00, which can wrap past midnight). Clips outside their window are skipped.
-- **Repeats**: a single entry can instead run *on the clock*, every 15, 30, 60, 120 or 180 minutes from midnight, interrupting the loop for its duration. The loop keeps time underneath and resumes where the clock says.
-- **At times**: any entry, a playlist too, can leave the loop and play only at set times each day (for example 08:00 and 20:00). At each one it interrupts the loop (a playlist plays its clips back to back), ending at least a minute before its next time. When two interruptions meet, the one higher in the show wins.
+- **The program** is a TV-style week: one plan for weekdays (Monday to Friday) and, if you make the weekend different, one for Saturday and Sunday. Otherwise every day plays the weekday plan.
+- **Blocks**: each plan is a list of times of day. A block plays from its time until the next block's, carrying past midnight into the next day if it's the last one.
+- **Inside a block**, its entries play top to bottom from the block's start, then start over from the top until the block ends. Each entry is either a **playlist** (its clips in order) or a **single drawing or app** with its own length. A block with one picture holds it for the whole block; an empty block leaves the last picture up.
+- **Playlists** hold clips. Each clip has a duration, and can be skipped for now. When a playlist plays is up to the program's blocks, not its clips.
 - **Show now**: puts one drawing or app on `/live` once: for its turn (a clip's own length, else 15 minutes), then the show carries on by itself. **Resume now** ends it early. The panel flashes black before drawing it, so it goes up clean, and pressing it again on what's already up redraws it.
 - **Night**: sleep hours during which the panel shows a moon and the wake-up time, goes blank, or keeps its last picture.
-- **Off** (`away` in the API): beats the night and the show. The panel is deep-cleaned once, left white (how e-ink keeps best) and not touched again: no daily clean, no redraws, and the panel's power is cut, as it is between all frames. Only the Pi stays on, so you can turn it back on from anywhere. It shows the logo, then the current clip; between clips it keeps the one that just played, rather than sitting on the white frame.
+- **Off** (`away` in the API): beats the night and the program. The panel is deep-cleaned once, left white (how e-ink keeps best) and not touched again: no daily clean, no redraws, and the panel's power is cut, as it is between all frames. Only the Pi stays on, so you can turn it back on from anywhere. It shows the logo, then the current clip; between clips it keeps the one that just played, rather than sitting on the white frame.
 
-The rotation runs on wall-clock time: the position in the cycle comes from `now % cycle length`. A restart doesn't change what's on air.
+The rotation runs on wall-clock time: the position in a block comes from `(now - block start) % one time round`. A restart doesn't change what's on air.
 
 Anything that edits the show, images, apps or the pin wakes the long-polls, so the dashboard and the panel update at once.
 
@@ -342,11 +342,11 @@ What's on the panel now: the frame, its name, which playlist it's from, and a pr
 
 ### Show (`/show`)
 
-The running order. Add playlists, or single drawings and apps, then drag them into order (or use the arrows; on a phone, drag by the arrows), set durations, switch entries on or off, set a single entry to repeat on the clock, or set any entry, playlists too, to play only **At times** of day you type, like `08:00, 20:00`. A single drawing or app has **Show now**, to put it on the panel for its turn right away. The header shows how long one pass of the loop takes. Under **Add to the show**, each playlist is a card with a glimpse of its first three clips stacked like a deck, its item count and its length.
+The week's program, made to be easy on a phone. Across the top: what played **Before**, what's **Live** (with a countdown, and **Back to the program** after a Show now), and the next two, each with **Make it live**. Below, the day as a bar from 6:00 to 6:00 (each block, every turn inside it, hour lines, and the night's sleep with a moon); switch it to **2 hours** or **1 hour** to see the turns up close, with their names, and tap one to change it. Then one card per block (morning, afternoon, evening, night), each with its start time (tap to change it), until when it runs, and big tiles for what plays in it, in order, before it starts over. Tap **＋ Add** on a card to add a playlist, drawing or app; drag tiles to change the order (on a phone, press and hold first); tap a tile for its colour on the day bar, **Make it live**, how long it stays on, **Earlier** and **Later**, skipping it, or removing it. **＋ Add more content** adds a block, from a time you pick. **Make the weekend different** gives Saturday and Sunday their own plan, starting as a copy of the weekdays; **Same as weekdays** goes back.
 
 ### Playlists (`/playlist/:id`)
 
-One playlist as a timeline, with the live picture on top. Drag drawings and apps from the strip into it (on phones: tap to add, tap to reorder). Select a clip and two things open: a small menu above it (**Show now**, **Earlier**, **Later**, **Remove**) and its settings below the timeline (duration in minutes, weekdays, time window, in the loop or not). Clicking anywhere else, or Esc, lets go of it. Tabs across the top switch between playlists. Double-click a tab to rename it. Zoom with the buttons, pinch, or ⌘/Ctrl + wheel. While dragging, a glowing gap shows where the clip will land.
+One playlist as a timeline, with the live picture on top. Drag drawings and apps from the strip into it (on phones: tap to add, tap to reorder). Select a clip and two things open: a small menu above it (**Show now**, **Earlier**, **Later**, **Remove**) and its settings below the timeline (duration in minutes, and skipping it for now). Clicking anywhere else, or Esc, lets go of it. Tabs across the top switch between playlists. Double-click a tab to rename it. Zoom with the buttons, pinch, or ⌘/Ctrl + wheel. While dragging, a glowing gap shows where the clip will land.
 
 ### Apps (`/apps`)
 
