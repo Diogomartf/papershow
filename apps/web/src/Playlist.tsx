@@ -22,8 +22,6 @@ const MIME_SOURCE = "application/x-papershow-source";
 const MIME_SLIDE = "application/x-papershow-slide";
 /** Matches the server's default for a new clip. */
 const NEW_CLIP_MIN = 15;
-const DAYS = ["S", "M", "T", "W", "T", "F", "S"];
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 const fmtMinutes = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`);
 const fmtCountdown = (ms: number) => {
@@ -440,7 +438,6 @@ export function Playlist({ id }: { id: string | null }) {
                         <span className="clip-name">{img?.name ?? "Missing"}</span>
                         <span className="clip-dur">{fmtMinutes(minutes)}</span>
                       </span>
-                      {(s.start || s.days.length < 7) && <span className="clip-flag" title="Has a schedule">◷</span>}
                       {canChange && <button
                         className="clip-x"
                         aria-label={`Remove ${img?.name ?? "clip"}`}
@@ -652,7 +649,6 @@ type InspectorProps = {
 };
 
 function Inspector({ slide, item, minutes, onDuration, onPatch, onShowNow, onRemove }: InspectorProps) {
-  const allDay = !slide.start || !slide.end;
   return (
     <div className="inspector">
       <img src={item?.thumb} alt="" />
@@ -670,46 +666,10 @@ function Inspector({ slide, item, minutes, onDuration, onPatch, onShowNow, onRem
         </div>
       </div>
 
+      {/* Days and hours are the program's now (the Show page), so a clip only plays or sits out. */}
       <div className="field">
-        <label>Days</label>
-        <div className="days">
-          {DAYS.map((d, i) => (
-            <button
-              key={i}
-              aria-pressed={slide.days.includes(i)}
-              aria-label={DAY_NAMES[i]}
-              onClick={() =>
-                onPatch({ days: slide.days.includes(i) ? slide.days.filter((x) => x !== i) : [...slide.days, i] })
-              }
-            >
-              {d}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="field">
-        <label>Hours</label>
-        <div className="hours">
-          <button
-            aria-pressed={allDay}
-            onClick={() => onPatch(allDay ? { start: "08:00", end: "22:00" } : { start: null, end: null })}
-          >
-            All day
-          </button>
-          {!allDay && (
-            <>
-              <input type="time" value={slide.start!} onChange={(e) => e.target.value && onPatch({ start: e.target.value })} />
-              <span className="muted">to</span>
-              <input type="time" value={slide.end!} onChange={(e) => e.target.value && onPatch({ end: e.target.value })} />
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="field">
-        <label>In loop</label>
-        <button className="toggle" role="switch" aria-checked={slide.enabled} onClick={() => onPatch({ enabled: !slide.enabled })}>
+        <label>Skip it for now</label>
+        <button className="toggle" role="switch" aria-checked={!slide.enabled} onClick={() => onPatch({ enabled: !slide.enabled })}>
           <span />
         </button>
       </div>

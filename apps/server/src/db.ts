@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Scene } from "@papershow/scene";
-import { awayUntil, DEFAULT_SLEEP, REPEAT_EVERY, sameSource, type Live, type Repeat, type Sleep, type Slide, type Source } from "./schedule.ts";
+import { awayUntil, DEFAULT_SLEEP, sameSource, type Days, type Live, type Program, type Sleep, type Slide, type Source } from "./schedule.ts";
 
 const path = process.env.DB ?? new URL("../data/imagegen.db", import.meta.url).pathname;
 mkdirSync(dirname(path), { recursive: true });
@@ -103,6 +103,9 @@ if (!(db.prepare("pragma table_info(show)").all() as { name: string }[]).some((c
 // Times of day an entry plays at instead of taking turns, as a JSON array of 'HH:MM'.
 if (!(db.prepare("pragma table_info(show)").all() as { name: string }[]).some((c) => c.name === "at_times"))
   db.exec("alter table show add column at_times text");
+// The colour someone picked for an entry, to tell it apart on the program's day bar; null picks one by position.
+if (!(db.prepare("pragma table_info(show)").all() as { name: string }[]).some((c) => c.name === "color"))
+  db.exec("alter table show add column color text");
 
 // First run with the show: what used to play (every enabled playlist, in order) becomes it.
 if (!db.prepare("select 1 from settings where key = 'show-ready'").get()) {
@@ -114,6 +117,28 @@ if (!db.prepare("select 1 from settings where key = 'show-ready'").get()) {
   db.prepare("insert into settings (key, value) values ('show-ready', '1')").run();
   db.exec("commit");
 }
+
+// The program: times of day, each with its own show entries, for weekdays and for the weekend.
+db.exec(`
+  create table if not exists blocks (
+    id    text primary key,
+    days  text not null check (days in ('weekdays', 'weekend')),
+    start text not null                              -- 'HH:MM'
+  );
+`);
+if (!(db.prepare("pragma table_info(show)").all() as { name: string }[]).some((c) => c.name === "block_id"))
+  db.exec("alter table show add column block_id text references blocks(id) on delete cascade");
+// The show from before the program becomes all day, every day. Cut-ins and set times are gone: the blocks do that now.
+if (!(db.prepare("select count(*) as n from blocks").get() as { n: number }).n) {
+  const id = crypto.randomUUID().slice(0, 8);
+  db.exec("begin");
+  db.prepare("insert into blocks (id, days, start) values (?, 'weekdays', '06:00')").run(id);
+  db.prepare("update show set block_id = ?, every_m = null, at_times = null where block_id is null").run(id);
+  db.exec("commit");
+}
+// The day starts at 6:00, so a lone block made at midnight by an early version of this moves there. Alone, its time
+// isn't shown and only decides where the loop starts.
+db.exec(`update blocks set start = '06:00' where start = '00:00' and (select count(*) from blocks b where b.days = blocks.days) = 1`);
 
 // Who made each drawing, app and playlist. Anyone can use them; only the maker or an admin changes them.
 for (const table of ["images", "apps", "playlists"])
@@ -260,14 +285,20 @@ export function listSlides(): Slide[] {
 }
 
 /**
- * What actually plays: the show's entries in order, each expanded into clips.
+ * What actually plays: each block's entries in order, each expanded into clips.
  * A playlist entry contributes its clips; an image or app entry is one clip.
  * Keys are "<entry>~<clip>" so the same playlist can appear twice.
  */
-export function loopSlides(): Slide[] {
+export function program(): Program {
   const clips = listSlides();
-  return listShow()
-    .filter((e) => e.enabled && !e.everyM && !e.times?.length)
+  const show = listShow();
+  const blocks = listBlocks().map((b) => ({ ...b, slides: blockSlides(show.filter((e) => e.blockId === b.id), clips) }));
+  return { blocks, weekendOwn: weekendOwn() };
+}
+
+function blockSlides(entries: ShowEntry[], clips: Slide[]): Slide[] {
+  return entries
+    .filter((e) => e.enabled)
     .flatMap((e): Slide[] =>
       e.playlistId
         ? clips
@@ -292,10 +323,12 @@ export function loopSlides(): Slide[] {
 }
 
 // ── The show ───────────────────────────────────────────────────────────────
-// What runs: playlists, images and apps, top to bottom, then again.
+// What runs: in each block of the program, playlists, images and apps, top to bottom, then again.
 
 export type ShowEntry = {
   id: string;
+  /** The block of the program it plays in. */
+  blockId: string;
   position: number;
   playlistId: string | null;
   /** For a single image or app. */
@@ -303,73 +336,50 @@ export type ShowEntry = {
   /** How long a single image or app stays on; playlists use their clips' lengths. */
   durationS: number;
   enabled: boolean;
-  /** Minutes: interrupt the loop on the clock this often (e.g. 60 = on the hour). Null = a turn in the loop. */
-  everyM: number | null;
-  /** Or play at these 'HH:MM' times each day, out of the loop otherwise. Playlists too. */
-  times: string[] | null;
+  /** One of `ENTRY_COLORS`, or null for one picked by its place in the block. */
+  color: string | null;
 };
+
+/** The colours an entry can have. Blue is left out: on the day bar it means the panel is asleep. */
+export const ENTRY_COLORS = ["yellow", "sage", "orange", "pink", "lilac", "teal", "sand", "lime", "plum"] as const;
 
 type ShowRow = {
   id: string;
+  block_id: string;
   position: number;
   playlist_id: string | null;
   image_id: string | null;
   app_id: string | null;
   duration_s: number;
   enabled: number;
-  every_m: number | null;
-  at_times: string | null;
+  color: string | null;
 };
 
 export function listShow(): ShowEntry[] {
-  return (db.prepare("select * from show order by position").all() as ShowRow[]).map((r) => ({
+  return (db.prepare("select * from show where block_id is not null order by position").all() as ShowRow[]).map((r) => ({
     id: r.id,
+    blockId: r.block_id,
     position: r.position,
     playlistId: r.playlist_id,
     source: r.image_id ? { kind: "image", id: r.image_id } : r.app_id ? { kind: "app", id: r.app_id } : null,
     durationS: r.duration_s,
     enabled: !!r.enabled,
-    everyM: r.playlist_id ? null : r.every_m,
-    times: r.at_times ? (JSON.parse(r.at_times) as string[]) : null,
+    color: r.color,
   }));
 }
 
-/** Show entries that interrupt the loop, on the clock or at set times, rather than taking a turn. */
-export function repeats(): Repeat[] {
-  const clips = listSlides();
-  return listShow()
-    .filter((e) => e.enabled && (e.times?.length || (e.source && e.everyM)))
-    .map((e) => ({
-      id: e.id,
-      everyM: e.times?.length ? null : e.everyM,
-      times: e.times?.length ? e.times : null,
-      clips: e.playlistId
-        ? clips
-            .filter((c) => c.playlistId === e.playlistId && c.enabled)
-            .map((c) => ({ id: c.id, source: c.source, durationS: c.durationS, clipId: c.id, playlistId: e.playlistId }))
-        : [{ id: e.id, source: e.source!, durationS: e.durationS, clipId: null, playlistId: null }],
-    }))
-    .filter((r) => r.clips.length);
-}
-
-/** "8:00, 20:00, 8:00" → ["08:00", "20:00"]: valid times only, sorted, once each. */
-function cleanTimes(times: string[]) {
-  const ok = times
-    .map((t) => t.trim().match(/^(\d{1,2}):(\d{2})$/))
-    .filter((m): m is RegExpMatchArray => !!m && Number(m[1]) < 24 && Number(m[2]) < 60)
-    .map((m) => `${m[1].padStart(2, "0")}:${m[2]}`);
-  return [...new Set(ok)].sort().slice(0, 24);
-}
-
-/** Add a playlist, image or app to the show at `at` (end by default). */
-export function addShowEntry(what: { playlistId: string } | { source: Source }, at?: number, durationS = DEFAULT_CLIP_S) {
+/** Add a playlist, image or app to a block of the program at `at` (end by default). */
+export function addShowEntry(blockId: string, what: { playlistId: string } | { source: Source }, at?: number, durationS = DEFAULT_CLIP_S) {
   const id = crypto.randomUUID().slice(0, 8);
-  const ids = listShow().map((e) => e.id);
+  const ids = listShow()
+    .filter((e) => e.blockId === blockId)
+    .map((e) => e.id);
   ids.splice(at ?? ids.length, 0, id);
   const src = "source" in what ? what.source : null;
   db.exec("begin");
-  db.prepare("insert into show (id, position, playlist_id, image_id, app_id, duration_s) values (?, ?, ?, ?, ?, ?)").run(
+  db.prepare("insert into show (id, block_id, position, playlist_id, image_id, app_id, duration_s) values (?, ?, ?, ?, ?, ?, ?)").run(
     id,
+    blockId,
     ids.length,
     "playlistId" in what ? what.playlistId : null,
     src?.kind === "image" ? src.id : null,
@@ -381,23 +391,76 @@ export function addShowEntry(what: { playlistId: string } | { source: Source }, 
   return id;
 }
 
-export function updateShowEntry(id: string, patch: { durationS?: number; enabled?: boolean; everyM?: number | null; times?: string[] | null }) {
+export function updateShowEntry(id: string, patch: { durationS?: number; enabled?: boolean; color?: string | null }) {
+  if (patch.color !== undefined)
+    db.prepare("update show set color = ? where id = ?").run((ENTRY_COLORS as readonly string[]).includes(patch.color ?? "") ? patch.color : null, id);
   if (patch.durationS !== undefined)
     db.prepare("update show set duration_s = ? where id = ?").run(Math.max(1, Math.round(patch.durationS / 60)) * 60, id);
   if (patch.enabled !== undefined) db.prepare("update show set enabled = ? where id = ?").run(patch.enabled ? 1 : 0, id);
-  if (patch.everyM !== undefined)
-    db.prepare("update show set every_m = ? where id = ? and playlist_id is null").run(
-      REPEAT_EVERY.includes(patch.everyM as number) ? patch.everyM : null,
-      id,
+}
+
+// ── The program's blocks ───────────────────────────────────────────────────
+
+export type BlockRow = { id: string; days: Days; start: string };
+
+export const listBlocks = () => db.prepare("select id, days, start from blocks order by days, start").all() as BlockRow[];
+export const getBlock = (id: string) => listBlocks().find((b) => b.id === id);
+
+/** "8:00" → "08:00"; null when it isn't a time of day. */
+export function cleanTime(t: string) {
+  const m = t.trim().match(/^(\d{1,2}):(\d{2})$/);
+  return m && Number(m[1]) < 24 && Number(m[2]) < 60 ? `${m[1].padStart(2, "0")}:${m[2]}` : null;
+}
+
+const taken = (days: Days, start: string, except = "") =>
+  listBlocks().some((b) => b.days === days && b.start === start && b.id !== except);
+
+/** A new, empty block. Null when the time is bad or that day already has a block then. */
+export function addBlock(days: Days, start: string): BlockRow | null {
+  const at = cleanTime(start);
+  if (!at || taken(days, at)) return null;
+  const id = crypto.randomUUID().slice(0, 8);
+  db.prepare("insert into blocks (id, days, start) values (?, ?, ?)").run(id, days, at);
+  return getBlock(id)!;
+}
+
+/** Move a block to another time. False when the time is bad or taken. */
+export function moveBlock(id: string, start: string) {
+  const b = getBlock(id);
+  const at = cleanTime(start);
+  if (!b || !at || taken(b.days, at, id)) return false;
+  db.prepare("update blocks set start = ? where id = ?").run(at, id);
+  return true;
+}
+
+/** Deletes the block and everything in it. */
+export const deleteBlock = (id: string) => db.prepare("delete from blocks where id = ?").run(id);
+
+/** Whether the weekend has its own blocks; otherwise it plays the weekdays'. */
+export const weekendOwn = () => !!db.prepare("select 1 from settings where key = 'weekend-own' and value = '1'").get();
+
+/**
+ * Plan the weekend on its own, starting from a copy of the weekdays, or go back to the weekdays' plan for every day
+ * (the weekend's blocks are deleted).
+ */
+export function setWeekendOwn(own: boolean) {
+  if (own === weekendOwn()) return;
+  db.exec("begin");
+  db.prepare("delete from blocks where days = 'weekend'").run();
+  if (own) {
+    const show = db.prepare("select * from show where block_id is not null order by position").all() as ShowRow[];
+    const copy = db.prepare(
+      "insert into show (id, block_id, position, playlist_id, image_id, app_id, duration_s, enabled, color) values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     );
-  // Set times: the entry leaves the loop and its clock repeat; an empty list puts it back in the loop.
-  if (patch.times !== undefined) {
-    const times = cleanTimes(patch.times ?? []);
-    db.prepare("update show set at_times = ? where id = ?").run(times.length ? JSON.stringify(times) : null, id);
+    for (const b of listBlocks().filter((x) => x.days === "weekdays")) {
+      const id = crypto.randomUUID().slice(0, 8);
+      db.prepare("insert into blocks (id, days, start) values (?, 'weekend', ?)").run(id, b.start);
+      for (const e of show.filter((r) => r.block_id === b.id))
+        copy.run(crypto.randomUUID().slice(0, 8), id, e.position, e.playlist_id, e.image_id, e.app_id, e.duration_s, e.enabled, e.color);
+    }
   }
-  // On the clock and at set times exclude each other: the last one chosen wins.
-  if (patch.everyM) db.prepare("update show set at_times = null where id = ?").run(id);
-  else if (patch.times?.length) db.prepare("update show set every_m = null where id = ?").run(id);
+  db.prepare("insert into settings (key, value) values ('weekend-own', ?) on conflict(key) do update set value = excluded.value").run(own ? "1" : "0");
+  db.exec("commit");
 }
 
 export function reorderShow(ids: string[], transaction = true) {

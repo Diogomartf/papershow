@@ -144,6 +144,7 @@ export function says(e: LogEntry): string {
     case "removed-from-show": return `took ${what} out of the show`;
     case "changed-show": return what === "something" ? "changed the show" : `changed ${what} in the show`;
     case "reordered-show": return "shuffled the show around";
+    case "changed-program": return "changed the week's program 📅";
     case "showed-now": return `put ${item} on the panel 📺`;
     case "resumed": return "let the show carry on";
     case "turned-off": return s.back ? `turned the panel off until ${String(s.back)} 💤` : "turned the panel off 💤";
