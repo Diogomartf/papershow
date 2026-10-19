@@ -1,5 +1,5 @@
 // The Apps API: built-in apps (clock, crypto, …) and the instances you set up.
-import { signedOut } from "./house";
+import { Oops, signedOut } from "./house";
 
 export type Field =
   | { key: string; label: string; type: "text"; placeholder?: string; hint?: string }
@@ -41,7 +41,10 @@ async function api<T>(path: string, method = "GET", body?: unknown): Promise<T> 
     body: body ? JSON.stringify(body) : undefined,
   });
   if (res.status === 401) signedOut();
-  if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Oops(json.error ?? `${method} ${path} → ${res.status}`, res.status, json);
+  }
   return (res.status === 204 ? undefined : await res.json()) as T;
 }
 

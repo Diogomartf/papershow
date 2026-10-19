@@ -2161,7 +2161,8 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
 .knock-card { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 16px; padding: 16px; }
 .knock-text, .you-text { display: grid; gap: 2px; flex: 1 1 160px; }
 .knock-text strong { font-size: 19px; }
-.knock-actions { display: flex; align-items: center; gap: 6px; }
+.knock-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.knock-actions button { white-space: nowrap; }
 .big-yes {
   height: 46px; padding: 0 24px;
   border: 0; border-radius: 999px;
@@ -2187,7 +2188,8 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
   width: 14px; height: 14px; border-radius: 50%;
   background: var(--here); box-shadow: 0 0 0 3px var(--surface);
 }
-.person-actions { display: flex; gap: 14px; margin-top: 8px; font-size: 13px; }
+.person-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; margin-top: 8px; font-size: 13px; }
+.person-actions button { white-space: nowrap; }
 .person-actions button.link:disabled { opacity: .35; cursor: default; }
 button.link.danger { color: var(--danger); }
 
@@ -2243,7 +2245,7 @@ button.link.danger { color: var(--danger); }
 .invite-code { font: 700 32px/1.2 var(--mono); letter-spacing: .2em; padding-left: .2em; }
 .invite-sheet code { font: 12px var(--mono); }
 .invite-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
-.invite-actions .night-row { gap: 10px; font-size: 14px; }
+.invite-on-panel { display: flex; align-items: center; gap: 12px; font-size: 14px; }
 
 @media (max-width: 720px) {
   .people-page .people-main { padding: 4px 16px 56px; overflow: visible; }
@@ -2333,3 +2335,27 @@ fieldset.plain:disabled > * { opacity: .55; }
 .pg-badge[data-kind="outside"]::before { content: "↘"; font-size: 14px; letter-spacing: 0; }
 .pg-now[data-outside="true"] { box-shadow: 0 16px 36px -20px var(--drop); outline: 3px dashed var(--ink); outline-offset: -1px; }
 .pg-outside { margin: 0; font-size: 16px; font-weight: 560; color: var(--ink); }
+
+/* Two invites side by side: a guest's and the household's. */
+.section-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: flex-end; }
+
+/* A guest's ask, with what they want to show. A sentence, so it wraps as text rather than as flex items. */
+.ask-card p { display: block; }
+.ask-card .face-mini { vertical-align: middle; }
+
+/* Manage people: one row per person, their role, and what can be done to them. */
+.manage-intro { margin: 0 0 12px; font-size: 14px; line-height: 1.5; max-width: 60ch; }
+.manage-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.manage-list li { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.manage-list li:first-child { border-top: 0; }
+.manage-who { display: grid; gap: 2px; flex: 1; min-width: 120px; }
+.manage-who small { font-size: 12px; }
+.manage-list button:disabled { opacity: .35; cursor: default; }
+.manage-confirm { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 14px; }
+.danger-solid {
+  height: 34px; padding: 0 14px; border: 0; border-radius: 999px;
+  background: var(--danger); color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+}
+
+/* Who an invite lets in as, at the top of the invite. */
+.invite-role { margin: 4px auto 8px; }

@@ -8,7 +8,10 @@ export type ImageMeta = { id: string; name: string; updatedAt: number; madeBy: s
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
   if (res.status === 401) signedOut();
-  if (!res.ok) throw new Oops(`${init?.method ?? "GET"} ${path} → ${res.status}`, res.status, {});
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Oops(json.error ?? `${init?.method ?? "GET"} ${path} → ${res.status}`, res.status, json);
+  }
   return (res.status === 204 ? undefined : await res.json()) as T;
 }
 

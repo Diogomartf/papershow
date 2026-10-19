@@ -27,7 +27,7 @@ const hhmm = (t: number) => {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
 
-function InviteCard({ url, code, until }: { url: string; code: string; until: number }) {
+function InviteCard({ url, code, until, guest }: { url: string; code: string; until: number; guest: boolean }) {
   const { d, size } = qrPath(url);
   // Whole pixels per module, so every square comes out crisp in 1 bit.
   const px = Math.floor(400 / size) * size;
@@ -38,7 +38,9 @@ function InviteCard({ url, code, until }: { url: string; code: string; until: nu
       </svg>
       <div style={{ display: "flex", flexDirection: "column" }}>
         <span style={{ fontSize: 64, fontWeight: 700, letterSpacing: -2 }}>Come in!</span>
-        <span style={{ fontSize: 26, marginTop: 14, lineHeight: 1.3 }}>Scan this with your phone's camera to join the house.</span>
+        <span style={{ fontSize: 26, marginTop: 14, lineHeight: 1.3 }}>
+          {guest ? "Scan this with your phone's camera to join as a guest." : "Scan this with your phone's camera to join the house."}
+        </span>
         <span style={{ fontSize: 20, marginTop: 34 }}>Or type the code</span>
         <span style={{ fontSize: 52, fontWeight: 600, letterSpacing: 6, marginTop: 4 }}>{code}</span>
         <span style={{ fontSize: 20, marginTop: 30 }}>{`Works until ${hhmm(until)}`}</span>
@@ -51,7 +53,12 @@ let cached: { key: string; frame: Promise<Frame> } | null = null;
 
 /** The invite's frame, rendered once per invite. */
 export function inviteFrame(invite: Invite): Promise<Frame> {
-  if (cached?.key !== invite.code)
-    cached = { key: invite.code, frame: renderFrame(<InviteCard url={invite.url} code={invite.code} until={invite.expiresAt} />) };
+  // The role can change while it's up, and the card says which.
+  const key = `${invite.code}-${invite.role}`;
+  if (cached?.key !== key)
+    cached = {
+      key,
+      frame: renderFrame(<InviteCard url={invite.url} code={invite.code} until={invite.expiresAt} guest={invite.role === "guest"} />),
+    };
   return cached.frame;
 }

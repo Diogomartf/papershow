@@ -20,7 +20,13 @@ export const FACES = [
 /** Tile colours. Only the web app shows them; the panel is black and white. */
 export const COLORS = ["#f4a259", "#f7d046", "#8cc084", "#5fb7c9", "#7d8fe0", "#c98bdb", "#ef7c8e", "#b8a48c"];
 
-export type Role = "admin" | "member";
+/**
+ * Admins run the house. Members are the household (stored as "member"; the app calls them Household): they
+ * make things and run the show. Guests draw and make apps, but ask before anything goes on the panel, and
+ * don't see the show or the log.
+ */
+export type Role = "admin" | "member" | "guest";
+export const ROLES: Role[] = ["admin", "member", "guest"];
 /** Knocking: asked to join, waiting for an admin. In: can use Papershow. Out: removed by an admin. */
 export type Status = "knocking" | "in" | "out";
 
@@ -66,7 +72,8 @@ db.exec(`
     made_by    text references people(id) on delete set null,
     expires_at integer not null,
     url        text not null,                       -- where it leads: /join/<code> on the address it was made from
-    on_panel   integer not null default 0,
+    on_panel   integer not null default 0,          -- when it comes off the panel (ms), 0 when it isn't on it
+    role       text not null default 'member',      -- what whoever uses it joins as
     used_by    text references people(id) on delete set null
   );
 
@@ -80,6 +87,10 @@ db.exec(`
   );
   create index if not exists log_at on log(at);
 `);
+
+// Invites made before guests existed let people in as household.
+if (!(db.prepare("pragma table_info(invites)").all() as { name: string }[]).some((c) => c.name === "role"))
+  db.exec("alter table invites add column role text not null default 'member'");
 
 type PersonRow = {
   id: string;
@@ -178,6 +189,18 @@ export function updatePerson(id: string, patch: Partial<Profile & { role: Role; 
 /** Only for someone still knocking: they never got in, so nothing else refers to them. */
 export const deletePerson = (id: string) => db.prepare("delete from people where id = ? and status = 'knocking'").run(id);
 
+/**
+ * Forget someone for good: their person, their sessions and asks (by cascade), and every log line by them or
+ * about them. Their drawings, apps and playlists go first, in index.ts, which knows what depends on them.
+ */
+export function forgetPerson(id: string) {
+  db.prepare(
+    `delete from log where person_id = ?
+       or json_extract(subject, '$.person.id') = ? or json_extract(subject, '$.by.id') = ? or json_extract(subject, '$.was.id') = ?`,
+  ).run(id, id, id, id);
+  db.prepare("delete from people where id = ?").run(id);
+}
+
 /** Admins left if this person stopped being one: the house always keeps at least one. */
 export const otherAdmins = (id: string) =>
   listPeople().filter((p) => p.id !== id && p.role === "admin" && p.status === "in").length;
@@ -247,49 +270,97 @@ export function personFor(token: string | undefined, now = Date.now()): Person |
 /** How long an invite works for. */
 export const INVITE_MS = 10 * 60_000;
 
+/** How long an invite stays on the panel: long enough to walk over and scan it, short enough not to hold the show up. */
+export const INVITE_PANEL_MS = 2 * 60_000;
+
 /** No 0/O or 1/I/L: the code may be read off the panel and typed. */
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
-export type Invite = { code: string; madeBy: string | null; expiresAt: number; url: string; onPanel: boolean };
+/** `role`: whoever uses it joins as household ("member") or as a guest. `onPanelUntil`: while it's on the panel, when it comes off. */
+export type Invite = { code: string; madeBy: string | null; expiresAt: number; url: string; onPanelUntil: number | null; role: Role };
 
-type InviteRow = { code: string; made_by: string | null; expires_at: number; url: string; on_panel: number; used_by: string | null };
-const toInvite = (r: InviteRow): Invite => ({ code: r.code, madeBy: r.made_by, expiresAt: r.expires_at, url: r.url, onPanel: !!r.on_panel });
+type InviteRow = { code: string; made_by: string | null; expires_at: number; url: string; on_panel: number; used_by: string | null; role: Role };
+const toInvite = (r: InviteRow, now = Date.now()): Invite => ({
+  code: r.code,
+  madeBy: r.made_by,
+  expiresAt: r.expires_at,
+  url: r.url,
+  onPanelUntil: r.on_panel > now ? r.on_panel : null,
+  role: r.role,
+});
 
 /** A new invite. `origin` is the address the admin is using, so the link works where they are. */
-export function createInvite(madeBy: string, origin: string, onPanel: boolean, now = Date.now()): Invite {
+export function createInvite(madeBy: string, origin: string, role: "member" | "guest", now = Date.now()): Invite {
   const code = Array.from(randomBytes(6), (b) => CODE_CHARS[b % CODE_CHARS.length]).join("");
   const url = `${origin.replace(/\/$/, "")}/join/${code}`;
-  // One invite on the panel at a time: a new one takes its place.
-  if (onPanel) db.prepare("update invites set on_panel = 0").run();
-  db.prepare("insert into invites (code, made_by, expires_at, url, on_panel) values (?, ?, ?, ?, ?)").run(
-    code,
-    madeBy,
-    now + INVITE_MS,
-    url,
-    onPanel ? 1 : 0,
-  );
+  db.prepare("insert into invites (code, made_by, expires_at, url, role) values (?, ?, ?, ?, ?)").run(code, madeBy, now + INVITE_MS, url, role);
   db.prepare("delete from invites where expires_at < ?").run(now - 86_400_000);
-  return { code, madeBy, expiresAt: now + INVITE_MS, url, onPanel };
+  return { code, madeBy, expiresAt: now + INVITE_MS, url, onPanelUntil: null, role };
 }
 
 /** An invite that still works: not expired, not used. */
 export function getInvite(code: string, now = Date.now()): Invite | undefined {
   const row = db.prepare("select * from invites where code = ?").get(code.toUpperCase()) as InviteRow | undefined;
-  return row && !row.used_by && row.expires_at > now ? toInvite(row) : undefined;
+  return row && !row.used_by && row.expires_at > now ? toInvite(row, now) : undefined;
 }
 
 export const useInvite = (code: string, personId: string) =>
   db.prepare("update invites set used_by = ?, on_panel = 0 where code = ?").run(personId, code.toUpperCase());
+
+/** Put a working invite on the panel for INVITE_PANEL_MS, or until it runs out. One at a time: it takes any other's place. */
+export function showInvite(code: string, now = Date.now()): Invite | undefined {
+  const invite = getInvite(code, now);
+  if (!invite) return;
+  const until = Math.min(now + INVITE_PANEL_MS, invite.expiresAt);
+  db.prepare("update invites set on_panel = 0").run();
+  db.prepare("update invites set on_panel = ? where code = ?").run(until, invite.code);
+  return { ...invite, onPanelUntil: until };
+}
+
+/** Change who a working invite lets in as. The code stays the same, so a QR already on a screen keeps working. */
+export function setInviteRole(code: string, role: "member" | "guest", now = Date.now()): Invite | undefined {
+  if (!getInvite(code, now)) return;
+  db.prepare("update invites set role = ? where code = ?").run(role, code.toUpperCase());
+  return getInvite(code, now);
+}
 
 /** Take the invite off the panel (it still works on the phone that shows it). */
 export const hideInvite = (code: string) => db.prepare("update invites set on_panel = 0 where code = ?").run(code.toUpperCase());
 
 /** The invite the panel shows now, if any. */
 export function panelInvite(now = Date.now()): Invite | undefined {
-  const row = db.prepare("select * from invites where on_panel = 1 and used_by is null and expires_at > ?").get(now) as
+  const row = db.prepare("select * from invites where on_panel > ? and used_by is null and expires_at > ?").get(now, now) as
     | InviteRow
     | undefined;
-  return row && toInvite(row);
+  return row && toInvite(row, now);
+}
+
+// ── Going easy on the panel ───────────────────────────────────────────────
+// Everyone but admins gets so many goes an hour at putting things on the panel and at adding new things,
+// so one person (or a phone left in a kid's hands) can't flood the house's feed. Kept in memory, like
+// the PIN lockout: a restart forgives.
+
+/** "live": Show now and asking to show. "make": new drawings, apps and playlists, and adding to the show. */
+export type Bucket = "live" | "make";
+
+/** Goes per hour, by role. Admins have no limit. */
+export const LIMITS: Record<Bucket, Record<Exclude<Role, "admin">, number>> = {
+  live: { member: 12, guest: 4 },
+  make: { member: 40, guest: 10 },
+};
+
+const HOUR = 3_600_000;
+const goes = new Map<string, number[]>();
+
+/** Spend one go of `bucket`: null when that's fine, or when the next go frees up. */
+export function spend(p: Person, bucket: Bucket, now = Date.now()): number | null {
+  if (p.role === "admin") return null;
+  const key = `${p.id}:${bucket}`;
+  const recent = (goes.get(key) ?? []).filter((t) => t > now - HOUR);
+  goes.set(key, recent);
+  if (recent.length >= LIMITS[bucket][p.role]) return recent[0] + HOUR;
+  recent.push(now);
+  return null;
 }
 
 // ── The log ───────────────────────────────────────────────────────────────
