@@ -106,8 +106,17 @@ export type Days = "weekdays" | "weekend";
  */
 export type Block = { id: string; days: Days; start: string; slides: Slide[] };
 
+/**
+ * The time check: a clock that cuts in at the top of every hour, whatever block is on, like a radio station's
+ * time signal. It isn't in any block, and the block carries on underneath as if it hadn't.
+ */
+export type Hourly = { source: Source; durationS: number };
+
+/** The time check's turn on air. It has no clip or entry of its own. */
+export const HOURLY = "hourly";
+
 /** The week: weekday blocks, and weekend ones when the weekend is planned on its own (otherwise it plays the weekdays). */
-export type Program = { blocks: Block[]; weekendOwn: boolean };
+export type Program = { blocks: Block[]; weekendOwn: boolean; hourly: Hourly | null };
 
 /** A block on a given day, in wall-clock time. */
 export type Airing = { block: Block; startedAt: number; endsAt: number };
@@ -154,13 +163,24 @@ export function showing(live: Live, program: Program, now = Date.now()): Showing
 
   const air = blockAt(program, now);
   if (!air) return null;
+
+  // On the hour the time check cuts in. Whatever was on gives way until it's over, and hands back at the next hour.
+  const hour = new Date(now).setMinutes(0, 0, 0);
+  const checked = program.hourly ? hour + program.hourly.durationS * 1000 : hour;
+  if (program.hourly && now < checked) {
+    const clip = { startedAt: hour, endsAt: checked };
+    return { source: program.hourly.source, slideId: HOURLY, endsAt: checked, clip };
+  }
+  const nextHour = program.hourly ? hour + 60 * 60_000 : Infinity;
+  const around = (startedAt: number, endsAt: number) => ({ startedAt: Math.max(startedAt, checked), endsAt: Math.min(endsAt, nextHour) });
+
   // `slides` arrive in play order, so keep that order. Skipped clips sit out.
   const eligible = air.block.slides.filter((s) => s.enabled);
   if (!eligible.length) return null;
   // One picture holds for the whole block.
   if (eligible.length === 1) {
-    const clip = { startedAt: air.startedAt, endsAt: air.endsAt };
-    return { source: eligible[0].source, slideId: eligible[0].id, endsAt: air.endsAt, clip };
+    const clip = around(air.startedAt, air.endsAt);
+    return { source: eligible[0].source, slideId: eligible[0].id, endsAt: clip.endsAt, clip };
   }
 
   // The block plays from its first clip at its start time, then starts over when it runs out.
@@ -169,7 +189,7 @@ export function showing(live: Live, program: Program, now = Date.now()): Showing
   for (const slide of eligible) {
     const ms = slide.durationS * 1000;
     if (t < ms) {
-      const clip = { startedAt: now - t, endsAt: Math.min(now + (ms - t), air.endsAt) };
+      const clip = around(now - t, Math.min(now + (ms - t), air.endsAt));
       return { source: slide.source, slideId: slide.id, endsAt: clip.endsAt, clip };
     }
     t -= ms;
@@ -210,6 +230,8 @@ function turnAt(program: Program, t: number): Turn | null {
   const air = blockAt(program, t);
   const s = showing({ mode: "rotate" }, program, t);
   if (!air || !s?.clip || !s.slideId) return null;
+  if (s.slideId === HOURLY)
+    return { key: HOURLY, blockId: air.block.id, entryId: null, clipId: null, playlistId: null, source: s.source, at: s.clip.startedAt, endsAt: s.clip.endsAt };
   const slide = air.block.slides.find((x) => x.id === s.slideId);
   if (!slide) return null;
   return {
@@ -233,6 +255,8 @@ export function sequence(program: Program, now = Date.now(), max = 60): Turn[] {
   const horizon = now + 24 * 60 * 60_000;
   let seen = new Set<string>();
   let block: number | null = null;
+  // The clip the time check cut into: when it picks up again after, it's the same turn going on, not a repeat.
+  let cut: string | null = null;
   for (let t = now, guard = 0; out.length < max && t < horizon && guard < 2000; guard++) {
     const air = blockAt(program, t);
     if (!air) break;
@@ -241,12 +265,17 @@ export function sequence(program: Program, now = Date.now(), max = 60): Turn[] {
       seen = new Set();
     }
     const next = turnAt(program, t);
-    if (!next || seen.has(next.key)) {
+    const resumed = next?.key === cut;
+    if (!next || (seen.has(next.key) && !resumed)) {
       // An empty block, or it has come back around: on to the next block.
       t = air.endsAt;
       continue;
     }
-    seen.add(next.key);
+    if (next.key === HOURLY) cut = out.at(-1)?.key ?? null;
+    else {
+      seen.add(next.key);
+      cut = null;
+    }
     out.push(next);
     t = next.endsAt;
   }
