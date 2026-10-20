@@ -113,7 +113,8 @@ case "$cmd" in
     fi
     last=$(journalctl -u papershow-panel --no-pager -o cat -g ' drew ' -n 1 2>/dev/null | sed 's/^[0-9-]* \([0-9:]*\),[0-9]* drew/\1/' || true)
     echo "Panel:    ${last:+last drew }${last:-nothing drawn yet}"
-    health=$(journalctl -u papershow-health --no-pager -o cat -n 1 2>/dev/null || true)
+    # Its own lines, not systemd's "Started" and "Finished" around each run.
+    health=$(journalctl _SYSTEMD_UNIT=papershow-health.service --no-pager -o cat -n 1 2>/dev/null || true)
     echo "Health:   ${health:-not checked yet (paper:logs health)}"
     ;;
 
