@@ -17,6 +17,7 @@ On the Pi:
 paper:status                               # services, version, addresses, keys, last frame
 paper:logs [server|panel|update]           # follow the logs
 paper:update                               # get the latest release and reinstall (the Pi also does it nightly)
+paper:channel [main|releases]              # what updates follow: every commit on main (dev), or releases
 paper:help                                 # list these commands
 ```
 
@@ -45,8 +46,8 @@ There are no unit tests yet. Check your work by rendering frames and looking at 
 - **pnpm is pinned to 7**, the version that wrote `pnpm-lock.yaml`; newer ones refuse it. The install runs it through `npx pnpm@7`. Upgrading pnpm means regenerating the lockfile and changing both.
 - **`install.sh` runs on Pis that are also used for other things.** Keep it safe to rerun, and don't take over what's already there: ports, Tailscale serve, cron, the system Node. Check and warn, or stop with a clear message. The units in `deploy/pi/*.service` are templates: `@USER@`, `@REPO@` and `@PORT@` are filled in on install, and personal settings go in `systemctl edit` drop-ins, which survive reinstalls.
 - **`uninstall.sh` undoes what `install.sh` adds**, and nothing more. When the install gains a step (a unit, a file, a Tailscale route), add its undo. Data is deleted only with `--purge`, and shared things (Node, apt packages, SPI, Tailscale itself) stay.
-- **Pis follow releases, not `main`.** The one-line install leaves the checkout on the latest `vX.Y.Z` tag (detached), and `paper:update` moves it to the next one; a checkout on a branch follows the branch instead (`PAPERSHOW_BRANCH=main`). Merging to `main` reaches no one's wall until you release. To release, from an up-to-date `main`: `gh release create v0.2.0 --target main --generate-notes`. Bump the minor for features, the patch for fixes; `-rc1` and other pre-release tags are skipped. Tags are never moved or deleted once out.
-- **`deploy/pi/paper.sh` is the `paper:` commands** (`paper:update`, `paper:status`, `paper:logs`, `paper:help`); the name it's called by picks the command. A new one needs its name in the lists in `install.sh` and `uninstall.sh` and a row in the README's Commands on the Pi table.
+- **Pis follow releases, not `main`.** The one-line install leaves the checkout on the latest `vX.Y.Z` tag (detached), and `paper:update` moves it to the next one; a checkout on a branch follows the branch instead (`paper:channel main`, or `PAPERSHOW_BRANCH=main` on install). Merging to `main` reaches no one's wall until you release. To release, from an up-to-date `main`: `gh release create v0.2.0 --target main --generate-notes`. Bump the minor for features, the patch for fixes; `-rc1` and other pre-release tags are skipped. Tags are never moved or deleted once out.
+- **`deploy/pi/paper.sh` is the `paper:` commands** (`paper:update`, `paper:channel`, `paper:status`, `paper:logs`, `paper:help`); the name it's called by picks the command. A new one needs its name in the lists in `install.sh` and `uninstall.sh` and a row in the README's Commands on the Pi table.
 - New client settings are environment variables: document them in `panel.py`'s docstring and in the README's Panel settings table.
 
 ## Building an e-ink app

@@ -20,7 +20,7 @@ done
 sudo systemctl daemon-reload
 echo "Removed the papershow, papershow-panel, papershow-name, papershow-update and papershow-health services."
 
-for name in update status logs help; do
+for name in update channel status logs help; do
   link=/usr/local/bin/paper:$name
   if [[ "$(readlink "$link" 2>/dev/null)" == */deploy/pi/paper.sh ]]; then sudo rm -f "$link"; fi
 done
