@@ -4,9 +4,10 @@
 // Mark a control yourself (`data-cuelume-open`, …) to choose its cue, or `data-quiet` to play something in its handler instead.
 // Outcomes (saved, on the panel, errors, someone at the door) play from where they happen, with `cue`.
 import { useSyncExternalStore } from "react";
-import { bind, play, setEnabled, unlock, type PlayOptions, type SoundName } from "cuelume";
+import { bind, play, setEnabled, setVolume, unlock, type PlayOptions, type SoundName } from "cuelume";
 
 const KEY = "papershow-sound";
+const VOLUME_KEY = "papershow-sound-volume";
 const CHANGED = "papershow:sound";
 
 /** Sound is a setting of this device, like the lights: on unless switched off here. */
@@ -31,15 +32,41 @@ export function setSound(on: boolean) {
   if (on) unlock().then((ok) => ok && play("toggle"));
 }
 
+/** How loud, from 0 to 1, on this device: full unless turned down here. */
+export function soundVolume(): number {
+  try {
+    const v = Number(localStorage.getItem(VOLUME_KEY) ?? 1);
+    return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/** Turn it up or down; each step plays at the new level, so you hear where it is. */
+export function setSoundVolume(v: number) {
+  const down = v < soundVolume();
+  try {
+    if (v >= 1) localStorage.removeItem(VOLUME_KEY);
+    else localStorage.setItem(VOLUME_KEY, String(v));
+  } catch {
+    // Private mode: it still changes, just isn't remembered.
+  }
+  setVolume(v);
+  dispatchEvent(new Event(CHANGED));
+  play("select", { emphasis: "subtle", direction: down ? "back" : "forward" });
+}
+
 const onChange = (l: () => void) => {
   addEventListener(CHANGED, l);
-  // Another tab switched it.
-  const storage = (e: StorageEvent) => e.key === KEY && (setEnabled(soundOn()), l());
+  // Another tab changed it.
+  const storage = (e: StorageEvent) =>
+    (e.key === KEY || e.key === VOLUME_KEY) && (setEnabled(soundOn()), setVolume(soundVolume()), l());
   addEventListener("storage", storage);
   return () => (removeEventListener(CHANGED, l), removeEventListener("storage", storage));
 };
 
 export const useSound = () => useSyncExternalStore(onChange, soundOn);
+export const useSoundVolume = () => useSyncExternalStore(onChange, soundVolume);
 
 /** A cue, with how much it matters: a name, or a name and its options. */
 export type Cue = SoundName | [SoundName, PlayOptions];
@@ -122,6 +149,7 @@ export function startSound() {
   if (started) return;
   started = true;
   setEnabled(soundOn());
+  setVolume(soundVolume());
   // On the window, so it runs before cuelume, which listens on the document.
   for (const type of ["pointerdown", "keydown", "focusin"]) addEventListener(type, mark, { capture: true });
   bind();

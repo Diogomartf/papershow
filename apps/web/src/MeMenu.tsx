@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { ROLE_NAMES, signOut, tint, useMe } from "./house";
 import { useLiveState } from "./live";
 import { navigate } from "./Nav";
-import { cue, setSound, useSound } from "./sound";
+import { cue, setSound, setSoundVolume, useSound, useSoundVolume } from "./sound";
 
 export function MeMenu() {
   const { me, refresh, switchTo } = useMe();
   const { state } = useLiveState();
   const [open, setOpen] = useState(false);
   const sound = useSound();
+  const volume = useSoundVolume();
   const root = useRef<HTMLDivElement>(null);
 
   const self = state?.me ?? me;
@@ -88,6 +89,22 @@ export function MeMenu() {
             Sound
             <span className="me-sound-state">{sound ? "On" : "Off"}</span>
           </button>
+          {sound && (
+            <label className="me-volume">
+              <span>Volume</span>
+              {/* Each step plays at the new level, from setSoundVolume. */}
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={10}
+                value={Math.round(volume * 100)}
+                onChange={(e) => setSoundVolume(Number(e.target.value) / 100)}
+                aria-valuetext={`${Math.round(volume * 100)}%`}
+                data-quiet
+              />
+            </label>
+          )}
           <button role="menuitem" className="me-item" onClick={() => go("/people")}>The house</button>
           {self.role !== "guest" && <button role="menuitem" className="me-item" onClick={() => go("/log")}>Log</button>}
           <button
