@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Logs one line on how the Pi is doing: temperature, throttling, Wi-Fi signal, load and free memory.
-# papershow-health.timer runs it every 5 minutes, so the journal shows the trend before a problem
+# papershow-health.timer runs it every 15 minutes, so the journal shows the trend before a problem
 # (paper:logs health). Hot or throttled lines are warnings, which paper:logs shows in yellow.
 set -uo pipefail
 

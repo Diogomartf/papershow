@@ -121,7 +121,7 @@ The script builds the web app, turns on SPI, installs the panel's Python librari
 | `papershow-panel` | The panel client: shows the logo, then follows `/live` and draws it. |
 | `papershow-name` | Publishes `paper.local` for the Pi on your network (`deploy/pi/name.sh`, through avahi). |
 | `papershow-update` | Run by `papershow-update.timer` every night around 4: if `main` has changed, it runs `paper:update`. |
-| `papershow-health` | Run by `papershow-health.timer` every 5 minutes: logs one line with the temperature, throttling, Wi-Fi signal, load and free memory (`deploy/pi/health.sh`). Lines at 75 °C or more, or when the Pi has throttled, are warnings. |
+| `papershow-health` | Run by `papershow-health.timer` every 15 minutes: logs one line with the temperature, throttling, Wi-Fi signal, load and free memory (`deploy/pi/health.sh`). Lines at 75 °C or more, or when the Pi has throttled, are warnings. |
 
 The panel shows the logo, then the current frame. The script ends with "Papershow installed! Ready to use." and Papershow's address, `http://paper.local`, and it all starts again on its own after a reboot or power cut. [What the install changes on your Pi](#what-the-install-changes-on-your-pi) lists what it touches and what it leaves alone. From then on, [`paper:status`, `paper:logs` and `paper:update`](#commands-on-the-pi) check on it and update it; `paper:help` lists them.
 
@@ -198,7 +198,7 @@ The install adds these commands:
 |---|---|
 | `paper:update` | Gets the latest `main` and reinstalls. If `main` hasn't changed, it stops, so the panel isn't restarted for the same picture. A local edit to a tracked file is dropped only when there is something to pull; `.env` stays. Running the [one line](#2-on-the-pi-install) again does the same. The Pi also does it on its own every night when `main` has changed (see [Updates](#what-the-install-changes-on-your-pi)). |
 | `paper:status` | Whether the server and panel are running, the version and whether it's behind, where to open Papershow, whether it updates itself and when it last checked, which keys are set, what the panel last drew, and the last health check. |
-| `paper:logs` | Follows the server's and the panel's logs, coloured by service, with problems in red, warnings in yellow and drawn frames in green. `paper:logs server`, `paper:logs panel` or `paper:logs update` (the nightly updates) or `paper:logs health` (the temperature every 5 minutes) for one; journalctl options go after, like `paper:logs panel -n 200`. |
+| `paper:logs` | Follows the server's and the panel's logs, coloured by service, with problems in red, warnings in yellow and drawn frames in green. `paper:logs server`, `paper:logs panel`, `paper:logs update` (the nightly updates) or `paper:logs health` (the temperature every 15 minutes) for one; journalctl options go after, like `paper:logs panel -n 200`. |
 | `paper:help` | Lists these commands. |
 
 Installed before these commands existed? Update once the long way, which adds them:

@@ -1,10 +1,10 @@
-# Logs how the Pi is doing every 5 minutes, from a minute after boot: about 300 short lines a day.
+# Logs how the Pi is doing every 15 minutes, from a minute after boot: about 100 short lines a day.
 [Unit]
-Description=Log the Pi's temperature and health every 5 minutes
+Description=Log the Pi's temperature and health every 15 minutes
 
 [Timer]
 OnBootSec=1min
-OnUnitActiveSec=5min
+OnUnitActiveSec=15min
 
 [Install]
 WantedBy=timers.target
