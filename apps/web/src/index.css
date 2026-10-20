@@ -1007,7 +1007,7 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .seq-strip li[data-live="true"] .seq-time { color: var(--signal); }
 .seq-strip strong { font-size: 13px; font-weight: 560; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .seq-strip small { font-size: 12px; }
-.seq-strip:has(li[data-new-list="true"]) { padding-top: 22px; }
+.seq-strip:has(.seq-list) { padding-top: 22px; }
 
 /* ── Floating menu, remove, undo ─────────────────── */
 

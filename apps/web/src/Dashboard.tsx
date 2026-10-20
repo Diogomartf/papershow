@@ -269,7 +269,7 @@ export function Dashboard() {
                 const key = `${t.key}-${t.at}`;
                 return (
                   <li key={key} data-live={live} data-new-list={newList && (state!.show.length > 1)} data-open={menu?.key === key}>
-                    {newList && state!.show.length > 1 && <span className="seq-list">{t.playlistId ? playlistName(t.playlistId) : "Single"}</span>}
+                    {newList && t.playlistId && state!.show.length > 1 && <span className="seq-list">{playlistName(t.playlistId)}</span>}
                     <button
                       className="seq-frame"
                       aria-haspopup="menu"
