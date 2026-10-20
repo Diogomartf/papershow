@@ -53,7 +53,9 @@ class RaspberryPi:
         self.GPIO_DC_PIN     = gpiozero.LED(self.DC_PIN)
         # self.GPIO_CS_PIN     = gpiozero.LED(self.CS_PIN)
         self.GPIO_PWR_PIN    = gpiozero.LED(self.PWR_PIN)
-        self.GPIO_BUSY_PIN   = gpiozero.Button(self.BUSY_PIN, pull_up = False)
+        # Papershow: InputDevice, not Waveshare's Button. Busy is only ever read, and a Button watches
+        # the pin for edges with a thread that wakes all day (about 1% of a core while idle).
+        self.GPIO_BUSY_PIN   = gpiozero.InputDevice(self.BUSY_PIN, pull_up = False)
 
     def digital_write(self, pin, value):
         if pin == self.RST_PIN:
