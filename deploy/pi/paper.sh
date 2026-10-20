@@ -2,14 +2,16 @@
 # Papershow's commands on the Pi. install.sh links this script into /usr/local/bin under each
 # command's name, and the name it's called by picks the command:
 #
-#   paper:update           get the latest main and reinstall (--if-newer is the same check the
-#                          nightly timer uses). If main hasn't changed, it stops. A local edit to a
-#                          tracked file is dropped only when there is something to pull; .env stays.
+#   paper:update           get the latest release and reinstall, or the newest commit when the checkout
+#                          is on a branch (--if-newer is the same check the nightly timer uses). If
+#                          there's nothing new, it stops. A local edit to a tracked file is dropped
+#                          only when there is something to update to; .env stays.
 #   paper:status           what's running, which version, where to open it, what the panel last drew
 #   paper:logs [server|panel|update|health] [journalctl options]   follow the logs, both services by default
 #   paper:help             list these commands
 #
-# Or call it directly: deploy/pi/paper.sh status
+# Or call it directly: deploy/pi/paper.sh status. deploy/pi/paper.sh version prints the version
+# alone, for install.sh.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)
@@ -25,9 +27,38 @@ help() {
 Papershow on this Pi:
   paper:status            what's running, which version, where to open it, what the panel last drew
   paper:logs              follow the logs; paper:logs server, panel, update or health for one
-  paper:update            get the latest main and reinstall (it also checks every night on its own)
+  paper:update            get the latest release and reinstall (it also checks every night on its own)
   paper:help              this list
 EOF
+}
+
+# A checkout on a branch follows it; one on a tag (detached, as the one-line install leaves it)
+# follows releases.
+on_branch() { git -C "$repo" symbolic-ref -q HEAD >/dev/null; }
+
+# The newest release: the highest vX.Y.Z tag, leaving out pre-releases like v1.0.0-rc1.
+latest() { git -C "$repo" tag -l 'v*' --sort=-v:refname | grep -v -- - | head -1 || true; }
+
+# v0.4.0 on a release, v0.4.0+3 three commits after it, the commit alone before the first release.
+version() {
+  local described count
+  described=$(git -C "$repo" describe --tags --match 'v*' --long 2>/dev/null) || {
+    git -C "$repo" log -1 --format=%h
+    return
+  }
+  count=${described%-g*}
+  count=${count##*-}
+  if [ "$count" = 0 ]; then echo "${described%-*-g*}"; else echo "${described%-*-g*}+$count"; fi
+}
+
+# What the commit is: for GitHub's "Merge pull request #29 from …", the PR's number and title.
+summary() {
+  local subject
+  subject=$(git -C "$repo" log -1 --format=%s)
+  if [[ "$subject" =~ ^Merge\ pull\ request\ (#[0-9]+) ]]; then
+    subject="${BASH_REMATCH[1]} $(git -C "$repo" log -1 --format=%b | head -1)"
+  fi
+  echo "$subject"
 }
 
 port() {
@@ -38,37 +69,59 @@ port() {
 
 case "$cmd" in
   update)
-    # Quiet for the nightly check; someone running it can see the fetch.
+    # Quiet for the nightly check; someone running it can see the fetch. --force, in case a tag was moved.
     if [ "${1:-}" = --if-newer ]; then
-      git -C "$repo" fetch --quiet origin
+      git -C "$repo" fetch --quiet --tags --force origin
     else
-      git -C "$repo" fetch origin
+      git -C "$repo" fetch --tags --force origin
+    fi
+    if on_branch; then
+      target='@{upstream}'
+    else
+      target=$(latest)
+      if [ -z "$target" ]; then
+        echo "No release to update to. Follow main instead: git -C $repo switch main" >&2
+        exit 1
+      fi
     fi
     # Nothing new: don't reinstall. That restarts the panel and flashes it for the same picture.
-    if [ "$(git -C "$repo" rev-parse HEAD)" = "$(git -C "$repo" rev-parse '@{upstream}')" ]; then
-      echo "Already up to date: $(git -C "$repo" log -1 --format='%h %s')"
+    if [ "$(git -C "$repo" rev-parse HEAD)" = "$(git -C "$repo" rev-parse "$target^{commit}")" ]; then
+      echo "Already up to date: $(version) $(summary)"
       exit 0
     fi
-    # The checkout follows main. An edit left in a tracked file stops the pull, and the nightly
-    # update with it. Drop it only when there is something to pull; .env and other untracked files stay.
+    # An edit left in a tracked file stops the update, and the nightly one with it. Drop it only when
+    # there is something to update to; .env and other untracked files stay.
     dirty=$(git -C "$repo" status --porcelain --untracked-files=no)
     if [ -n "$dirty" ]; then
-      echo "Dropping local changes so main can update:"
+      echo "Dropping local changes so Papershow can update:"
       printf '%s\n' "$dirty"
       git -C "$repo" reset --hard HEAD
     fi
-    git -C "$repo" pull --ff-only
+    if on_branch; then
+      git -C "$repo" pull --ff-only
+    else
+      echo "Updating $(version) to $target"
+      git -C "$repo" switch --quiet --detach "$target"
+    fi
     # The new copy of install.sh, so changes to the install itself apply in this run.
     exec "$repo/deploy/pi/install.sh"
     ;;
 
   status)
     p=$(port)
-    echo "Version:  $(git -C "$repo" log -1 --format='%h %s (%cr)')"
-    # A quick look for a newer main; offline or slow, skip it.
-    if timeout 5 git -C "$repo" fetch --quiet origin 2>/dev/null; then
-      behind=$(git -C "$repo" rev-list --count 'HEAD..@{upstream}' 2>/dev/null || echo 0)
-      if [ "$behind" -gt 0 ]; then echo "          $behind commit(s) behind: run paper:update"; fi
+    echo "Version:  $(version) ($(git -C "$repo" log -1 --format='%h, %cr'))"
+    echo "          $(summary)"
+    # A quick look for something newer; offline or slow, skip it.
+    if timeout 5 git -C "$repo" fetch --quiet --tags --force origin 2>/dev/null; then
+      if on_branch; then
+        behind=$(git -C "$repo" rev-list --count 'HEAD..@{upstream}' 2>/dev/null || echo 0)
+        if [ "$behind" -gt 0 ]; then echo "          $behind commit(s) behind: run paper:update"; fi
+      else
+        newest=$(latest)
+        if [ -n "$newest" ] && [ "$(git -C "$repo" rev-parse HEAD)" != "$(git -C "$repo" rev-parse "$newest^{commit}")" ]; then
+          echo "          $newest is out: run paper:update"
+        fi
+      fi
     fi
     for pair in server:papershow panel:papershow-panel; do
       unit=${pair#*:}
@@ -92,18 +145,23 @@ case "$cmd" in
       name=$(tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')
       echo "          https://$name"
     fi
+    if on_branch; then
+      to="to the newest $(git -C "$repo" branch --show-current)"
+    else
+      to="to the latest release"
+    fi
     if systemctl is-enabled --quiet papershow-update.timer 2>/dev/null; then
       checked=$(systemctl show papershow-update -p ExecMainExitTimestamp --value 2>/dev/null || true)
       result=$(systemctl show papershow-update -p Result --value 2>/dev/null || true)
       if [ -z "$checked" ]; then
-        echo "Updates:  every night, not checked yet"
+        echo "Updates:  every night $to, not checked yet"
       elif [ "$result" = success ]; then
-        echo "Updates:  every night, last checked $checked"
+        echo "Updates:  every night $to, last checked $checked"
       else
         echo "Updates:  every night, but the last one failed ($checked): paper:logs update shows why"
       fi
     else
-      echo "Updates:  only with paper:update"
+      echo "Updates:  only with paper:update, $to"
     fi
     if [ -f "$repo/.env" ]; then
       keys=$(grep -oE '^[A-Z_]+=.' "$repo/.env" | cut -d= -f1 | paste -sd' ' - || true)
@@ -132,6 +190,10 @@ case "$cmd" in
     else
       exec journalctl "${units[@]}" -n 50 -f "$@"
     fi
+    ;;
+
+  version)
+    echo "$(version) $(summary)"
     ;;
 
   help | -h | --help)

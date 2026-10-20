@@ -1,4 +1,4 @@
-# Updates Papershow when main has something new; papershow-update.timer runs it every night.
+# Updates Papershow when there's a new release (or, on a branch, a new commit); papershow-update.timer runs it every night.
 # install.sh fills in @USER@ and @REPO@.
 [Unit]
 Description=Papershow update
