@@ -4,14 +4,15 @@
 # It's safe to run again, and it leaves the rest of a Pi you already use alone.
 #
 # From a checkout:   deploy/pi/install.sh
-# Or in one line, without one: it clones the repo to ~/papershow (or updates it) and carries on.
+# Or in one line, without one: it clones the repo to ~/papershow (or updates it) to the latest
+# release, and carries on.
 #   curl -fsSL https://raw.githubusercontent.com/Diogomartf/papershow/main/deploy/pi/install.sh | bash
 #
 #   PAPERSHOW_PORT=8080     if something else already uses 5194
 #   PAPERSHOW_NAME=paper    its name on the local network: http://paper.local
 #   PAPERSHOW_AUTO_UPDATE=0 don't update every night (1 turns it back on); later runs keep the choice
 #   PAPERSHOW_DIR=~/x       where the one-line install puts the checkout (~/papershow)
-#   PAPERSHOW_BRANCH=main   which branch it checks out (main)
+#   PAPERSHOW_BRANCH=main   follow a branch instead of releases; rerunning without it goes back to releases
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)
@@ -19,16 +20,22 @@ if [ ! -f "$here/install.sh" ] || [ ! -f "$here/../../package.json" ]; then
   # Piped in, not run from a checkout: get the code, then run the checkout's copy of this script.
   # Everything here reads from /dev/null, because the rest of this script is still waiting on stdin.
   dir=${PAPERSHOW_DIR:-$HOME/papershow}
-  branch=${PAPERSHOW_BRANCH:-main}
   command -v git >/dev/null || sudo apt-get install -y git </dev/null
   if [ -d "$dir/.git" ]; then
-    git -C "$dir" fetch --quiet origin </dev/null
+    git -C "$dir" fetch --quiet --tags --force origin </dev/null
     # Same as paper:update: a local edit to a tracked file must not stop the update. Untracked files stay.
     git -C "$dir" reset --hard HEAD </dev/null
-    git -C "$dir" switch --quiet "$branch" </dev/null
-    git -C "$dir" pull --quiet --ff-only </dev/null
   else
-    git clone --branch "$branch" https://github.com/Diogomartf/papershow.git "$dir" </dev/null
+    git clone --quiet https://github.com/Diogomartf/papershow.git "$dir" </dev/null
+  fi
+  # The latest release, as paper.sh's latest(), on a detached HEAD: that's how paper:update knows to
+  # follow releases. A branch when asked for one, or main before the first release.
+  release=$(git -C "$dir" tag -l 'v*' --sort=-v:refname </dev/null | grep -v -- - | head -1 || true)
+  if [ -z "${PAPERSHOW_BRANCH:-}" ] && [ -n "$release" ]; then
+    git -C "$dir" switch --quiet --detach "$release" </dev/null
+  else
+    git -C "$dir" switch --quiet "${PAPERSHOW_BRANCH:-main}" </dev/null
+    git -C "$dir" pull --quiet --ff-only </dev/null
   fi
   exec bash "$dir/deploy/pi/install.sh" </dev/null
 fi
@@ -230,7 +237,8 @@ echo
 if curl -fs -o /dev/null "$ready"; then
   echo "  ${green}✓ Papershow $action! Ready to use.$off"
   echo
-  row Version "$bold$(git -C "$repo" log -1 --format=%h)$off $(git -C "$repo" log -1 --format=%s)"
+  version=$(deploy/pi/paper.sh version)
+  row Version "$bold${version%% *}$off ${version#* }"
   row Open "$bold$cyan$open$off"
   [ -z "${away:-}" ] || row Away "$cyan$away$off"
   if [ "$auto" = 1 ]; then row Updates "every night"; else row Updates "with paper:update"; fi

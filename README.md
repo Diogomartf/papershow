@@ -105,7 +105,7 @@ Every "On the Pi" step runs in this session.
 
 ### 2. On the Pi: install
 
-Paste this one line. It clones the repo to `~/papershow`, installs, and offers to set up Tailscale:
+Paste this one line. It clones the repo to `~/papershow` at the latest release, installs, and offers to set up Tailscale:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Diogomartf/papershow/main/deploy/pi/install.sh | bash
@@ -118,7 +118,7 @@ The script builds the web app, turns on SPI, installs the panel's Python librari
 | `papershow` | The server: web app, API and `/live` on :5194, and on :80 when it's free. Data in `/var/lib/papershow/papershow.db`. |
 | `papershow-panel` | The panel client: shows the logo, then follows `/live` and draws it. |
 | `papershow-name` | Publishes `paper.local` for the Pi on your network (`deploy/pi/name.sh`, through avahi). |
-| `papershow-update` | Run by `papershow-update.timer` every night around 4: if `main` has changed, it runs `paper:update`. |
+| `papershow-update` | Run by `papershow-update.timer` every night around 4: if there's a new release, it runs `paper:update`. |
 | `papershow-health` | Run by `papershow-health.timer` every 15 minutes, and on the hour while the panel is asleep: logs one line with the temperature, throttling, Wi-Fi signal, load and free memory (`deploy/pi/health.sh`). Lines at 75 °C or more, or when the Pi has throttled, are warnings. |
 
 The panel shows the logo, then the current frame. The script ends with "Papershow installed! Ready to use." and Papershow's address, `http://paper.local`, and it all starts again on its own after a reboot or power cut. [What the install changes on your Pi](#what-the-install-changes-on-your-pi) lists what it touches and what it leaves alone. From then on, [`paper:status`, `paper:logs` and `paper:update`](#commands-on-the-pi) check on it and update it; `paper:help` lists them.
@@ -173,7 +173,7 @@ It's safe to run again, and it leaves the rest of your Pi alone:
 
 - **Port**: it uses 5194, and stops if something else is already on it. Pick another with `PAPERSHOW_PORT=8080 deploy/pi/install.sh`.
 - **Address**: your Pi keeps its hostname, and gets a second name, `paper.local`, published over mDNS by avahi (installed from apt). If another device already answers to `paper.local`, the install keeps `<hostname>.local` and says so; pick another name with `PAPERSHOW_NAME=paper2 deploy/pi/install.sh`. The server also listens on port 80, so the address needs no port, but only if nothing else uses 80; otherwise it's `http://paper.local:5194`. The script ends by waiting for the server to answer, then prints "Papershow installed! Ready to use." (or "updated!") with the version, the addresses and whether it updates itself.
-- **Code**: the one line puts the checkout in `~/papershow` (`PAPERSHOW_DIR` to change it). Or clone it yourself anywhere and run `deploy/pi/install.sh`.
+- **Code**: the one line puts the checkout in `~/papershow` (`PAPERSHOW_DIR` to change it), at the latest [release](https://github.com/Diogomartf/papershow/releases). To follow a branch instead, every commit as it lands, run it with `PAPERSHOW_BRANCH=main` before `bash`; the line without it goes back to releases. Or clone it yourself anywhere and run `deploy/pi/install.sh`: a checkout on a branch follows that branch.
 - **Node**: it installs Node 24 only if the Pi's Node is older than 22.13, and that upgrade is system-wide. A newer Node is left alone.
 - **pnpm**: it runs pnpm 7 through `npx`, so a pnpm the Pi already has stays as it is.
 - **SPI** gets turned on. Python libraries come from apt and don't replace anything.
@@ -181,7 +181,7 @@ It's safe to run again, and it leaves the rest of your Pi alone:
 - **Tailscale**: if the Pi already serves something through `tailscale serve`, that setup is left alone, and the script prints the command to add Papershow on port 8443.
 - **The panel**: it lists anything else that might draw on it (e-ink lines in your or root's crontab or `/etc/cron.d`, systemd units and timers, programs holding the SPI device) and removes none of them. If you used [pi-e-ink](https://github.com/Diogomartf/pi-e-ink), that's its `clean.py`, `tokens.py`, `stocks.py` and `ai_clock.py` lines. The deep clean, the 180° rotation and the night pause now live in Papershow.
 - **Data** goes in `/var/lib/papershow`, outside your checkout.
-- **Updates**: a systemd timer checks `main` every night around 4 and, if it changed, pulls it and reinstalls, restarting the services (the panel redraws). It runs as you, so it needs sudo without a password, as the Pi's first user has; otherwise the install says so and leaves it off. Turn it off with `sudo systemctl disable --now papershow-update.timer`, and later updates keep it off; `PAPERSHOW_AUTO_UPDATE=1 deploy/pi/install.sh` turns it back on (`=0` installs without it). It uses a timer, not cron, so your crontab stays as it is.
+- **Updates**: a systemd timer checks for a new release every night around 4 (or a new commit, on a branch) and, if there is one, gets it and reinstalls, restarting the services (the panel redraws). It runs as you, so it needs sudo without a password, as the Pi's first user has; otherwise the install says so and leaves it off. Turn it off with `sudo systemctl disable --now papershow-update.timer`, and later updates keep it off; `PAPERSHOW_AUTO_UPDATE=1 deploy/pi/install.sh` turns it back on (`=0` installs without it). It uses a timer, not cron, so your crontab stays as it is.
 - **Commands**: `paper:update`, `paper:status`, `paper:logs` and `paper:help` go in `/usr/local/bin`, as links to `deploy/pi/paper.sh`. A command of the same name that isn't Papershow's is left alone.
 
 ### Starting from a blank card
@@ -194,8 +194,8 @@ The install adds these commands:
 
 | Command | What it does |
 |---|---|
-| `paper:update` | Gets the latest `main` and reinstalls. If `main` hasn't changed, it stops, so the panel isn't restarted for the same picture. A local edit to a tracked file is dropped only when there is something to pull; `.env` stays. Running the [one line](#2-on-the-pi-install) again does the same. The Pi also does it on its own every night when `main` has changed (see [Updates](#what-the-install-changes-on-your-pi)). |
-| `paper:status` | Whether the server and panel are running, the version and whether it's behind, where to open Papershow, whether it updates itself and when it last checked, which keys are set, what the panel last drew, and the last health check. |
+| `paper:update` | Gets the latest release and reinstalls, or the newest commit when the Pi follows a branch. If there's nothing new, it stops, so the panel isn't restarted for the same picture. A local edit to a tracked file is dropped only when there is something to update to; `.env` stays. Running the [one line](#2-on-the-pi-install) again does the same. The Pi also does it on its own every night (see [Updates](#what-the-install-changes-on-your-pi)). |
+| `paper:status` | Whether the server and panel are running, the version (`v0.2.0` on a release, `v0.2.0+3` three commits after one) and whether a newer one is out, where to open Papershow, whether it updates itself and when it last checked, which keys are set, what the panel last drew, and the last health check. |
 | `paper:logs` | Follows the server's and the panel's logs, coloured by service, with problems in red, warnings in yellow and drawn frames in green. `paper:logs server`, `paper:logs panel`, `paper:logs update` (the nightly updates) or `paper:logs health` (the temperature every 15 minutes) for one; journalctl options go after, like `paper:logs panel -n 200`. |
 | `paper:help` | Lists these commands. |
 
