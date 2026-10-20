@@ -1,0 +1,11 @@
+# Logs how the Pi is doing every quarter hour, and a minute after boot. While the panel is asleep,
+# health.sh keeps only the one on the hour. About 80 short lines a day.
+[Unit]
+Description=Log the Pi's temperature and health every 15 minutes
+
+[Timer]
+OnBootSec=1min
+OnCalendar=*:00/15
+
+[Install]
+WantedBy=timers.target

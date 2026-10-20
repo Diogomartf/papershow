@@ -113,7 +113,7 @@ command -v gh >/dev/null || { sudo apt-get update && sudo apt-get install -y gh;
 
 When `gh auth login` asks, pick GitHub.com, HTTPS, and *Login with a web browser*, then enter the code it shows on your Mac.
 
-The script builds the web app, turns on SPI, installs the panel's Python libraries, and sets up three services that start on boot, and a nightly update:
+The script builds the web app, turns on SPI, installs the panel's Python libraries, and sets up three services that start on boot, a nightly update and a health check:
 
 | Service | What it runs |
 |---|---|
@@ -121,6 +121,7 @@ The script builds the web app, turns on SPI, installs the panel's Python librari
 | `papershow-panel` | The panel client: shows the logo, then follows `/live` and draws it. |
 | `papershow-name` | Publishes `paper.local` for the Pi on your network (`deploy/pi/name.sh`, through avahi). |
 | `papershow-update` | Run by `papershow-update.timer` every night around 4: if `main` has changed, it runs `paper:update`. |
+| `papershow-health` | Run by `papershow-health.timer` every 15 minutes, and on the hour while the panel is asleep: logs one line with the temperature, throttling, Wi-Fi signal, load and free memory (`deploy/pi/health.sh`). Lines at 75 °C or more, or when the Pi has throttled, are warnings. |
 
 The panel shows the logo, then the current frame. The script ends with "Papershow installed! Ready to use." and Papershow's address, `http://paper.local`, and it all starts again on its own after a reboot or power cut. [What the install changes on your Pi](#what-the-install-changes-on-your-pi) lists what it touches and what it leaves alone. From then on, [`paper:status`, `paper:logs` and `paper:update`](#commands-on-the-pi) check on it and update it; `paper:help` lists them.
 
@@ -178,6 +179,7 @@ It's safe to run again, and it leaves the rest of your Pi alone:
 - **Node**: it installs Node 24 only if the Pi's Node is older than 22.13, and that upgrade is system-wide. A newer Node is left alone.
 - **pnpm**: it runs pnpm 7 through `npx`, so a pnpm the Pi already has stays as it is.
 - **SPI** gets turned on. Python libraries come from apt and don't replace anything.
+- **Wi-Fi power saving** goes off, as NetworkManager's default (`/etc/NetworkManager/conf.d/papershow-wifi.conf`): with it on, the Pi drops off the network after a while until it's restarted. A Wi-Fi network you set power saving on yourself keeps that setting.
 - **Tailscale**: if the Pi already serves something through `tailscale serve`, that setup is left alone, and the script prints the command to add Papershow on port 8443.
 - **The panel**: it lists anything else that might draw on it (e-ink lines in your or root's crontab or `/etc/cron.d`, systemd units and timers, programs holding the SPI device) and removes none of them. If you used [pi-e-ink](https://github.com/Diogomartf/pi-e-ink), that's its `clean.py`, `tokens.py`, `stocks.py` and `ai_clock.py` lines. The deep clean, the 180° rotation and the night pause now live in Papershow.
 - **Data** goes in `/var/lib/papershow`, outside your checkout.
@@ -195,8 +197,8 @@ The install adds these commands:
 | Command | What it does |
 |---|---|
 | `paper:update` | Gets the latest `main` and reinstalls. If `main` hasn't changed, it stops, so the panel isn't restarted for the same picture. A local edit to a tracked file is dropped only when there is something to pull; `.env` stays. Running the [one line](#2-on-the-pi-install) again does the same. The Pi also does it on its own every night when `main` has changed (see [Updates](#what-the-install-changes-on-your-pi)). |
-| `paper:status` | Whether the server and panel are running, the version and whether it's behind, where to open Papershow, whether it updates itself and when it last checked, which keys are set, and what the panel last drew. |
-| `paper:logs` | Follows the server's and the panel's logs, coloured by service, with problems in red, warnings in yellow and drawn frames in green. `paper:logs server`, `paper:logs panel` or `paper:logs update` (the nightly updates) for one; journalctl options go after, like `paper:logs panel -n 200`. |
+| `paper:status` | Whether the server and panel are running, the version and whether it's behind, where to open Papershow, whether it updates itself and when it last checked, which keys are set, what the panel last drew, and the last health check. |
+| `paper:logs` | Follows the server's and the panel's logs, coloured by service, with problems in red, warnings in yellow and drawn frames in green. `paper:logs server`, `paper:logs panel`, `paper:logs update` (the nightly updates) or `paper:logs health` (the temperature every 15 minutes) for one; journalctl options go after, like `paper:logs panel -n 200`. |
 | `paper:help` | Lists these commands. |
 
 Installed before these commands existed? Update once the long way, which adds them:
@@ -214,7 +216,7 @@ On the Pi:
 ~/papershow/deploy/pi/uninstall.sh --purge    # deletes them too
 ```
 
-It stops and removes the three services, the nightly update, and any `systemctl edit` settings, removes the `paper:` commands, blanks the panel, and removes the Tailscale address if it serves only Papershow. Your data in `/var/lib/papershow` stays unless you pass `--purge`. Node, the Python libraries, avahi, SPI and Tailscale stay installed, because other things on the Pi may use them. The code stays in `~/papershow`; delete it yourself when you're done. The install line puts everything back.
+It stops and removes the three services, the nightly update, the health check, and any `systemctl edit` settings, removes the `paper:` commands, puts Wi-Fi power saving back to the default, blanks the panel, and removes the Tailscale address if it serves only Papershow. Your data in `/var/lib/papershow` stays unless you pass `--purge`. Node, the Python libraries, avahi, SPI and Tailscale stay installed, because other things on the Pi may use them. The code stays in `~/papershow`; delete it yourself when you're done. The install line puts everything back.
 
 To go back to pi-e-ink after uninstalling, restore its cron jobs: `crontab ~/code/pi-e-ink/e_ink_cron_jobs`.
 
