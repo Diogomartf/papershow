@@ -121,7 +121,7 @@ The script builds the web app, turns on SPI, installs the panel's Python librari
 | `papershow-panel` | The panel client: shows the logo, then follows `/live` and draws it. |
 | `papershow-name` | Publishes `paper.local` for the Pi on your network (`deploy/pi/name.sh`, through avahi). |
 | `papershow-update` | Run by `papershow-update.timer` every night around 4: if `main` has changed, it runs `paper:update`. |
-| `papershow-health` | Run by `papershow-health.timer` every 15 minutes: logs one line with the temperature, throttling, Wi-Fi signal, load and free memory (`deploy/pi/health.sh`). Lines at 75 °C or more, or when the Pi has throttled, are warnings. |
+| `papershow-health` | Run by `papershow-health.timer` every 15 minutes, and on the hour while the panel is asleep: logs one line with the temperature, throttling, Wi-Fi signal, load and free memory (`deploy/pi/health.sh`). Lines at 75 °C or more, or when the Pi has throttled, are warnings. |
 
 The panel shows the logo, then the current frame. The script ends with "Papershow installed! Ready to use." and Papershow's address, `http://paper.local`, and it all starts again on its own after a reboot or power cut. [What the install changes on your Pi](#what-the-install-changes-on-your-pi) lists what it touches and what it leaves alone. From then on, [`paper:status`, `paper:logs` and `paper:update`](#commands-on-the-pi) check on it and update it; `paper:help` lists them.
 

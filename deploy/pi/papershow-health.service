@@ -1,9 +1,10 @@
 # Logs the Pi's temperature, throttling, Wi-Fi signal, load and memory; papershow-health.timer runs it
-# every 15 minutes. install.sh fills in @USER@ and @REPO@.
+# every 15 minutes. install.sh fills in @USER@, @REPO@ and @PORT@.
 [Unit]
 Description=Papershow health check
 
 [Service]
 Type=oneshot
 User=@USER@
+Environment=PORT=@PORT@
 ExecStart=@REPO@/deploy/pi/health.sh

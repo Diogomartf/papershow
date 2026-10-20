@@ -133,7 +133,7 @@ if [ -n "$publish" ]; then
 else
   sudo systemctl disable --now papershow-name 2>/dev/null || true
 fi
-# The temperature and the rest every 15 minutes, for paper:logs health.
+# The temperature and the rest every 15 minutes (hourly at night), for paper:logs health.
 sudo systemctl enable --now papershow-health.timer
 # Not restarted: this may be the nightly update itself, running.
 if [ "$auto" = 1 ]; then
