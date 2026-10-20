@@ -146,10 +146,10 @@ else
   sudo systemctl disable --now papershow-update.timer 2>/dev/null || true
 fi
 
-# paper:update, paper:status, paper:logs and paper:help, as links to the checkout's script so they update
+# paper:update, paper:channel, paper:status, paper:logs and paper:help, as links to the checkout's script so they update
 # with it. A command of the same name that isn't ours is left alone.
 chmod +x deploy/pi/paper.sh
-for command in update status logs help; do
+for command in update channel status logs help; do
   link=/usr/local/bin/paper:$command
   if { [ -e "$link" ] || [ -L "$link" ]; } && [[ "$(readlink "$link")" != */deploy/pi/paper.sh ]]; then
     echo "$link already exists and isn't Papershow's, so it was left alone." >&2
