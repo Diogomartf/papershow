@@ -9,10 +9,10 @@ All the work happens on the server. The panel never renders anything: it downloa
 On your Raspberry Pi 5 (64-bit Raspberry Pi OS, panel attached), `ssh` in and paste this one line:
 
 ```sh
-command -v gh >/dev/null || { sudo apt-get update && sudo apt-get install -y gh; }; gh auth status >/dev/null 2>&1 || gh auth login; gh api repos/Diogomartf/papershow/contents/deploy/pi/install.sh -H "Accept: application/vnd.github.raw" | bash
+curl -fsSL https://raw.githubusercontent.com/Diogomartf/papershow/main/deploy/pi/install.sh | bash
 ```
 
-It signs in to GitHub if needed (the repo is private), installs everything, offers to set up Tailscale, and starts the panel. To update, run `paper:update` on the Pi, or the line again. It works on a fresh Pi and on one you already use for other things: see [What the install changes on your Pi](#what-the-install-changes-on-your-pi) for what it changes and what it leaves alone. The step-by-step is in [On a Raspberry Pi](#on-a-raspberry-pi).
+It installs everything, offers to set up Tailscale, and starts the panel. To update, run `paper:update` on the Pi, or the line again. It works on a fresh Pi and on one you already use for other things: see [What the install changes on your Pi](#what-the-install-changes-on-your-pi) for what it changes and what it leaves alone. The step-by-step is in [On a Raspberry Pi](#on-a-raspberry-pi).
 
 ## Where it runs
 
@@ -38,7 +38,7 @@ On a phone, use the Tailscale address even at home: it's HTTPS, which Draw needs
 |---|---|---|
 | Raspberry Pi 5, 64-bit Raspberry Pi OS (Bookworm or later) | Everything | You, with Raspberry Pi Imager |
 | Waveshare 7.5″ e-Paper V2 HAT (800×480, black and white) | The panel | You, on the GPIO header |
-| `git`, `gh` | Getting the code from the private repo | apt, by the one line |
+| `git` | Getting the code | apt, by the install, if it's missing |
 | Node 24 | The server (needs `node:sqlite`, 22.13 or later) | NodeSource apt repo, only if the Pi's Node is older |
 | pnpm 7 | Installing and building | `npx pnpm@7`, nothing installed globally |
 | `python3-pil`, `python3-spidev`, `python3-gpiozero`, `python3-lgpio` | The panel client and its SPI and GPIO on a Pi 5 | apt |
@@ -105,13 +105,11 @@ Every "On the Pi" step runs in this session.
 
 ### 2. On the Pi: install
 
-Paste this one line. It installs GitHub's `gh` if it's missing and asks you to sign in if you aren't yet (the repo is private). Then it clones the repo to `~/papershow`, installs, and offers to set up Tailscale:
+Paste this one line. It clones the repo to `~/papershow`, installs, and offers to set up Tailscale:
 
 ```sh
-command -v gh >/dev/null || { sudo apt-get update && sudo apt-get install -y gh; }; gh auth status >/dev/null 2>&1 || gh auth login; gh api repos/Diogomartf/papershow/contents/deploy/pi/install.sh -H "Accept: application/vnd.github.raw" | bash
+curl -fsSL https://raw.githubusercontent.com/Diogomartf/papershow/main/deploy/pi/install.sh | bash
 ```
-
-When `gh auth login` asks, pick GitHub.com, HTTPS, and *Login with a web browser*, then enter the code it shows on your Mac.
 
 The script builds the web app, turns on SPI, installs the panel's Python libraries, and sets up three services that start on boot, a nightly update and a health check:
 
@@ -492,3 +490,7 @@ Edits answer with the whole new state, so the UI never drifts from the server. W
 | `DB` | SQLite file (`apps/server/data/imagegen.db`). |
 
 The server reads `.env` when it starts, so restart it after changing keys.
+
+## License
+
+[MIT](LICENSE). The Waveshare driver in `apps/panel/waveshare_epd` keeps its own MIT notice.

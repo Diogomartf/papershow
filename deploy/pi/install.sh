@@ -5,7 +5,7 @@
 #
 # From a checkout:   deploy/pi/install.sh
 # Or in one line, without one: it clones the repo to ~/papershow (or updates it) and carries on.
-#   gh api repos/Diogomartf/papershow/contents/deploy/pi/install.sh -H "Accept: application/vnd.github.raw" | bash
+#   curl -fsSL https://raw.githubusercontent.com/Diogomartf/papershow/main/deploy/pi/install.sh | bash
 #
 #   PAPERSHOW_PORT=8080     if something else already uses 5194
 #   PAPERSHOW_NAME=paper    its name on the local network: http://paper.local
@@ -27,10 +27,7 @@ if [ ! -f "$here/install.sh" ] || [ ! -f "$here/../../package.json" ]; then
     git -C "$dir" reset --hard HEAD </dev/null
     git -C "$dir" switch --quiet "$branch" </dev/null
     git -C "$dir" pull --quiet --ff-only </dev/null
-  elif command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
-    gh repo clone Diogomartf/papershow "$dir" -- --branch "$branch" </dev/null
   else
-    # Works once the repo is public; until then, `gh auth login` first.
     git clone --branch "$branch" https://github.com/Diogomartf/papershow.git "$dir" </dev/null
   fi
   exec bash "$dir/deploy/pi/install.sh" </dev/null
