@@ -71,6 +71,18 @@ pnpm build
 sudo raspi-config nonint do_spi 0
 sudo apt-get install -y python3-pil python3-spidev python3-gpiozero python3-lgpio
 
+# Wi-Fi power saving off: with it on, the Pi drops off the network after a while and Papershow can't
+# be reached until it's restarted. As NetworkManager's default, so a Wi-Fi network set otherwise
+# keeps its setting. It applies from the next connect; iw turns it off for this one, without the
+# reconnect that would cut off an install run over SSH.
+if [ -d /etc/NetworkManager/conf.d ]; then
+  printf '[connection]\nwifi.powersave = 2\n' | sudo tee /etc/NetworkManager/conf.d/papershow-wifi.conf >/dev/null
+  sudo systemctl reload NetworkManager
+  for dev in $(nmcli -t -f DEVICE,TYPE device 2>/dev/null | sed -n 's/:wifi$//p'); do
+    sudo iw dev "$dev" set power_save off 2>/dev/null || true
+  done
+fi
+
 # http://paper.local: the name over mDNS (avahi, as for <hostname>.local), and port 80 so it needs no port.
 sudo apt-get install -y avahi-daemon avahi-utils
 # Port 80 only if it's free, or Papershow's own from an earlier install: a web server already there stays.
@@ -108,7 +120,7 @@ fi
 
 # Already set up means this run is an update; it changes only the last line of the output.
 [ -f /etc/systemd/system/papershow.service ] && action=updated || action=installed
-for unit in papershow.service papershow-panel.service papershow-name.service papershow-update.service papershow-update.timer; do
+for unit in papershow.service papershow-panel.service papershow-name.service papershow-update.service papershow-update.timer papershow-health.service papershow-health.timer; do
   sed -e "s|@USER@|$user|g" -e "s|@REPO@|$repo|g" -e "s|@PORT@|$port|g" -e "s|@WEB_PORT@|$web_port|g" -e "s|@NAME@|$name|g" \
     "deploy/pi/$unit" | sudo tee "/etc/systemd/system/$unit" >/dev/null
 done
@@ -121,6 +133,8 @@ if [ -n "$publish" ]; then
 else
   sudo systemctl disable --now papershow-name 2>/dev/null || true
 fi
+# The temperature and the rest every 5 minutes, for paper:logs health.
+sudo systemctl enable --now papershow-health.timer
 # Not restarted: this may be the nightly update itself, running.
 if [ "$auto" = 1 ]; then
   sudo systemctl enable --now papershow-update.timer

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Takes Papershow off the Pi: stops and removes its services (server, panel, the paper.local name
-# and the nightly update) and the paper: commands, blanks the panel, and removes its Tailscale
-# address. Your drawings and shows stay in /var/lib/papershow unless you pass --purge. Node, pnpm's
-# cache, the Python libraries, avahi, SPI and Tailscale itself stay too: other things on the Pi may
-# use them. Run deploy/pi/install.sh to put it all back.
+# Takes Papershow off the Pi: stops and removes its services (server, panel, the paper.local name,
+# the nightly update and the health check), the paper: commands and its Wi-Fi setting, blanks the
+# panel, and removes its Tailscale address. Your drawings and shows stay in /var/lib/papershow
+# unless you pass --purge. Node, pnpm's cache, the Python libraries, avahi, SPI and Tailscale itself
+# stay too: other things on the Pi may use them. Run deploy/pi/install.sh to put it all back.
 #
 #   deploy/pi/uninstall.sh            # keep the data
 #   deploy/pi/uninstall.sh --purge    # delete it as well
@@ -13,18 +13,24 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 port=$(systemctl show papershow -p Environment --value 2>/dev/null | tr ' ' '\n' | grep '^PORT=' | cut -d= -f2 || true)
 port=${port:-5194}
 
-sudo systemctl disable --now papershow-update.timer papershow-name papershow-panel papershow 2>/dev/null || true
-for unit in papershow.service papershow-panel.service papershow-name.service papershow-update.service papershow-update.timer; do
+sudo systemctl disable --now papershow-health.timer papershow-update.timer papershow-name papershow-panel papershow 2>/dev/null || true
+for unit in papershow.service papershow-panel.service papershow-name.service papershow-update.service papershow-update.timer papershow-health.service papershow-health.timer; do
   sudo rm -rf "/etc/systemd/system/$unit" "/etc/systemd/system/$unit.d"
 done
 sudo systemctl daemon-reload
-echo "Removed the papershow, papershow-panel, papershow-name and papershow-update services."
+echo "Removed the papershow, papershow-panel, papershow-name, papershow-update and papershow-health services."
 
 for name in update status logs help; do
   link=/usr/local/bin/paper:$name
   if [[ "$(readlink "$link" 2>/dev/null)" == */deploy/pi/paper.sh ]]; then sudo rm -f "$link"; fi
 done
 echo "Removed the paper: commands."
+
+if [ -f /etc/NetworkManager/conf.d/papershow-wifi.conf ]; then
+  sudo rm -f /etc/NetworkManager/conf.d/papershow-wifi.conf
+  sudo systemctl reload NetworkManager
+  echo "Wi-Fi power saving is back to the default from the next connect."
+fi
 
 # Leave the panel white rather than showing a frozen Papershow frame.
 if [ -e /dev/spidev0.0 ]; then

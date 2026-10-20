@@ -6,7 +6,7 @@
 #                          nightly timer uses). If main hasn't changed, it stops. A local edit to a
 #                          tracked file is dropped only when there is something to pull; .env stays.
 #   paper:status           what's running, which version, where to open it, what the panel last drew
-#   paper:logs [server|panel|update] [journalctl options]   follow the logs, both services by default
+#   paper:logs [server|panel|update|health] [journalctl options]   follow the logs, both services by default
 #   paper:help             list these commands
 #
 # Or call it directly: deploy/pi/paper.sh status
@@ -24,7 +24,7 @@ help() {
   cat <<'EOF'
 Papershow on this Pi:
   paper:status            what's running, which version, where to open it, what the panel last drew
-  paper:logs              follow the logs; paper:logs server, panel or update for one
+  paper:logs              follow the logs; paper:logs server, panel, update or health for one
   paper:update            get the latest main and reinstall (it also checks every night on its own)
   paper:help              this list
 EOF
@@ -113,6 +113,8 @@ case "$cmd" in
     fi
     last=$(journalctl -u papershow-panel --no-pager -o cat -g ' drew ' -n 1 2>/dev/null | sed 's/^[0-9-]* \([0-9:]*\),[0-9]* drew/\1/' || true)
     echo "Panel:    ${last:+last drew }${last:-nothing drawn yet}"
+    health=$(journalctl -u papershow-health --no-pager -o cat -n 1 2>/dev/null || true)
+    echo "Health:   ${health:-not checked yet (paper:logs health)}"
     ;;
 
   logs)
@@ -121,6 +123,7 @@ case "$cmd" in
       server) units=(-u papershow); shift ;;
       panel) units=(-u papershow-panel); shift ;;
       update) units=(-u papershow-update); shift ;;
+      health) units=(-u papershow-health); shift ;;
     esac
     # In colour on a terminal; plain when piped, or when you pick journalctl's own output format.
     if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && ! [[ " $* " =~ \ (-o|--output)[\ =] ]]; then

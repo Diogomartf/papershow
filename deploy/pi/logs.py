@@ -18,6 +18,7 @@ SERVICES = {
     "papershow-panel.service": ("panel", MAGENTA),
     "papershow-update.service": ("update", BLUE),
     "papershow-name.service": ("name", BLUE),
+    "papershow-health.service": ("health", BLUE),
 }
 BAD = re.compile(r"error|fail|traceback|exception|unreachable|refused|rejected|denied|EADDRINUSE|fatal", re.I)
 WARN = re.compile(r"warn|retrying|stand-in|unexpected|timed? ?out|skipp", re.I)
