@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import * as api from "./slides";
 import type { State } from "./slides";
+import { cue, ON_AIR } from "./sound";
 
 // One long-poll per tab, shared by every component that wants live state. Browsers allow only
 // six connections per host across all tabs, so a second poll per page soon starves the site.
@@ -10,7 +11,21 @@ let snap: Snapshot = { state: null, skew: 0 };
 const listeners = new Set<() => void>();
 let polling = false;
 
+/** Sounds for what changed: something of yours went on the panel, or someone's waiting at the door or with an ask. */
+function hear(was: State | null, now: State | null) {
+  if (!was || !now) return;
+  const pin = (s: State) => (s.live.mode === "pin" ? s.live : null);
+  const [a, b] = [pin(was), pin(now)];
+  // Every Show now in the app comes back through here, so this is the one place it sounds.
+  if (b?.by === now.me.id && (a?.source.kind !== b.source.kind || a.source.id !== b.source.id || a.until !== b.until)) cue(ON_AIR);
+  if (now.me.role === "guest") return;
+  const waiting = (s: State) => [...s.people.filter((p) => p.status === "knocking").map((p) => p.id), ...s.asks.map((x) => x.id)];
+  const before = new Set(waiting(was));
+  if (waiting(now).some((id) => !before.has(id))) cue("attention");
+}
+
 function publish(s: State | null) {
+  hear(snap.state, s);
   snap = { state: s, skew: s ? s.now - Date.now() : snap.skew };
   for (const l of listeners) l();
 }

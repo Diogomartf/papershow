@@ -3,6 +3,7 @@
 // will land, and the new order is handed over when it's let go.
 
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
+import { cue } from "./sound";
 
 type Lift = { group: string; id: string; ids: string[]; width: number; height: number; landed: boolean };
 
@@ -55,6 +56,7 @@ export function useSortable(onDrop: (group: string, ids: string[]) => Promise<un
     p.offY = p.y - r.top;
     setLift({ group: p.group, id: p.id, ids: p.ids, width: r.width, height: r.height, landed: false });
     navigator.vibrate?.(10);
+    cue("select");
   };
 
   useEffect(() => {
@@ -88,9 +90,13 @@ export function useSortable(onDrop: (group: string, ids: string[]) => Promise<un
       if (!p.live) return void (press.current = null);
       const l = liftNow.current;
       if (l && l.ids.join() !== p.ids.join()) {
+        cue(["tap", { emphasis: "strong" }]);
         setLift({ ...l, landed: true });
         onDrop(l.group, l.ids).finally(() => setLift(null));
-      } else setLift(null);
+      } else {
+        cue(["close", { emphasis: "subtle" }]);
+        setLift(null);
+      }
       // Let the click that ends a drag pass by before forgetting it, so it doesn't open the item.
       setTimeout(() => (press.current = null));
     };

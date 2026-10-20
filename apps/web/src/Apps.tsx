@@ -9,6 +9,7 @@ import type { AppInstance, AppKind, Field } from "./apps";
 import { addToShow, ask, setLive } from "./slides";
 import { mine, reason, tint, useMe } from "./house";
 import { useLiveState } from "./live";
+import { cue, DONE, type Cue } from "./sound";
 
 /** The form's state, tagged with the app it belongs to so it can never be saved onto another. */
 type Draft = { id: string; name: string; config: Record<string, unknown> };
@@ -148,13 +149,15 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
     return () => clearTimeout(t);
   }, [draft, current?.id, canChange]);
 
-  const flash = (msg: string) => {
+  /** A toast, sounding like what it reports: done unless it says otherwise. */
+  const flash = (msg: string, sound: Cue | null = DONE) => {
+    cue(sound);
     setToast(msg);
     setTimeout(() => setToast((t) => (t === msg ? null : t)), 2400);
   };
 
   /** Run `fn`; if the server says no (a limit, say), show why. */
-  const tried = (fn: () => Promise<unknown>) => () => fn().catch((e) => flash(reason(e, "That didn't work")));
+  const tried = (fn: () => Promise<unknown>) => () => fn().catch((e) => flash(reason(e, "That didn't work"), "error"));
 
   const create = tried(async () => {
     if (!kind || !draft) return;
@@ -349,7 +352,7 @@ export function Apps({ id, newKind }: { id: string | null; newKind?: string }) {
                         className="primary"
                         onClick={tried(async () => {
                           await setLive({ mode: "pin", source: { kind: "app", id: current!.id } });
-                          flash(`${draft.name} is on /live for 15 minutes`);
+                          flash(`${draft.name} is on /live for 15 minutes`, null);
                         })}
                       >
                         Show now

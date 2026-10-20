@@ -4,11 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { ROLE_NAMES, signOut, tint, useMe } from "./house";
 import { useLiveState } from "./live";
 import { navigate } from "./Nav";
+import { cue, setSound, useSound } from "./sound";
 
 export function MeMenu() {
   const { me, refresh, switchTo } = useMe();
   const { state } = useLiveState();
   const [open, setOpen] = useState(false);
+  const sound = useSound();
   const root = useRef<HTMLDivElement>(null);
 
   const self = state?.me ?? me;
@@ -23,7 +25,7 @@ export function MeMenu() {
   useEffect(() => {
     if (!open) return;
     const away = (e: PointerEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && (cue(["close", { emphasis: "subtle" }]), setOpen(false));
     addEventListener("pointerdown", away);
     addEventListener("keydown", esc);
     return () => (removeEventListener("pointerdown", away), removeEventListener("keydown", esc));
@@ -81,6 +83,11 @@ export function MeMenu() {
             </>
           )}
           <hr />
+          {/* This device's, like the lights: a shared tablet in the kitchen can stay quiet. */}
+          <button role="menuitemcheckbox" aria-checked={sound} className="me-item me-sound" data-quiet onClick={() => setSound(!sound)}>
+            Sound
+            <span className="me-sound-state">{sound ? "On" : "Off"}</span>
+          </button>
           <button role="menuitem" className="me-item" onClick={() => go("/people")}>The house</button>
           {self.role !== "guest" && <button role="menuitem" className="me-item" onClick={() => go("/log")}>Log</button>}
           <button

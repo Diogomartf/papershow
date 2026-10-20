@@ -13,6 +13,7 @@ import { People } from "./People.tsx";
 import { hello as getHello, Me, SIGNED_OUT, signOut, useMe, type Hello as HelloData } from "./house";
 import { Playlist } from "./Playlist.tsx";
 import { Show } from "./Show.tsx";
+import { cue, startSound } from "./sound.ts";
 import { Viewer } from "./Viewer.tsx";
 
 function Router() {
@@ -79,6 +80,7 @@ function Gate() {
 
   /** Just signed in: fetch the house before showing it, so it appears whole. */
   const enter = useCallback(async (h: HelloData) => {
+    cue("success");
     await loadEverything().catch(() => {});
     setHello(h);
   }, []);
@@ -102,6 +104,8 @@ function Gate() {
     </Me.Provider>
   );
 }
+
+startSound();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

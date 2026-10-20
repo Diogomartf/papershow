@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { fileUrl, getImage, type ImageMeta } from "./store";
 import { useLights } from "./theme";
 import { navigate } from "./Nav";
+import { cue } from "./sound";
 import type { Scene } from "@papershow/scene";
 
 /** Back where you came from in Papershow; opened on its own (a new tab, a shared link), home. */
-const goBack = () => (history.state?.from ? history.back() : navigate("/"));
+const goBack = () => (cue(["navigate", { direction: "back" }]), history.state?.from ? history.back() : navigate("/"));
 
 /** /i/:id — the saved image on its own, ready to look at, drag out, or download. */
 export function Viewer({ id }: { id: string }) {
@@ -35,7 +36,7 @@ export function Viewer({ id }: { id: string }) {
 
   return (
     <div className="viewer">
-      <button className="pg-big viewer-back" onClick={goBack}>
+      <button className="pg-big viewer-back" data-quiet onClick={goBack}>
         <span aria-hidden>←</span> Back
       </button>
       <img src={src} alt={image.name} width={800} height={480} />

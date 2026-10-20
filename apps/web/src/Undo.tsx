@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { cue, DONE, type Cue } from "./sound";
 
 type Toast = { msg: string; undo?: () => void };
 
-/** A status toast that can carry an Undo button for a few seconds. */
+/**
+ * A status toast that can carry an Undo button for a few seconds. It sounds like what it reports: a quiet success
+ * unless told otherwise (`"error"` when it says why something didn't work). One with an Undo is quiet: the button
+ * that took something away already made its sound.
+ */
 export function useUndoToast() {
   const [toast, setToast] = useState<Toast | null>(null);
   const timer = useRef<number | undefined>(undefined);
-  const show = useCallback((msg: string, undo?: () => void) => {
+  const show = useCallback((msg: string, undo?: () => void, sound: Cue | null = undo ? null : DONE) => {
+    cue(sound);
     clearTimeout(timer.current);
     setToast({ msg, undo });
     timer.current = window.setTimeout(() => setToast(null), undo ? 6000 : 2400);
@@ -19,7 +25,9 @@ export function useUndoToast() {
       {toast?.undo && (
         <button
           className="toast-undo"
+          data-quiet
           onClick={() => {
+            cue(["navigate", { emphasis: "subtle", direction: "back" }]);
             toast.undo!();
             setToast(null);
           }}
@@ -66,7 +74,7 @@ export function FloatingMenu({
       if (keepOpenWithin && t instanceof Element && t.closest(keepOpenWithin)) return;
       onClose();
     };
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && (cue(["close", { emphasis: "subtle" }]), onClose());
     addEventListener("pointerdown", away);
     addEventListener("keydown", esc);
     return () => {
