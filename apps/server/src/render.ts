@@ -53,6 +53,36 @@ export async function renderFrame(node: JSX.Element, mode: DitherMode = "thresho
 }
 
 /**
+ * A drawing's panel files, made from the 1-bit PNG the browser sent: what the household sees (`mono`) and what the
+ * panel draws (`bin`) come from the same pixels, so one can't be swapped for the other. Null when it isn't an
+ * 800×480 PNG.
+ */
+export function panelFiles(png: Uint8Array): { mono: Uint8Array<ArrayBuffer>; bin: Uint8Array<ArrayBuffer> } | null {
+  const { w, h } = PANEL;
+  // Check the size before decoding: a small file can claim a huge one.
+  const size = pictureSize(png);
+  if (!size || size.width !== w || size.height !== h || png[0] !== 0x89) return null;
+  let img;
+  try {
+    img = decode(png);
+  } catch {
+    return null;
+  }
+  if (img.palette || (img.depth !== 8 && img.depth !== 16)) return null;
+  const { channels, data } = img;
+  const max = img.depth === 16 ? 65535 : 255;
+  const rgba = new Uint8ClampedArray(w * h * 4);
+  for (let p = 0; p < w * h; p++) {
+    // Grey (or red, in colour), over white where it's see-through; then black or white, as the panel shows it.
+    const v = data[p * channels] / max;
+    const a = channels === 2 || channels === 4 ? data[p * channels + channels - 1] / max : 1;
+    const ink = v * a + (1 - a) >= 0.5 ? 255 : 0;
+    rgba.set([ink, ink, ink, 255], p * 4);
+  }
+  return reduce(rgba, w, h, "threshold");
+}
+
+/**
  * RGBA → 1-bit PNG + packed frame. The hot loop: if it ever matters on the Pi,
  * this is the function to move into a Rust native module.
  */
@@ -81,10 +111,49 @@ function roundedRectDistance(px: number, py: number, halfW: number, halfH: numbe
   return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
 }
 
+/** The most pixels a picture may have: resvg unpacks it whole, and a small file can claim a huge size. */
+const MAX_PIXELS = 25_000_000;
+
+/** A PNG, JPEG, GIF or WebP's size from its header, without decoding it. Null for anything else. */
+export function pictureSize(b: Uint8Array): { width: number; height: number } | null {
+  const u16be = (i: number) => (b[i] << 8) | b[i + 1];
+  const u24le = (i: number) => b[i] | (b[i + 1] << 8) | (b[i + 2] << 16);
+  const ascii = (i: number, n: number) => String.fromCharCode(...b.subarray(i, i + n));
+  if (b.length >= 24 && b[0] === 0x89 && ascii(1, 3) === "PNG") {
+    const view = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    return { width: view.getUint32(16), height: view.getUint32(20) };
+  }
+  if (b.length >= 10 && ascii(0, 4) === "GIF8") return { width: b[6] | (b[7] << 8), height: b[8] | (b[9] << 8) };
+  if (b.length >= 30 && ascii(0, 4) === "RIFF" && ascii(8, 4) === "WEBP") {
+    const chunk = ascii(12, 4);
+    if (chunk === "VP8 ") return { width: ((b[27] << 8) | b[26]) & 0x3fff, height: ((b[29] << 8) | b[28]) & 0x3fff };
+    if (chunk === "VP8L") return { width: 1 + (((b[22] & 0x3f) << 8) | b[21]), height: 1 + (((b[24] & 0x0f) << 10) | (b[23] << 2) | ((b[22] & 0xc0) >> 6)) };
+    if (chunk === "VP8X") return { width: 1 + u24le(24), height: 1 + u24le(27) };
+    return null;
+  }
+  if (b[0] === 0xff && b[1] === 0xd8) {
+    // Walk the segments to the frame header (SOFn), which holds the size.
+    let i = 2;
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) return null;
+      const marker = b[i + 1];
+      if (marker === 0xff) {
+        i++;
+        continue;
+      }
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc)
+        return { width: u16be(i + 7), height: u16be(i + 5) };
+      i += marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8) ? 2 : 2 + u16be(i + 2);
+    }
+  }
+  return null;
+}
+
 /**
  * A picture already reduced to 1 bit at the size it will be drawn, as a data URL for <img>.
  * Cropped to fill the box, then levels, contrast and edges are tuned for e-ink before dithering.
  * Dithering just the picture keeps text around it crisp: the frame itself can then use plain threshold.
+ * Throws for a picture that isn't a PNG, JPEG, GIF or WebP, or that's too big to unpack safely.
  */
 export function ditheredImage(
   bytes: Uint8Array,
@@ -92,6 +161,9 @@ export function ditheredImage(
   height = width,
   { round = false, radius, type = "image/png", ...tune }: { round?: boolean; radius?: number; type?: string } & Enhance = {},
 ) {
+  const size = pictureSize(bytes);
+  if (!size || !size.width || !size.height) throw new Error("not a picture that can be drawn");
+  if (size.width * size.height > MAX_PIXELS) throw new Error(`picture too big: ${size.width}×${size.height}`);
   // A circle is a rounded square whose corners meet: one shape covers both.
   const corner = round ? Math.min(width, height) / 2 : radius;
   const href = `data:${type};base64,${Buffer.from(bytes).toString("base64")}`;

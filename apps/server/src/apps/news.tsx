@@ -77,7 +77,11 @@ async function leadStory(paper: Paper, feed: string, photo: number | null): Prom
     const url = decode(src);
     const img = await fetch(paper.photoUrl?.(url) ?? url, { signal: AbortSignal.timeout(10_000) });
     if (img.ok)
-      image = ditheredImage(new Uint8Array(await img.arrayBuffer()), photo, photo, { type: img.headers.get("content-type") ?? "image/jpeg" });
+      try {
+        image = ditheredImage(new Uint8Array(await img.arrayBuffer()), photo, photo, { type: img.headers.get("content-type") ?? "image/jpeg" });
+      } catch {
+        // A picture that can't be drawn leaves the story without one.
+      }
   }
   return { title: tag(item, "title"), summary: tag(item, "description"), byline: names(tags(item, "dc:creator")), credit: tag(item, "media:credit"), image };
 }

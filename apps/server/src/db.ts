@@ -433,7 +433,7 @@ export function addShowEntry(blockId: string, what: { playlistId: string } | { s
 export function updateShowEntry(id: string, patch: { durationS?: number; enabled?: boolean; color?: string | null }) {
   if (patch.color !== undefined)
     db.prepare("update show set color = ? where id = ?").run((ENTRY_COLORS as readonly string[]).includes(patch.color ?? "") ? patch.color : null, id);
-  if (patch.durationS !== undefined)
+  if (typeof patch.durationS === "number" && Number.isFinite(patch.durationS))
     db.prepare("update show set duration_s = ? where id = ?").run(Math.max(1, Math.round(patch.durationS / 60)) * 60, id);
   if (patch.enabled !== undefined) db.prepare("update show set enabled = ? where id = ?").run(patch.enabled ? 1 : 0, id);
 }
@@ -582,11 +582,17 @@ export function addSlide(source: Source, playlistId: string, at?: number, durati
 export function updateSlide(id: string, patch: Partial<Omit<Slide, "id" | "source" | "position" | "playlistId">>) {
   const cols: string[] = [];
   const vals: (string | number | null)[] = [];
-  if (patch.durationS !== undefined) cols.push("duration_s = ?"), vals.push(Math.max(1, Math.round(patch.durationS / 60)) * 60);
+  // The body is whatever the request sent: anything that isn't the right shape is left as it was.
+  const time = (t: unknown) => (t === null ? null : typeof t === "string" ? (cleanTime(t) ?? undefined) : undefined);
+  if (typeof patch.durationS === "number" && Number.isFinite(patch.durationS))
+    cols.push("duration_s = ?"), vals.push(Math.max(1, Math.round(patch.durationS / 60)) * 60);
   if (patch.enabled !== undefined) cols.push("enabled = ?"), vals.push(patch.enabled ? 1 : 0);
-  if (patch.days !== undefined) cols.push("days = ?"), vals.push([...new Set(patch.days)].sort().join(""));
-  if (patch.start !== undefined) cols.push("start = ?"), vals.push(patch.start);
-  if (patch.end !== undefined) cols.push('"end" = ?'), vals.push(patch.end);
+  if (Array.isArray(patch.days) && patch.days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6))
+    cols.push("days = ?"), vals.push([...new Set(patch.days)].sort().join(""));
+  const start = time(patch.start);
+  if (start !== undefined) cols.push("start = ?"), vals.push(start);
+  const end = time(patch.end);
+  if (end !== undefined) cols.push('"end" = ?'), vals.push(end);
   if (!cols.length) return;
   db.prepare(`update slides set ${cols.join(", ")} where id = ?`).run(...vals, id);
 }
@@ -596,6 +602,13 @@ export function reorderSlides(ids: string[], transaction = true) {
   if (transaction) db.exec("begin");
   ids.forEach((id, i) => stmt.run(i, id));
   if (transaction) db.exec("commit");
+}
+
+/** Take a drawing or app out of every playlist and every block of the show. */
+export function unschedule(src: Source) {
+  const col = src.kind === "image" ? "image_id" : "app_id";
+  db.prepare(`delete from slides where ${col} = ?`).run(src.id);
+  db.prepare(`delete from show where ${col} = ?`).run(src.id);
 }
 
 export function deleteSlide(id: string) {

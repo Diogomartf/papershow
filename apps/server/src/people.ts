@@ -206,24 +206,31 @@ export const otherAdmins = (id: string) =>
   listPeople().filter((p) => p.id !== id && p.role === "admin" && p.status === "in").length;
 
 // Wrong PINs lock that person for a while, longer each time, so four digits can't be guessed
-// by trying them all. Kept in memory: a restart forgives, which is fine at home.
+// by trying them all. The lock is per person and per device (`from`, its address): someone else
+// trying your PIN can't lock you out of your own phone. Kept in memory: a restart forgives, which
+// is fine at home.
 const misses = new Map<string, { n: number; until: number }>();
 const FREE_TRIES = 5;
+/** The longest wait: one try an hour still takes over a year to go through 10,000 PINs. */
+const MAX_LOCK_MS = 3_600_000;
 
 export type SignIn = { ok: true; person: Person } | { ok: false; triesLeft: number; lockedUntil: number | null };
 
-export function signIn(id: string, secret: string[], now = Date.now()): SignIn {
+export function signIn(id: string, secret: string[], from: string, now = Date.now()): SignIn {
   const row = db.prepare("select * from people where id = ?").get(id) as (PersonRow & { secret: string }) | undefined;
-  const m = misses.get(id) ?? { n: 0, until: 0 };
+  const key = `${id}@${from}`;
+  const m = misses.get(key) ?? { n: 0, until: 0 };
   if (m.until > now) return { ok: false, triesLeft: 0, lockedUntil: m.until };
   if (row && row.status !== "out" && secretMatches(row.secret, secret)) {
-    misses.delete(id);
+    misses.delete(key);
     return { ok: true, person: toPerson(row) };
   }
   m.n++;
-  // Five free tries, then a minute's wait, doubling with every miss after that.
-  m.until = m.n >= FREE_TRIES ? now + 60_000 * 2 ** (m.n - FREE_TRIES) : 0;
-  misses.set(id, m);
+  // Five free tries, then a minute's wait, doubling with every miss after that, up to an hour.
+  m.until = m.n >= FREE_TRIES ? now + Math.min(MAX_LOCK_MS, 60_000 * 2 ** (m.n - FREE_TRIES)) : 0;
+  misses.set(key, m);
+  // Tries against made-up ids would otherwise pile up: forget the ones that aren't holding a lock.
+  if (misses.size > 10_000) for (const [k, x] of misses) if (x.until <= now && x.n < FREE_TRIES) misses.delete(k);
   return { ok: false, triesLeft: Math.max(0, FREE_TRIES - m.n), lockedUntil: m.until || null };
 }
 
@@ -340,27 +347,45 @@ export function panelInvite(now = Date.now()): Invite | undefined {
 // so one person (or a phone left in a kid's hands) can't flood the house's feed. Kept in memory, like
 // the PIN lockout: a restart forgives.
 
-/** "live": Show now and asking to show. "make": new drawings, apps and playlists, and adding to the show. */
-export type Bucket = "live" | "make";
+/**
+ * "live": Show now and asking to show. "make": new drawings, apps and playlists, and adding to the show.
+ * "preview": an app's preview as its settings are typed. Each can fetch pages or ask the AI, so it's generous
+ * (a clock's preview ticks every 15 s) but not endless.
+ */
+export type Bucket = "live" | "make" | "preview";
 
 /** Goes per hour, by role. Admins have no limit. */
 export const LIMITS: Record<Bucket, Record<Exclude<Role, "admin">, number>> = {
   live: { member: 12, guest: 4 },
   make: { member: 40, guest: 10 },
+  preview: { member: 2000, guest: 600 },
 };
 
 const HOUR = 3_600_000;
 const goes = new Map<string, number[]>();
 
-/** Spend one go of `bucket`: null when that's fine, or when the next go frees up. */
-export function spend(p: Person, bucket: Bucket, now = Date.now()): number | null {
-  if (p.role === "admin") return null;
-  const key = `${p.id}:${bucket}`;
+/** Take one of `limit` goes an hour at `key`: null when that's fine, or when the next go frees up. */
+function take(key: string, limit: number, now: number): number | null {
   const recent = (goes.get(key) ?? []).filter((t) => t > now - HOUR);
   goes.set(key, recent);
-  if (recent.length >= LIMITS[bucket][p.role]) return recent[0] + HOUR;
+  if (recent.length >= limit) return recent[0] + HOUR;
   recent.push(now);
   return null;
+}
+
+/** Spend one go of `bucket`: null when that's fine, or when the next go frees up. */
+export function spend(p: Person, bucket: Bucket, now = Date.now()): number | null {
+  return p.role === "admin" ? null : take(`${p.id}:${bucket}`, LIMITS[bucket][p.role], now);
+}
+
+/** At most this many people knocking at once, and knocks an hour from one device. */
+const KNOCKING_MAX = 20;
+const KNOCKS_PER_HOUR = 5;
+
+/** Whether someone at `from` (a device's address) may knock now. Knocking needs no one signed in. */
+export function mayKnock(from: string, now = Date.now()) {
+  const knocking = (db.prepare("select count(*) as n from people where status = 'knocking'").get() as { n: number }).n;
+  return knocking < KNOCKING_MAX && take(`knock:${from}`, KNOCKS_PER_HOUR, now) === null;
 }
 
 // ── The log ───────────────────────────────────────────────────────────────

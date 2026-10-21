@@ -5,7 +5,8 @@
 #   paper:update           get the latest release and reinstall, or the newest commit when the checkout
 #                          is on a branch (--if-newer is the same check the nightly timer uses). If
 #                          there's nothing new, it stops. A local edit to a tracked file is dropped
-#                          only when there is something to update to; .env stays.
+#                          only when there is something to update to; .env stays. A release that isn't
+#                          signed with a key in /etc/papershow/allowed_signers is refused.
 #   paper:channel [releases|main|<branch>]   what updates follow: releases (the default), or every
 #                          commit on a branch, as a dev. It switches now and reinstalls if the code changed.
 #   paper:status           what's running, which version, where to open it, what the panel last drew
@@ -41,6 +42,20 @@ on_branch() { git -C "$repo" symbolic-ref -q HEAD >/dev/null; }
 
 # The newest release: the highest vX.Y.Z tag, leaving out pre-releases like v1.0.0-rc1.
 latest() { git -C "$repo" tag -l 'v*' --sort=-v:refname | grep -v -- - | head -1 || true; }
+
+# Releases are signed, and a Pi installs only those signed with a key it already trusts: the list
+# install.sh pins in /etc/papershow on the first install. Without it, anyone who could push a tag to
+# GitHub could put code on every Pi, and the nightly update runs the install with sudo.
+signers=/etc/papershow/allowed_signers
+signed() { git -C "$repo" -c gpg.ssh.allowedSignersFile="$signers" verify-tag "$1" >/dev/null 2>&1; }
+unsigned() {
+  if [ -f "$signers" ]; then
+    echo "$1 isn't signed with a Papershow release key, so it wasn't installed. This Pi stays on $(version)." >&2
+  else
+    echo "$signers is missing, so releases can't be checked. Run $repo/deploy/pi/install.sh to put it back." >&2
+  fi
+  exit 1
+}
 
 # v0.4.0 on a release, v0.4.0+3 three commits after it, the commit alone before the first release.
 version() {
@@ -89,11 +104,12 @@ port() {
 
 case "$cmd" in
   update)
-    # Quiet for the nightly check; someone running it can see the fetch. --force, in case a tag was moved.
+    # Quiet for the nightly check; someone running it can see the fetch. No --force: releases are never moved,
+    # so a tag that changed on GitHub is refused, and the update stops there instead of installing it as root.
     if [ "${1:-}" = --if-newer ]; then
-      git -C "$repo" fetch --quiet --tags --force origin
+      git -C "$repo" fetch --quiet --tags origin
     else
-      git -C "$repo" fetch --tags --force origin
+      git -C "$repo" fetch --tags origin
     fi
     if on_branch; then
       target='@{upstream}'
@@ -109,6 +125,7 @@ case "$cmd" in
       echo "Already up to date: $(version) $(summary)"
       exit 0
     fi
+    on_branch || signed "$target" || unsigned "$target"
     drop_edits
     if on_branch; then
       git -C "$repo" pull --ff-only
@@ -126,7 +143,7 @@ case "$cmd" in
       echo "paper:channel main follows every commit on main (dev); paper:channel releases goes back."
       exit 0
     fi
-    git -C "$repo" fetch --quiet --tags --force origin
+    git -C "$repo" fetch --quiet --tags origin
     before=$(git -C "$repo" rev-parse HEAD)
     if [ "$1" = releases ]; then
       target=$(latest)
@@ -134,6 +151,7 @@ case "$cmd" in
         echo "There's no release yet, so this Pi stays on $(following)." >&2
         exit 1
       fi
+      signed "$target" || unsigned "$target"
       [ "$before" = "$(git -C "$repo" rev-parse "$target^{commit}")" ] || drop_edits
       git -C "$repo" switch --quiet --detach "$target"
     else
@@ -147,6 +165,8 @@ case "$cmd" in
       git -C "$repo" pull --quiet --ff-only
     fi
     echo "Updates now go to $(following): $(version) $(summary)"
+    # Commits on a branch aren't signed with the release key (GitHub signs its own merges), so they're taken as they are.
+    on_branch && echo "Commits on a branch aren't checked like releases: this is for trying unreleased code. paper:channel releases goes back."
     # Reinstall only if the code changed: a restart flashes the panel.
     [ "$(git -C "$repo" rev-parse HEAD)" = "$before" ] || exec "$repo/deploy/pi/install.sh"
     ;;
@@ -156,7 +176,7 @@ case "$cmd" in
     echo "Version:  $(version) ($(git -C "$repo" log -1 --format='%h, %cr'))"
     echo "          $(summary)"
     # A quick look for something newer; offline or slow, skip it.
-    if timeout 5 git -C "$repo" fetch --quiet --tags --force origin 2>/dev/null; then
+    if timeout 5 git -C "$repo" fetch --quiet --tags origin 2>/dev/null; then
       if on_branch; then
         behind=$(git -C "$repo" rev-list --count 'HEAD..@{upstream}' 2>/dev/null || echo 0)
         if [ "$behind" -gt 0 ]; then echo "          $behind commit(s) behind: run paper:update"; fi
