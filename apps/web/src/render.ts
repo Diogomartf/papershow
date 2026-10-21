@@ -1,4 +1,6 @@
 import { toSvg } from "drawesome";
+import { shortId } from "./id";
+import { takenAt } from "./exif";
 import { dither, enhance, pack1bpp, PANEL, PHOTO_FILL, photoSize, TEXT_FONT, TEXT_LINE, type Scene, type TextItem } from "@papershow/scene";
 
 const fontOf = (t: TextItem) => `${t.bold ? 700 : 450} ${t.size}px ${TEXT_FONT}`;
@@ -151,4 +153,30 @@ export async function paintMono(scene: Scene, target: HTMLCanvasElement) {
   target.width = scene.width;
   target.height = scene.height;
   target.getContext("2d")!.drawImage(mono, 0, 0);
+}
+
+/**
+ * How much of a photo the library keeps: its short side up to twice the panel's width, so cropping in close
+ * still has detail to spare. Draw keeps less, because a drawing's photo only ever fills the panel.
+ */
+const KEEP = 2 * PANEL.w;
+
+/** A photo is a scene with nothing drawn on it, so it's framed and rendered like the photo under a drawing. */
+export async function photoScene(file: File): Promise<Scene> {
+  const now = Date.now();
+  return {
+    id: shortId(),
+    name: file.name.replace(/\.[^.]+$/, "").trim() || "Photo",
+    width: PANEL.w,
+    height: PANEL.h,
+    background: "#ffffff",
+    strokes: [],
+    texts: [],
+    photo: await photoFor(file, KEEP),
+    photoAt: PHOTO_FILL,
+    // A camera's date if it wrote one; otherwise the file's, which is close for a screenshot or a saved picture.
+    takenAt: (await takenAt(file)) ?? (file.lastModified || undefined),
+    createdAt: now,
+    updatedAt: now,
+  };
 }

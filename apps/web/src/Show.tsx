@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 import { EinkImage } from "./EinkImage";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
@@ -8,6 +8,8 @@ import { useLiveState, useNow } from "./live";
 import * as api from "./slides";
 import { ENTRY_COLORS, type Block, type Days, type EntryColor, type ShowEntry, type State, type Turn } from "./slides";
 import { Grip } from "./Grip";
+import { StartParty } from "./Party";
+import { Deck, Sheet } from "./Sheet";
 import { reason } from "./house";
 import { useSortable } from "./sortable";
 import { useItems, type Item } from "./sources";
@@ -93,43 +95,12 @@ function TimeInput({ value, onSave, label }: { value: string; onSave: (t: string
   );
 }
 
-/** A bottom sheet on phones, a card in the middle on bigger screens. */
 /** On the tile playing now: a red dot, pulsing. */
 function LiveDot() {
   return (
     <span className="pg-live-dot-box" role="img" aria-label="Live" title="Live">
       <span aria-hidden />
     </span>
-  );
-}
-
-/** A playlist's first few pictures as a little pile. It fans out on hover, so you can see what else is in it. */
-function Deck({ thumbs }: { thumbs: string[] }) {
-  const cards = thumbs.slice(0, 3);
-  if (!cards.length) return <span>Empty</span>;
-  return (
-    <span className="pg-deck" data-n={cards.length}>
-      {cards.map((t, i) => <img key={i} src={t} alt="" data-i={i} />).reverse()}
-    </span>
-  );
-}
-
-function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => e.key === "Escape" && (cue("close"), onClose());
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [onClose]);
-  return (
-    <div className="pg-scrim" data-cuelume-close onClick={onClose}>
-      <div className="pg-sheet" role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
-        <div className="pg-sheet-head">
-          <h2>{title}</h2>
-          <button className="pg-close" data-cuelume-close onClick={onClose} aria-label="Close">✕</button>
-        </div>
-        {children}
-      </div>
-    </div>
   );
 }
 
@@ -150,6 +121,7 @@ export function Show() {
   const tab: Days = weekendOwn ? (picked ?? today) : "weekdays";
   const [adding, setAdding] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  const [startingParty, setStartingParty] = useState(false);
   // The bar remembers how close you last looked, on this device; two hours to start with.
   const [view, setView] = useState<View>(() => {
     try {
@@ -234,6 +206,15 @@ export function Show() {
   const prevTurn = !pinned && !resting ? (state?.previous ?? null) : null;
   const turnName = (t: Turn) => itemOf(t.source)?.name ?? "…";
   const blockOnAir = state?.block?.id ?? null;
+  const party = state?.party ?? null;
+  const partyAdded = party?.clips.filter((c) => c.addedBy).length ?? 0;
+  // The party plays when nothing beats it: not under a Show now, and not while the panel is off.
+  const partying = !!party && !pinned && !resting && !showing?.invite;
+  /** When the party ends, with the day when it isn't today. */
+  const partyEnds = (t: number) =>
+    new Date(t).toDateString() === new Date(now).toDateString()
+      ? hhmm(t)
+      : new Date(t).toLocaleString(undefined, { weekday: "long", hour: "2-digit", minute: "2-digit" });
 
   const nowTitle = away
     ? "Turned off"
@@ -341,6 +322,11 @@ export function Show() {
     api.removeFromShow(e.id).then(accept);
     toast.show(`Removed ${nameOf(e)}`, () => api.restoreShowEntry(e, index).then(accept));
   };
+  const endParty = () =>
+    api.endParty().then((s) => {
+      accept(s);
+      toast.show("Back to the program. The party's story is in the log 🎉");
+    }, refused);
   const setCheck = (patch: Partial<api.TimeCheck>) =>
     api.setTimeCheck(patch).then(accept, failed("Couldn't change the time check"));
   const setWeekend = (own: boolean) =>
@@ -474,8 +460,8 @@ export function Show() {
             </div>
             <div className="pg-now-text">
               <div className="pg-now-head">
-                <span className="pg-badge" data-kind={resting ? "rest" : outside ? "outside" : "now"}>
-                  {away ? "Off" : resting ? "Asleep" : outside ? "Outside the program" : "Live"}
+                <span className="pg-badge" data-kind={resting ? "rest" : outside ? "outside" : partying ? "party" : "now"}>
+                  {away ? "Off" : resting ? "Asleep" : outside ? "Outside the program" : partying ? "Party" : "Live"}
                 </span>
                 {left && (
                   <span className="pg-left tabular">
@@ -529,6 +515,35 @@ export function Show() {
             ),
           )}
 
+        </section>
+
+        {/* A party: its own loop in place of the program, and one tap back to it. */}
+        <section className="pg-party" data-on={!!party} aria-label="Party">
+          <span className="pg-party-mark" aria-hidden>🎉</span>
+          <div>
+            <strong>{party ? `Party on until ${partyEnds(party.endsAt)}` : "Having people over?"}</strong>
+            <small>
+              {party
+                ? `${partyAdded ? `${partyAdded} ${partyAdded === 1 ? "thing" : "things"} added so far. ` : ""}Everyone draws and adds photos on the Party page. Then the program carries on by itself.`
+                : "Give the panel to the party: start from a playlist, and everyone adds drawings and photos as it goes. It ends by morning, and the program carries on."}
+            </small>
+          </div>
+          <div className="pg-party-actions">
+            {party ? (
+              <>
+                <button className="pg-big pg-soft" onClick={() => navigate("/party")}>
+                  Open the party
+                </button>
+                <button className="pg-big pg-go" onClick={endParty}>
+                  ↩ End the party
+                </button>
+              </>
+            ) : (
+              <button className="pg-big pg-go" data-cuelume-open onClick={() => setStartingParty(true)}>
+                Start a party
+              </button>
+            )}
+          </div>
         </section>
 
         {/* The week's plan. */}
@@ -882,6 +897,8 @@ export function Show() {
           </div>
         </Sheet>
       )}
+
+      {startingParty && <StartParty onClose={() => setStartingParty(false)} />}
 
       {addingBlock && (
         <Sheet title={blocks.length === 1 ? "Add to the day" : `Add to ${partOf(addingBlock.start).toLowerCase()} at ${addingBlock.start}`} onClose={() => setAdding(null)}>

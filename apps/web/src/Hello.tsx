@@ -364,7 +364,7 @@ function Join({
   const [busy, setBusy] = useState(false);
   const [invite, setInvite] = useState<string | null>(initialInvite);
   const [host, setHost] = useState<Face | null>(null);
-  const [asGuest, setAsGuest] = useState(false);
+  const [joiningAs, setJoiningAs] = useState<house.Role>("member");
   const [typingCode, setTypingCode] = useState(false);
   const [code, setCode] = useState("");
 
@@ -372,7 +372,7 @@ function Join({
   useEffect(() => {
     if (!invite) return;
     house.inviteInfo(invite).then(
-      (i) => (setHost(i.by), setAsGuest(i.role === "guest"), setError(null)),
+      (i) => (setHost(i.by), setJoiningAs(i.role), setError(null)),
       () => (setInvite(null), setError("That invite has run out. You can still knock!")),
     );
   }, [invite]);
@@ -420,7 +420,7 @@ function Join({
         >
           {invite && host ? (
             <p className="invited">
-              <span className="face-mini" style={tint(host.color)}>{host.face}</span> {host.name} invited you{asGuest ? " as a guest" : ""}!
+              <span className="face-mini" style={tint(host.color)}>{host.face}</span> {host.name} invited you{joiningAs === "guest" ? " as a guest" : joiningAs === "party" ? " to the party 🎉" : ""}!
             </p>
           ) : null}
           <h1 className="door-title">{title}</h1>

@@ -1314,6 +1314,91 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .pg-check small { font-size: 15px; font-weight: 560; color: var(--ink-2); }
 .pg-check .segmented { justify-self: start; margin-top: 6px; }
 .pg-check[data-off="true"] .pg-thumb { opacity: 0.45; }
+/* A party: a card between what's on and the week, bright while one is on, with the way back to the program. */
+.pg-party {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px;
+  margin-bottom: 36px; padding: 14px 18px;
+  border-radius: 20px; background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
+}
+.pg-party[data-on="true"] { background: color-mix(in oklch, var(--c-pink) 45%, var(--surface)); box-shadow: 0 0 0 2px var(--c-pink); }
+.pg-party-mark { font-size: 40px; line-height: 1; }
+.pg-party > div:not(.pg-party-actions) { display: grid; gap: 4px; }
+.pg-party strong { font-size: 18px; font-weight: 700; }
+.pg-party small { font-size: 15px; font-weight: 560; color: var(--ink-2); text-wrap: pretty; }
+.pg-party-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: end; }
+.pg-badge[data-kind="party"] { background: var(--c-pink); color: var(--ink); }
+.pg-badge[data-kind="party"]::before { content: "🎉"; letter-spacing: 0; }
+.pg-pick .pg-tile[aria-checked="true"] { box-shadow: 0 0 0 3px var(--ink), 0 8px 20px -16px var(--drop); }
+.pg-party-lengths { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pg-party-lengths button { display: grid; place-content: center; gap: 2px; padding: 6px; }
+.pg-party-lengths small { font-size: 13px; font-weight: 600; opacity: .75; }
+/* The Party page: what's on, the big ways in (draw, photos), and the loop coming up. */
+.party > section { margin-bottom: 28px; }
+.party h2 { margin: 0 0 12px; font-size: 24px; font-weight: 720; letter-spacing: -0.015em; }
+.party-hero {
+  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 20px; align-items: center;
+  padding: 14px; border-radius: var(--pg-r); background: color-mix(in oklch, var(--c-pink) 35%, var(--surface));
+  box-shadow: 0 0 0 2px var(--c-pink), 0 16px 36px -20px var(--drop);
+}
+.party-hero-text { display: grid; gap: 8px; justify-items: start; }
+.party-hero h1 { margin: 0; font-size: 32px; font-weight: 720; letter-spacing: -0.025em; line-height: 1.1; text-wrap: balance; }
+.party-who { margin: 0; font-size: 17px; font-weight: 600; color: var(--ink-2); }
+.party-hero .pg-quiet { margin: 0; }
+.party-hero .pg-row { justify-self: stretch; margin-top: 6px; }
+.party-add { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.party-add .pg-big { min-height: 76px; font-size: 21px; }
+.party-loop ol, .party-past ul, .party-story { list-style: none; margin: 0; padding: 0; }
+.party-loop ol { display: grid; gap: 8px; }
+.party-loop li {
+  display: grid; grid-template-columns: 96px minmax(0, 1fr) auto auto; align-items: center; gap: 14px;
+  padding: 8px 12px 8px 8px; border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px var(--line);
+}
+.party-loop li[data-on="true"] { box-shadow: 0 0 0 3px var(--c-pink); }
+.party-loop img { width: 96px; aspect-ratio: 5 / 3; border-radius: 10px; background: var(--paper); filter: var(--dim); }
+.party-loop li > div { display: grid; gap: 2px; min-width: 0; }
+.party-loop strong { font-size: 17px; font-weight: 680; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.party-loop small { font-size: 14px; font-weight: 560; color: var(--ink-2); }
+.party-at { font-size: 16px; font-weight: 680; color: var(--ink-2); }
+.party-remove {
+  display: grid; place-items: center; width: 36px; height: 36px; padding: 0;
+  border: 0; border-radius: 50%; background: transparent; color: var(--ink-3);
+  transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+.party-remove:hover { background: var(--danger-tint); color: var(--danger); }
+.party-again {
+  min-height: 40px; padding: 0 14px; border: 0; border-radius: 12px;
+  background: var(--tint); color: var(--ink); font: inherit; font-size: 15px; font-weight: 680; white-space: nowrap;
+  transition: transform 160ms var(--ease-out), background-color 120ms ease-out;
+}
+.party-again:hover { background: color-mix(in srgb, var(--tint) 100%, var(--ink) 8%); }
+.party-again:active { transform: scale(0.96); }
+.party-earlier li { opacity: .9; }
+.party-loop .party-cover-empty { width: 96px; font-size: 20px; }
+.party-all { margin-top: 8px; }
+.party-loop li[data-on="true"] .party-at { color: var(--on-air); }
+.party-off { display: grid; justify-items: center; gap: 10px; padding: 48px 16px; text-align: center; }
+.party-off h1 { margin: 0; font-size: 30px; font-weight: 720; letter-spacing: -0.02em; }
+.party-off .pg-quiet { max-width: 46ch; margin: 0; }
+.party-past ul, .party-story { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.party-past a, .party-story li {
+  display: grid; gap: 6px; padding: 10px 10px 12px; border-radius: 18px;
+  background: var(--surface); color: var(--ink); text-decoration: none; box-shadow: 0 0 0 1px var(--line);
+}
+.party-past a:hover { box-shadow: 0 0 0 2px var(--ink-3); }
+.party-past img, .party-story img, .party-cover-empty {
+  width: 100%; aspect-ratio: 5 / 3; border-radius: 12px; background: var(--paper); filter: var(--dim);
+}
+.party-cover-empty { display: grid; place-items: center; font-size: 36px; }
+.party-past strong, .party-story strong { font-size: 16px; font-weight: 700; }
+.party-past small, .party-story small { font-size: 14px; font-weight: 560; color: var(--ink-2); }
+.party-story li[data-own="true"] { box-shadow: 0 0 0 2px var(--c-pink); }
+.party-story li[data-gone="true"] { opacity: .5; }
+.party-story-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: center; margin-top: 12px; }
+.party-story-head h1 { margin: 0; font-size: 30px; font-weight: 720; letter-spacing: -0.02em; }
+.party-story-head .pg-quiet { margin: 4px 0; }
+.party-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 17px; }
+.party-faces { display: inline-flex; gap: 2px; margin-left: 8px; }
 .pg-blocks-head { display: grid; gap: 4px; margin-bottom: 14px; }
 .pg-blocks-head h3 { margin: 0; font-size: 22px; font-weight: 720; letter-spacing: -0.015em; }
 .pg-blocks-head p { margin: 0; font-size: 16px; font-weight: 560; color: var(--ink-2); }
@@ -1527,6 +1612,15 @@ a.live-link:hover .live-link-text { color: var(--ink); }
   .pg-time { font-size: 30px; }
   .pg-tiles, .pg-pick { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .pg-lengths { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pg-party-lengths { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .party-hero { grid-template-columns: 1fr; }
+  .party-hero h1 { font-size: 26px; }
+  .party-loop li { grid-template-columns: 72px minmax(0, 1fr) auto auto; gap: 10px; }
+  .party-loop img { width: 72px; }
+  .party-past ul, .party-story { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .pg-party { grid-template-columns: auto minmax(0, 1fr); margin-bottom: 28px; }
+  .pg-party-actions { grid-column: 1 / -1; justify-content: stretch; }
+  .pg-party-actions .pg-big { flex: 1; }
   .pg-scrim { place-items: end stretch; padding: 0; }
   .pg-sheet { width: 100%; border-radius: 26px 26px 0 0; max-height: 88dvh; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
 }

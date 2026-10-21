@@ -104,7 +104,9 @@ export function People() {
                   ? "👑 Admin: you let people in"
                   : self.role === "guest"
                     ? "Guest: you draw and make apps, and ask before something goes on the panel"
-                    : "Household"}
+                    : self.role === "party"
+                      ? "Party: what you draw and add goes straight into the party"
+                      : "Household"}
               </span>
             </div>
             <div className="you-actions">
@@ -229,7 +231,7 @@ function PersonTile({ p, now }: { p: Person; now: number }) {
         {p.role === "admin" && <span title="Admin"> 👑</span>}
       </strong>
       <span className="muted">
-        {p.role === "guest" ? "Guest · " : ""}
+        {p.role === "guest" ? "Guest · " : p.role === "party" ? "Party · " : ""}
         {around ? "Around now" : p.seenAt ? `Seen ${when(p.seenAt, now)}` : "Not seen yet"}
       </span>
     </div>
@@ -321,7 +323,7 @@ function InviteSheet({
   onClose,
 }: {
   invite: Invite;
-  onRole: (role: "member" | "guest") => void;
+  onRole: (role: house.InviteRole) => void;
   onPanel: (on: boolean) => void;
   onClose: () => void;
 }) {
@@ -340,16 +342,18 @@ function InviteSheet({
       <div className="invite-sheet" role="dialog" aria-label="Invite someone">
         <h2>Come in! 🎟️</h2>
         <div className="segmented invite-role" role="radiogroup" aria-label="Joins as">
-          {(["member", "guest"] as const).map((r) => (
+          {(["member", "guest", "party"] as const).map((r) => (
             <button key={r} role="radio" aria-checked={invite.role === r} onClick={() => invite.role !== r && onRole(r)}>
-              {r === "member" ? "Household" : "Guest"}
+              {house.ROLE_NAMES[r]}
             </button>
           ))}
         </div>
         <p className="muted">
           {invite.role === "guest"
             ? "Joins as a guest: draws and makes apps, and asks before anything goes on the panel."
-            : "Joins the household: makes things and runs the show."}{" "}
+            : invite.role === "party"
+              ? "Joins the party: draws and adds photos straight into it, and sees nothing else of the house."
+              : "Joins the household: makes things and runs the show."}{" "}
           Scan with a phone's camera, on the home Wi-Fi.
         </p>
         {left > 0 ? (
@@ -394,9 +398,12 @@ function InviteSheet({
 function LogThumb({ item }: { item: unknown }) {
   const [gone, setGone] = useState(false);
   const it = item as { kind?: string; id?: string; name?: string } | undefined;
-  if (gone || !it?.id || (it.kind !== "image" && it.kind !== "app")) return null;
-  const href = it.kind === "image" ? `/i/${it.id}` : `/apps/${it.id}`;
-  const src = it.kind === "image" ? `/api/images/${it.id}/mono.png` : `/api/apps/${it.id}/mono.png`;
+  const cover = (item as { cover?: string | null } | undefined)?.cover;
+  if (gone || !it?.id || (it.kind !== "image" && it.kind !== "app" && it.kind !== "party")) return null;
+  // A party opens as its story, with a picture from it.
+  if (it.kind === "party" && !cover) return null;
+  const href = it.kind === "party" ? `/parties/${it.id}` : it.kind === "image" ? `/i/${it.id}` : `/apps/${it.id}`;
+  const src = it.kind === "party" ? `/api/images/${cover}/mono.png` : it.kind === "image" ? `/api/images/${it.id}/mono.png` : `/api/apps/${it.id}/mono.png`;
   return (
     <a
       className="log-thumb"

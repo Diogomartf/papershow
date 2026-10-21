@@ -11,7 +11,8 @@ import { Manage } from "./Manage.tsx";
 import { navigate } from "./Nav.tsx";
 import { People } from "./People.tsx";
 import { Photos } from "./Photos.tsx";
-import { hello as getHello, Me, SIGNED_OUT, signOut, useMe, type Hello as HelloData } from "./house";
+import { hello as getHello, Me, SIGNED_OUT, signOut, useMe, visiting, type Hello as HelloData } from "./house";
+import { Party, PartyStory } from "./Party.tsx";
 import { Playlist } from "./Playlist.tsx";
 import { Show } from "./Show.tsx";
 import { cue, startSound } from "./sound.ts";
@@ -19,7 +20,8 @@ import { Viewer } from "./Viewer.tsx";
 
 function Router() {
   const [path, setPath] = useState(location.pathname);
-  const guest = useMe().me.role === "guest";
+  const { me } = useMe();
+  const guest = visiting(me);
   useEffect(() => {
     const onPop = () => setPath(location.pathname);
     addEventListener("popstate", onPop);
@@ -31,12 +33,19 @@ function Router() {
     if (path.startsWith("/join/")) navigate("/");
   }, [path]);
 
-  // The show, the playlists and the log are the household's: a guest lands on the Dashboard.
-  const offLimits = guest && /^\/(show|library|playlists?|slides|log)\b/.test(path);
+  // The show, the playlists and the log are the household's: a guest lands on the Dashboard. A party guest is at
+  // the party and nowhere else: the Party page, drawing for it, and their own profile.
+  const partyGuest = me.role === "party";
+  const offLimits = partyGuest ? !/^\/(party|parties|draw|people)\b/.test(path) || path.startsWith("/people/manage") : guest && /^\/(show|library|playlists?|slides|log)\b/.test(path);
+  const home = partyGuest ? "/party" : "/";
   useEffect(() => {
-    if (offLimits) history.replaceState(null, "", "/");
-  }, [offLimits]);
-  if (offLimits) return <Dashboard />;
+    if (offLimits) history.replaceState(null, "", home);
+  }, [offLimits, home]);
+  if (offLimits) return partyGuest ? <Party /> : <Dashboard />;
+
+  const story = path.match(/^\/parties\/([\w-]+)/);
+  if (story) return <PartyStory id={story[1]} />;
+  if (path.startsWith("/part")) return <Party />;
 
   const viewing = path.match(/^\/i\/([\w-]+)/);
   if (viewing) return <Viewer id={viewing[1]} />;

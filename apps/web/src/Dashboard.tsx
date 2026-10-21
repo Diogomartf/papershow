@@ -63,6 +63,9 @@ export function Dashboard() {
   const pinnedUntil = state?.live.mode === "pin" ? (state.live.until ?? null) : null;
   // A Show now or a drawing sent from Draw: on the panel, but not from the program.
   const outside = pinned && !resting && !showing?.invite;
+  // A party plays one playlist in place of the program, until it ends or someone ends it.
+  const party = state?.party ?? null;
+  const partying = !!party && !pinned && !resting && !showing?.invite;
   const onAir = itemOf(showing?.source);
   const playlistName = (id: string | null) => (id ? (state?.playlists.find((p) => p.id === id)?.name ?? "") : "In the show");
   const seq = state?.sequence ?? [];
@@ -104,7 +107,7 @@ export function Dashboard() {
             </div>
             <div className="dash-caption">
               <span className="on-air" data-on={!!showing && !resting} data-asleep={resting} data-outside={outside}>
-                {away ? "Off" : resting ? "Asleep" : outside ? "Outside the program" : showing ? "On air" : "Off air"}
+                {away ? "Off" : resting ? "Asleep" : outside ? "Outside the program" : partying ? "🎉 Party" : showing ? "On air" : "Off air"}
               </span>
               <h1>
                 {away ? "Turned off" : resting ? "Good night" : showing?.invite ? "Invite" : onAir?.name ?? (showing ? "…" : "Nothing showing")}
@@ -131,6 +134,19 @@ export function Dashboard() {
                   <>
                     {" · "}
                     <button className="link" onClick={() => setLive({ mode: "rotate" }).then(accept)}>Resume now</button>
+                  </>
+                )}
+                {partying && (
+                  <>
+                    {` · party until ${hhmm(party.endsAt)}`}
+                    {!guest && (
+                      <>
+                        {" · "}
+                        <button className="link" onClick={() => api.endParty().then(accept, (e) => toast.show(reason(e, "That didn't work"), undefined, "error"))}>
+                          End the party
+                        </button>
+                      </>
+                    )}
                   </>
                 )}
               </p>
@@ -190,6 +206,11 @@ export function Dashboard() {
                       <button className="ghost" onClick={() => house.updatePerson(p.id, { status: "in", role: "guest" }).then((s) => accept(s as api.State))}>
                         As a guest
                       </button>
+                      {party && (
+                        <button className="ghost" onClick={() => house.updatePerson(p.id, { status: "in", role: "party" }).then((s) => accept(s as api.State))}>
+                          To the party
+                        </button>
+                      )}
                       <button className="ghost" onClick={() => house.notNow(p.id).then((s) => accept(s as api.State))}>
                         Not now
                       </button>

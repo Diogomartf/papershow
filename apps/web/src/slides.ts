@@ -2,6 +2,7 @@
 // Every mutation answers with the whole new state, so the UI never drifts.
 
 import { Oops, signedOut, type LogEntry, type Person } from "./house";
+import type { Scene } from "@papershow/scene";
 import type { Source } from "./sources";
 
 export type Slide = {
@@ -76,6 +77,29 @@ export function pinnedBy(live: Live, people: Person[], me?: Person | null): stri
   return `${who ? `${how} by ${who}` : how}${ok ? `, ${ok} said yes` : ""}`;
 }
 
+/** One thing in a party's loop. `addedBy` is null for what came from the playlist it started with; `own` when it was made there. */
+export type PartyClip = { id: string; partyId: string; position: number; source: Source; durationS: number; addedBy: string | null; addedAt: number; name: string; own: boolean };
+
+/** A turn that went on air at a party: which clip, what it showed, who added it, and whether it's still there. */
+export type PartyPlay = { clipId: string; source: Source; at: number; name: string; addedBy: string | null; gone: boolean };
+
+/** A party: its own loop in place of the program until `endsAt`, starting from a copy of `playlistId`. */
+export type Party = {
+  id: string;
+  playlistId: string | null;
+  startedAt: number;
+  endsAt: number;
+  endedAt: number | null;
+  startedBy: string | null;
+  clips: PartyClip[];
+  /** What's been on so far, newest first. */
+  played: PartyPlay[];
+};
+
+/** A party that's over, as its story: how many things people added, how many were made there, by whom. */
+export type PartySummary = Omit<Party, "clips" | "played"> & { things: number; made: number; people: string[]; cover: string | null };
+export type PartyStory = PartySummary & { playlist: string | null; clips: (PartyClip & { gone: boolean })[]; played: PartyPlay[] };
+
 /** A guest asked for something to go on the panel; it waits for someone in the household to say yes. */
 export type Ask = { id: string; by: string; source: Source; forS: number; via: "draw" | null; at: number };
 
@@ -114,6 +138,8 @@ export type State = {
     invite: string | null;
   } | null;
   sleep: Sleep;
+  /** A party going on, or null. */
+  party: Party | null;
   slides: Slide[];
   playlists: Playlist[];
   show: ShowEntry[];
@@ -166,6 +192,43 @@ export const ask = (source: Source, forS?: number, from?: "draw") => call("/api/
 export const sayYes = (id: string) => call(`/api/asks/${id}/yes`, "POST");
 /** Not now, or, for the guest who asked, take it back. */
 export const dropAsk = (id: string) => call(`/api/asks/${id}`, "DELETE");
+/** Start a party from a copy of `playlistId` (or nothing), until `until`; while one is on, move its end. The server keeps it to the next morning. */
+export const startParty = (playlistId: string | null, until: number) => call("/api/party", "PUT", { playlistId, until });
+/** Something of the house's into the party, to play next. */
+export const addToParty = (source: Source) => call("/api/party/clips", "POST", { source });
+/** Play something from the party again, next. */
+export const playAgain = (clipId: string) => call(`/api/party/clips/${clipId}/next`, "POST");
+/** Take something out of the party; what was made there goes with it. */
+export const removeFromParty = (clipId: string) => call(`/api/party/clips/${clipId}`, "DELETE");
+
+/** A drawing or photo made at the party: kept with it, out of the house's library, and played next the first time. */
+export function putPartyImage(scene: Scene, files: { png: Blob; mono: Blob; bin: Blob }, photo = false) {
+  const form = new FormData();
+  form.set("scene", JSON.stringify(scene));
+  form.set("png", files.png);
+  form.set("mono", files.mono);
+  form.set("bin", files.bin);
+  if (photo) form.set("photo", "1");
+  return fetch(`/api/party/images/${scene.id}`, { method: "PUT", body: form }).then(async (res) => {
+    if (res.status === 401) signedOut();
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Oops(json.error ?? `PUT party image → ${res.status}`, res.status, json);
+    return json as State;
+  });
+}
+
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(path);
+  if (res.status === 401) signedOut();
+  if (!res.ok) throw new Oops(`GET ${path} → ${res.status}`, res.status, {});
+  return res.json();
+}
+/** Parties that are over, newest first. */
+export const listParties = () => get<PartySummary[]>("/api/parties");
+/** One party's whole story. */
+export const getPartyStory = (id: string) => get<PartyStory>(`/api/parties/${id}`);
+/** End the party: the program carries on where it would be. */
+export const endParty = () => call("/api/party", "DELETE");
 export const setSleep = (patch: Partial<Sleep>) => call("/api/sleep", "PUT", patch);
 
 /** New playlists join the end of the show unless `show` is false. */
