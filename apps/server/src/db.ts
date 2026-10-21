@@ -145,24 +145,28 @@ for (const table of ["images", "apps", "playlists"])
   if (!(db.prepare(`pragma table_info(${table})`).all() as { name: string }[]).some((c) => c.name === "made_by"))
     db.exec(`alter table ${table} add column made_by text`);
 
+// A saved image is a drawing (from Draw) or a photo (from Photos: a picture, framed for the panel, with nothing drawn on it).
+if (!(db.prepare("pragma table_info(images)").all() as { name: string }[]).some((c) => c.name === "kind"))
+  db.exec("alter table images add column kind text not null default 'drawing'");
+
 /** The first person in the house becomes the maker of everything made before there were people. */
 export function claimAll(personId: string) {
   for (const table of ["images", "apps", "playlists"]) db.prepare(`update ${table} set made_by = ? where made_by is null`).run(personId);
 }
 
-export type ImageMeta = { id: string; name: string; updatedAt: number; madeBy: string | null };
+/** What a saved image is: a drawing, or a photo in the Photos library. */
+export type ImageType = "drawing" | "photo";
+export type ImageMeta = { id: string; name: string; updatedAt: number; madeBy: string | null; kind: ImageType };
 export type ImageKind = "png" | "mono" | "bin";
 
+const META = "select id, name, updated_at as updatedAt, made_by as madeBy, kind from images";
+
 export function listImages(): ImageMeta[] {
-  return db
-    .prepare("select id, name, updated_at as updatedAt, made_by as madeBy from images order by updated_at desc")
-    .all() as ImageMeta[];
+  return db.prepare(`${META} order by updated_at desc`).all() as ImageMeta[];
 }
 
 export function getImageMeta(id: string): ImageMeta | undefined {
-  return db.prepare("select id, name, updated_at as updatedAt, made_by as madeBy from images where id = ?").get(id) as
-    | ImageMeta
-    | undefined;
+  return db.prepare(`${META} where id = ?`).get(id) as ImageMeta | undefined;
 }
 
 export function getScene(id: string): Scene | undefined {
@@ -177,13 +181,16 @@ export function getImageFile(id: string, kind: ImageKind) {
     | undefined;
 }
 
-/** Save a drawing. `madeBy` is kept from the first save: redrawing someone's drawing doesn't make it yours. */
-export function putImage(scene: Scene, files: Record<ImageKind, Uint8Array>, madeBy: string) {
+/**
+ * Save a drawing or a photo. `madeBy` and `kind` are kept from the first save: redrawing someone's drawing doesn't
+ * make it yours, and a photo stays a photo.
+ */
+export function putImage(scene: Scene, files: Record<ImageKind, Uint8Array>, madeBy: string, kind: ImageType = "drawing") {
   db.prepare(
-    `insert into images (id, name, scene, png, mono, bin, updated_at, made_by) values (?, ?, ?, ?, ?, ?, ?, ?)
+    `insert into images (id, name, scene, png, mono, bin, updated_at, made_by, kind) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
      on conflict(id) do update set name = excluded.name, scene = excluded.scene, png = excluded.png,
        mono = excluded.mono, bin = excluded.bin, updated_at = excluded.updated_at`,
-  ).run(scene.id, scene.name, JSON.stringify(scene), files.png, files.mono, files.bin, scene.updatedAt, madeBy);
+  ).run(scene.id, scene.name, JSON.stringify(scene), files.png, files.mono, files.bin, scene.updatedAt, madeBy, kind);
 }
 
 export function deleteImage(id: string) {

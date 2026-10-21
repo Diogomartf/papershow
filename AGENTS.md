@@ -65,7 +65,7 @@ import { defineApp, sheet } from "./types.ts";
 export default defineApp({
   kind: "weather",                    // unique and stable: saved instances refer to it
   name: "Weather",
-  category: "news",                   // "clock" | "ai" | "news" | "markets": where it's listed under New app
+  category: "news",                   // "clock" | "ai" | "news" | "markets" | "photos": where it's listed under New app
   description: "Today's forecast for one city.",
   source: "Open-Meteo",               // shown in the app's settings as "from Open-Meteo"
   defaults: { city: "Lisbon", metric: true },

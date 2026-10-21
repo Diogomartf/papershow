@@ -1,7 +1,7 @@
 import * as store from "../db.ts";
 import { doodleImage, inkBox } from "../render.ts";
 import { Kicker, textWidth } from "./fit.tsx";
-import { clockParts, defineApp, sheet, type Field } from "./types.ts";
+import { clockParts, defineApp, random, sheet, type Field } from "./types.ts";
 
 // XL runs the time edge to edge; Large fills the panel with room around it; the others leave more.
 const SCALE = { small: 0.55, medium: 0.78, large: 1, xl: 1.32 } as const;
@@ -24,18 +24,6 @@ const SHUFFLE = { minute: 60_000, hour: 60 * 60_000, day: 24 * 60 * 60_000 } as 
 
 type Box = { x: number; y: number; w: number; h: number };
 type Doodle = { src: string; width: number; height: number; x: number; y: number; turn: number };
-
-/** A repeatable random sequence from a string: the same minute gives the same doodles to everyone asking. */
-function random(seed: string) {
-  let a = 0;
-  for (const c of seed) a = (Math.imul(a ^ c.charCodeAt(0), 2654435761) + 1) | 0;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 /**
  * The free space around the time: the corners above and below it, and the sides. Sized from the time's rough
@@ -145,7 +133,7 @@ export default defineApp({
         key: "doodles",
         label: "Doodles",
         type: "picks",
-        options: store.listImages().map((i) => ({ value: i.id, label: i.name || "Untitled" })),
+        options: store.listImages().filter((i) => i.kind === "drawing").map((i) => ({ value: i.id, label: i.name || "Untitled" })),
         hint: "Pick as many as you like: each shuffle shows a few of them at random. Medium leaves the most room; XL none.",
       },
       {

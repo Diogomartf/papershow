@@ -442,19 +442,24 @@ function Picks({
   onChange: (v: string[]) => void;
 }) {
   const full = field.max !== undefined && value.length >= field.max;
+  // Pictures are told apart by looking at them: a grid of thumbnails instead of names.
+  const thumbs = field.options.some((o) => o.thumb);
   return (
-    <div className="picks" id={id} role="group">
+    <div className="picks" data-thumbs={thumbs || undefined} id={id} role="group">
       {field.options.map((o) => {
         const on = value.includes(o.value);
         return (
           <button
             key={o.value}
             aria-pressed={on}
+            aria-label={o.thumb ? o.label : undefined}
+            title={o.thumb ? o.label : undefined}
             disabled={!on && full}
             onClick={() => onChange(on ? value.filter((v) => v !== o.value) : [...value, o.value])}
           >
+            {o.thumb && <img src={o.thumb} alt="" loading="lazy" />}
             {on && <span className="pick-n">{value.indexOf(o.value) + 1}</span>}
-            {o.label}
+            {!o.thumb && o.label}
           </button>
         );
       })}

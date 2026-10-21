@@ -45,7 +45,8 @@ export function PhotoLayer({
   at: PhotoAt;
   onChange: (at: PhotoAt) => void;
   active: boolean;
-  onDone: () => void;
+  /** Back to drawing. Without it there's no Done: the photo is all there is to move. */
+  onDone?: () => void;
   /** The e-ink preview shows the photo dithered instead. */
   hidden: boolean;
 }) {
@@ -237,7 +238,7 @@ export function PhotoLayer({
             >
               {whole ? "Fill" : "Whole"}
             </button>
-            <button className="photo-done" onClick={onDone}>Done</button>
+            {onDone && <button className="photo-done" onClick={onDone}>Done</button>}
           </div>
         )}
       </div>

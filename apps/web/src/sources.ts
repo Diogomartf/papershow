@@ -1,4 +1,4 @@
-// A playlist item shows a source: a drawing from Draw, or an app instance.
+// A playlist item shows a source: a drawing from Draw, a photo, or an app instance.
 // This gives both the same shape so the playlist doesn't care which it is.
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { appFrameUrl, getCatalog, listApps, type AppKind } from "./apps";
@@ -41,7 +41,7 @@ export async function loadItems() {
         key: `image:${i.id}`,
         name: i.name,
         thumb: fileUrl(i),
-        label: "Drawing",
+        label: i.kind === "photo" ? "Photo" : "Drawing",
       })),
     ],
   };

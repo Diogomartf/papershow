@@ -24,7 +24,8 @@ export function Gallery({ open, refreshKey, currentId, onClose, onOpen, showFor,
   const everyone = useLiveState().state?.people ?? [];
 
   useEffect(() => {
-    if (open) listImages().then(setItems, () => setItems([]));
+    // Photos have their own page; this is what was drawn.
+    if (open) listImages().then((xs) => setItems(xs.filter((x) => x.kind !== "photo")), () => setItems([]));
   }, [open, refreshKey]);
 
   useEffect(() => {

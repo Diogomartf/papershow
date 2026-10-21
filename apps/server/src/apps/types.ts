@@ -9,11 +9,11 @@ export type Field =
   | { key: string; label: string; type: "select"; options: { value: string; label: string }[]; hint?: string }
   /** Comma-separated in the form, an array in the config. */
   | { key: string; label: string; type: "list"; placeholder?: string; hint?: string }
-  /** Tap to pick several of `options`, kept in the order picked; an array in the config. */
-  | { key: string; label: string; type: "picks"; options: { value: string; label: string }[]; max?: number; hint?: string };
+  /** Tap to pick several of `options`, kept in the order picked; an array in the config. `thumb`: a picture to tap instead of the label. */
+  | { key: string; label: string; type: "picks"; options: { value: string; label: string; thumb?: string }[]; max?: number; hint?: string };
 
 /** Where an app is listed when you add one. */
-export type Category = "clock" | "ai" | "news" | "markets";
+export type Category = "clock" | "ai" | "news" | "markets" | "photos";
 
 export type AppDef<C extends Record<string, unknown>, D> = {
   kind: string;
@@ -99,6 +99,18 @@ export function wobble(seed: string, t: number) {
   for (const c of seed) h = (h * 31 + c.charCodeAt(0)) | 0;
   const p = (h % 1000) / 1000;
   return (Math.sin(t / 7 + p * 6.28) * 0.6 + Math.sin(t / 2.3 + p * 12.1) * 0.3 + Math.sin(t / 0.9 + p * 3.7) * 0.1);
+}
+
+/** A repeatable random sequence from a string: the same seed gives the same numbers to everyone asking. */
+export function random(seed: string) {
+  let a = 0;
+  for (const c of seed) a = (Math.imul(a ^ c.charCodeAt(0), 2654435761) + 1) | 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 export const money = (n: number, currency = "USD") =>

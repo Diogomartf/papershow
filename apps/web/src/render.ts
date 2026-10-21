@@ -89,12 +89,12 @@ async function sceneToCanvas(scene: Scene, mono = false): Promise<HTMLCanvasElem
 }
 
 /**
- * A picked photo, whole, small enough to keep in the scene: its short side at most the panel's width,
- * which fills the panel whichever way it's turned.
+ * A picked photo, whole, small enough to keep in the scene: its short side at most `short` (the panel's width,
+ * which fills the panel whichever way it's turned), its long side at most three times that.
  */
-export async function photoFor(file: Blob): Promise<string> {
+export async function photoFor(file: Blob, short: number = PANEL.w): Promise<string> {
   const bmp = await createImageBitmap(file);
-  const k = Math.min(1, PANEL.w / Math.min(bmp.width, bmp.height), (3 * PANEL.w) / Math.max(bmp.width, bmp.height));
+  const k = Math.min(1, short / Math.min(bmp.width, bmp.height), (3 * short) / Math.max(bmp.width, bmp.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bmp.width * k);
   canvas.height = Math.round(bmp.height * k);

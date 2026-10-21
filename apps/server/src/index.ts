@@ -600,8 +600,13 @@ app.put("/api/images/:id", async (c) => {
   // The panel's files are made here from the 1-bit PNG, so what the panel draws is what everyone sees.
   const panel = panelFiles(await bytes("mono"));
   if (!panel) return c.json({ error: "That drawing didn't come through. Try saving again?" }, 400);
-  store.putImage(scene, { png: await bytes("png"), ...panel }, c.get("me").id);
-  note(c, was ? "redrew" : "drew", { item: named({ kind: "image", id: scene.id }) });
+  // A photo stays a photo, and a drawing a drawing, whatever a later save says.
+  const kind = was?.kind ?? (form.get("kind") === "photo" ? "photo" : "drawing");
+  store.putImage(scene, { png: await bytes("png"), ...panel }, c.get("me").id, kind);
+  const verb = kind === "photo" ? (was ? "reframed-photo" : "added-photo") : was ? "redrew" : "drew";
+  note(c, verb, { item: named({ kind: "image", id: scene.id }) });
+  // Photos apps show the photo as framed: a new framing shouldn't wait for their next turn.
+  if (kind === "photo") for (const a of store.listApps()) if (a.kind === "photos") forgetApp(a.id);
   changed();
   return c.json(store.getImageMeta(scene.id));
 });
@@ -610,8 +615,9 @@ app.delete("/api/images/:id", (c) => {
   const was = store.getImageMeta(c.req.param("id"));
   if (!was) return c.body(null, 204);
   if (!mayChange(c, was.madeBy)) return notYours(c);
-  note(c, "erased", { item: named({ kind: "image", id: was.id }) });
+  note(c, was.kind === "photo" ? "deleted-photo" : "erased", { item: named({ kind: "image", id: was.id }) });
   store.deleteImage(was.id);
+  if (was.kind === "photo") for (const a of store.listApps()) if (a.kind === "photos") forgetApp(a.id);
   changed();
   return c.body(null, 204);
 });

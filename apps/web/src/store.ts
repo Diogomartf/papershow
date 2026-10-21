@@ -3,7 +3,8 @@
 import { Oops, signedOut } from "./house";
 import type { Scene } from "@papershow/scene";
 
-export type ImageMeta = { id: string; name: string; updatedAt: number; madeBy: string | null };
+/** A drawing from Draw, or a photo in the Photos library. */
+export type ImageMeta = { id: string; name: string; updatedAt: number; madeBy: string | null; kind: "drawing" | "photo" };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
@@ -19,8 +20,10 @@ export const listImages = () => api<ImageMeta[]>("/api/images");
 export const getImage = (id: string) => api<ImageMeta & { scene: Scene }>(`/api/images/${id}`);
 export const deleteImage = (id: string) => api<void>(`/api/images/${id}`, { method: "DELETE" });
 
-export function putImage(scene: Scene, files: { png: Blob; mono: Blob; bin: Blob }) {
+/** Save a drawing, or with `kind: "photo"`, a photo in the library. */
+export function putImage(scene: Scene, files: { png: Blob; mono: Blob; bin: Blob }, kind: ImageMeta["kind"] = "drawing") {
   const form = new FormData();
+  form.set("kind", kind);
   form.set("scene", JSON.stringify(scene));
   form.set("png", files.png);
   form.set("mono", files.mono);
