@@ -62,8 +62,7 @@ function logoOf(ticker: string, mark: number): Promise<string | null> {
     const url = `https://img.logo.dev/ticker/${encodeURIComponent(ticker)}?token=${token}&size=256&format=png&fallback=404`;
     logo = fetch(url, { signal: AbortSignal.timeout(10_000) }).then(
       async (res) => (res.ok ? ditheredImage(new Uint8Array(await res.arrayBuffer()), mark, mark, { radius: Math.round(mark * 0.22) }) : null),
-      () => (logos.delete(key), null),
-    );
+    ).catch(() => (logos.delete(key), null));
     logos.set(key, logo);
   }
   return logo;

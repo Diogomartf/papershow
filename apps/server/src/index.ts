@@ -1,8 +1,11 @@
+import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { readFile } from "node:fs/promises";
 import { serve } from "@hono/node-server";
+import { getConnInfo } from "@hono/node-server/conninfo";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type Context } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Scene } from "@papershow/scene";
 import { APPS, appFrame, appFrameAt, catalog, configFor, forgetApp, previewFrame } from "./apps/index.ts";
@@ -11,6 +14,7 @@ import * as asks from "./asks.ts";
 import * as store from "./db.ts";
 import { inviteFrame, qrSvg } from "./invite.tsx";
 import * as people from "./people.ts";
+import { panelFiles } from "./render.ts";
 import { awayUntil, blockAt, justAired, sequence, showing, sleepUntil, upcoming, type Days, type Live, type Showing, type Source } from "./schedule.ts";
 import { sleepFrame } from "./sleep.tsx";
 
@@ -105,7 +109,8 @@ async function liveNow(now = Date.now()): Promise<LiveNow | null> {
       away: false,
       invite: invite.code,
       showNow: invite.onPanelUntil,
-      etag: `"invite-${invite.code}-${invite.role}"`,
+      // Not the code itself: /live is open to anyone on the network, and the code lets them in.
+      etag: `"invite-${createHash("sha1").update(`${invite.code}-${invite.role}`).digest("hex").slice(0, 12)}"`,
       file: (k) => frame[k],
     };
   }
@@ -163,7 +168,7 @@ function nextChange(current: LiveNow | null, maxMs: number) {
 // ?wait=1 with If-None-Match: hold up to 55s until the frame changes (long-poll).
 // X-Next-Change: seconds until the frame changes by itself, if it will.
 // X-Sleep-Until: while asleep or away, when the panel wakes (ms since epoch; 0 = when switched back). 204 = keep the last picture; ETag "idle" when nothing has played.
-// X-Source: app:<id>, image:<id>, or invite:<code> while an invite is on the panel.
+// X-Source: app:<id>, image:<id>, or invite while an invite is on the panel.
 // X-Source-Name: the drawing's or app's name, URI-encoded (names aren't always ASCII), for logs.
 // X-Show-Now: while Show now or an invite holds /live, when it ends (ms since epoch): a new value is a fresh one.
 
@@ -193,7 +198,7 @@ async function live(c: Context, kind: "mono" | "bin") {
     const name = now.source.kind === "image" ? store.getImageMeta(now.source.id)?.name : store.getApp(now.source.id)?.name;
     if (name) c.header("X-Source-Name", encodeURIComponent(name));
   } else if (now.invite) {
-    c.header("X-Source", `invite:${now.invite}`);
+    c.header("X-Source", "invite");
     c.header("X-Source-Name", "Invite");
   }
   if (now.asleep !== null) c.header("X-Sleep-Until", String(now.asleep));
@@ -216,6 +221,45 @@ app.get("/live.bin", (c) => live(c, "bin"));
 // /live stays open, so the panel never needs to sign in.
 
 const COOKIE = "papershow";
+
+// Uploads are served back as they came: browsers must take their type as given, never guess HTML from them.
+app.use("*", async (c, next) => {
+  await next();
+  c.header("X-Content-Type-Options", "nosniff");
+});
+
+// Changes come only from Papershow's own pages. The cookie is SameSite=Lax, but a page on another port of this
+// host (the Pi runs other things) counts as the same site, so the browser's word on where a request comes from
+// is checked too. Without Sec-Fetch-Site (older browsers), the Origin's host must be this one.
+app.use("/api/*", async (c, next) => {
+  if (c.req.method === "GET" || c.req.method === "HEAD") return next();
+  const site = c.req.header("sec-fetch-site");
+  const origin = c.req.header("origin");
+  let ours = site ? site === "same-origin" || site === "none" : !origin;
+  if (!site && origin)
+    try {
+      ours = new URL(origin).host === c.req.header("host");
+    } catch {
+      ours = false;
+    }
+  return ours ? next() : c.json({ error: "Only Papershow's own pages can change things" }, 403);
+});
+
+// A drawing carries its photo and three renders; nothing else needs more than a little JSON.
+const tooBig = (c: Context) => c.json({ error: "That's too big to send" }, 413);
+const drawingBody = bodyLimit({ maxSize: 40 * 1024 * 1024, onError: tooBig });
+const smallBody = bodyLimit({ maxSize: 1024 * 1024, onError: tooBig });
+app.use("/api/*", (c, next) => (c.req.method === "PUT" && /^\/api\/images\/[\w-]+$/.test(c.req.path) ? drawingBody : smallBody)(c, next));
+
+/**
+ * Who's asking, for the limits on the routes that need no one signed in. Tailscale serve and the dev proxy reach
+ * the server from this machine, so then the last X-Forwarded-For, the one the proxy added, names the device.
+ */
+function from(c: Context) {
+  const ip = getConnInfo(c).remote.address ?? "";
+  const forwarded = c.req.header("x-forwarded-for")?.split(",").at(-1)?.trim();
+  return forwarded && /^(127\.|::1$|::ffff:127\.)/.test(ip) ? forwarded : ip;
+}
 
 app.use("/api/*", async (c, next) => {
   if (c.req.path === "/api/hello" || c.req.path.startsWith("/api/hello/")) return next();
@@ -263,12 +307,14 @@ function tooMany(c: C, bucket: people.Bucket) {
 }
 
 /**
- * A guest changed a drawing or app of theirs. If it's on the panel by their ask, or waiting on one, the
- * household said yes to how it looked before: it comes off, and they ask again.
+ * A guest changed a drawing or app of theirs. If it's on the panel by their ask, waiting on one, or in a playlist
+ * or the show, the household said yes to how it looked before: it comes off, and they ask again.
  */
 function guestChanged(c: C, src: Source) {
   if (!isGuest(c)) return;
   asks.dropAsksFor(src);
+  // Its places in playlists and the show were said yes to as well.
+  store.unschedule(src);
   const live = store.getLive();
   if (live.mode === "pin" && live.okBy && live.source.kind === src.kind && live.source.id === src.id) store.setLive({ mode: "rotate" });
 }
@@ -338,7 +384,7 @@ app.post("/api/hello/setup", async (c) => {
 app.post("/api/hello/in", async (c) => {
   const { id, secret } = await c.req.json<{ id?: string; secret?: unknown }>();
   if (!id || !people.isSecret(secret)) return c.json({ error: "Tap your face, then your secret" }, 400);
-  const r = people.signIn(id, secret);
+  const r = people.signIn(id, secret, from(c));
   if (!r.ok) return c.json({ error: "That's not it", triesLeft: r.triesLeft, lockedUntil: r.lockedUntil }, 401);
   signInAs(c, r.person.id);
   return c.json(hello(c, r.person));
@@ -357,6 +403,8 @@ app.post("/api/hello/knock", async (c) => {
   const body = await c.req.json<Joining & { invite?: string }>();
   const j = joining(body);
   if (typeof j === "string") return c.json({ error: j }, 400);
+  // Knocking needs no one signed in, so one device can't fill the door with strangers.
+  if (!body.invite && !people.mayKnock(from(c))) return c.json({ error: "Lots of knocking just now. Ask someone in the house to let you in?" }, 429);
   const invite = body.invite ? people.getInvite(body.invite) : undefined;
   if (body.invite && !invite) return c.json({ error: "That invite has run out. Knock instead?" }, 410);
   const me = people.createPerson(j.profile, j.secret, invite?.role ?? "member", invite ? "in" : "knocking");
@@ -549,7 +597,10 @@ app.put("/api/images/:id", async (c) => {
     if (wait) return wait;
   } else guestChanged(c, { kind: "image", id: was.id });
   const bytes = async (k: string) => new Uint8Array(await (form.get(k) as File).arrayBuffer());
-  store.putImage(scene, { png: await bytes("png"), mono: await bytes("mono"), bin: await bytes("bin") }, c.get("me").id);
+  // The panel's files are made here from the 1-bit PNG, so what the panel draws is what everyone sees.
+  const panel = panelFiles(await bytes("mono"));
+  if (!panel) return c.json({ error: "That drawing didn't come through. Try saving again?" }, 400);
+  store.putImage(scene, { png: await bytes("png"), ...panel }, c.get("me").id);
   note(c, was ? "redrew" : "drew", { item: named({ kind: "image", id: scene.id }) });
   changed();
   return c.json(store.getImageMeta(scene.id));
@@ -638,11 +689,23 @@ app.get("/api/apps/:id/:kind", async (c) => {
   return c.body(frame[kind]);
 });
 
+// Each person's previews render one at a time: typing fast queues them instead of fanning out renders and fetches.
+const previewing = new Map<string, Promise<unknown>>();
+
 /** Render settings that aren't saved yet, so the form previews as you type. */
 app.post("/api/apps/preview", async (c) => {
   const { kind, config, original } = await c.req.json<{ kind: string; config: Record<string, unknown>; original?: boolean }>();
   if (!APPS[kind]) return c.json({ error: "no such app" }, 404);
-  const frame = await previewFrame(kind, config ?? {}, { original: !!original });
+  const wait = tooMany(c, "preview");
+  if (wait) return wait;
+  const id = c.get("me").id;
+  const run = (previewing.get(id) ?? Promise.resolve())
+    .catch(() => {})
+    .then(() => previewFrame(kind, config ?? {}, { original: !!original }));
+  previewing.set(id, run);
+  const done = () => previewing.get(id) === run && previewing.delete(id);
+  run.then(done, done);
+  const frame = await run;
   c.header("Content-Type", "image/png");
   c.header("Cache-Control", "no-store");
   // Original: the full-resolution render in colour, before it's reduced to the panel's 1 bit.

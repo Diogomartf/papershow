@@ -89,11 +89,12 @@ port() {
 
 case "$cmd" in
   update)
-    # Quiet for the nightly check; someone running it can see the fetch. --force, in case a tag was moved.
+    # Quiet for the nightly check; someone running it can see the fetch. No --force: releases are never moved,
+    # so a tag that changed on GitHub is refused, and the update stops there instead of installing it as root.
     if [ "${1:-}" = --if-newer ]; then
-      git -C "$repo" fetch --quiet --tags --force origin
+      git -C "$repo" fetch --quiet --tags origin
     else
-      git -C "$repo" fetch --tags --force origin
+      git -C "$repo" fetch --tags origin
     fi
     if on_branch; then
       target='@{upstream}'
@@ -126,7 +127,7 @@ case "$cmd" in
       echo "paper:channel main follows every commit on main (dev); paper:channel releases goes back."
       exit 0
     fi
-    git -C "$repo" fetch --quiet --tags --force origin
+    git -C "$repo" fetch --quiet --tags origin
     before=$(git -C "$repo" rev-parse HEAD)
     if [ "$1" = releases ]; then
       target=$(latest)
@@ -156,7 +157,7 @@ case "$cmd" in
     echo "Version:  $(version) ($(git -C "$repo" log -1 --format='%h, %cr'))"
     echo "          $(summary)"
     # A quick look for something newer; offline or slow, skip it.
-    if timeout 5 git -C "$repo" fetch --quiet --tags --force origin 2>/dev/null; then
+    if timeout 5 git -C "$repo" fetch --quiet --tags origin 2>/dev/null; then
       if on_branch; then
         behind=$(git -C "$repo" rev-list --count 'HEAD..@{upstream}' 2>/dev/null || echo 0)
         if [ "$behind" -gt 0 ]; then echo "          $behind commit(s) behind: run paper:update"; fi

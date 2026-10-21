@@ -1,9 +1,11 @@
+import { getPublic } from "../net.ts";
 import { ditheredImage } from "../render.ts";
 import { FrontPage, PHOTO, STYLES, type Story, type Style } from "./news.tsx";
 import { decode, defineApp } from "./types.ts";
 
 const HEADERS = { "User-Agent": "Mozilla/5.0 (Papershow)", "Accept-Language": "pt-PT,pt;q=0.9,en;q=0.8" };
-const get = (url: string) => fetch(url, { headers: HEADERS, redirect: "follow", signal: AbortSignal.timeout(10_000) });
+// Only the public internet: the address is typed by whoever made the app, guests included.
+const get = (url: string) => getPublic(url, { headers: HEADERS });
 
 /** A meta tag's content, whichever order its attributes come in. */
 const meta = (html: string, name: string) => {
@@ -144,11 +146,20 @@ async function lead(url: string, from: From, photo: number | null): Promise<Page
   let image: string | null = null;
   if (photo && story.image) {
     const img = await get(story.image).catch(() => null);
-    const bytes = img?.ok ? new Uint8Array(await img.arrayBuffer()) : null;
+    const bytes = img?.ok ? img.bytes : null;
     const type = bytes && sniff(bytes);
-    if (type) image = ditheredImage(bytes, photo, photo, { type });
+    // A picture too big to draw safely leaves the story without one.
+    if (type) image = tryDither(bytes, photo, type);
   }
   return { title: story.title, summary: story.summary, byline: "", credit: "", image, site, host: new URL(base).hostname.replace(/^www\./, "") };
+}
+
+function tryDither(bytes: Uint8Array, size: number, type: string) {
+  try {
+    return ditheredImage(bytes, size, size, { type });
+  } catch {
+    return null;
+  }
 }
 
 /** A picture's type from its first bytes: some servers label JPEGs as PNGs. Null for kinds resvg can't draw. */
@@ -214,6 +225,8 @@ export default defineApp({
     try {
       const page = await lead(url, config.from, photo);
       last.set(key, page);
+      // Addresses are typed in, so keep only the most recent ones.
+      if (last.size > 50) last.delete(last.keys().next().value!);
       return page;
     } catch (err) {
       const old = last.get(key);
