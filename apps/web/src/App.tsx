@@ -3,7 +3,7 @@ import { Draw, type DrawHandle, type Stroke } from "drawesome";
 import "drawesome/styles.css";
 import "@fontsource-variable/inter";
 import { PANEL, PHOTO_FILL, type PhotoAt, type Scene, type TextItem } from "@papershow/scene";
-import { paintMono, photoFor, renderScene } from "./render";
+import { cantOpen, paintMono, photoFor, renderScene } from "./render";
 import { getDraft, getImage, getSaved, imageUrl, listImages, putDraft, putImage, putSaved, type ImageMeta } from "./store";
 import { Oops, reason, useMe } from "./house";
 import { Gallery } from "./Gallery";
@@ -280,7 +280,7 @@ export default function App() {
       setTyping(false);
       setPlacing(true);
     } catch (err) {
-      flash("Couldn't open that picture", "error");
+      flash(cantOpen(file), "error");
       console.error(err);
     }
   };
@@ -353,7 +353,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="bar">
+      <header className="bar draw-bar">
         <div className="bar-left">
           <Nav current="draw" />
           <span className="divider" aria-hidden />

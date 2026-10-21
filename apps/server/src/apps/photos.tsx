@@ -1,5 +1,6 @@
 import * as store from "../db.ts";
 import { isOriginal } from "../render.ts";
+import { textWidth } from "./fit.tsx";
 import { defineApp, random, sheet, type Field } from "./types.ts";
 
 /** How long each photo stays up before the next one. */
@@ -20,6 +21,24 @@ function shuffled(ids: string[], round: number) {
   return out;
 }
 
+/** Same month and day, in the house's time zone (the server's). */
+const sameDay = (a: number, b: Date) => {
+  const d = new Date(a);
+  return d.getMonth() === b.getMonth() && d.getDate() === b.getDate();
+};
+
+/** "21 October 2019". */
+const dateOf = (t: number) => new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+
+/** The label's words: the photo's name, when it was taken, or both. Empty when it has none to give. */
+function labelFor(label: string, name: string, taken: number | null) {
+  const date = taken ? dateOf(taken) : "";
+  if (label === "name") return name;
+  if (label === "date") return date;
+  if (label === "both") return [name, date].filter(Boolean).join(" · ");
+  return "";
+}
+
 /**
  * The photo for turn `turn`. In order, they go round one after another. Shuffled, every photo comes up once a round,
  * in a new order each round, and a round never starts with the photo the last one ended on.
@@ -38,8 +57,8 @@ export default defineApp({
   category: "photos",
   source: "Your photos",
   name: "Photos",
-  description: "Your photos, one at a time: in order, or shuffled.",
-  defaults: { photos: [] as string[], order: "shuffle", every: "15m" as Every },
+  description: "Your photos, one at a time: in order, shuffled, or the ones taken on this day.",
+  defaults: { photos: [] as string[], order: "shuffle", every: "15m" as Every, label: "none" },
   // A getter: the photos to pick from are the library's, which come and go.
   get fields() {
     return [
@@ -57,8 +76,9 @@ export default defineApp({
         options: [
           { value: "shuffle", label: "Shuffle" },
           { value: "order", label: "In order" },
+          { value: "today", label: "On this day" },
         ],
-        hint: "Shuffle shows each photo once before any comes back, in a new order every time round.",
+        hint: "Shuffle shows each photo once before any comes back, in a new order every time round. On this day shuffles the ones taken on today's date in any year, and all of them on a day with none.",
       },
       {
         key: "every",
@@ -73,27 +93,50 @@ export default defineApp({
         ],
         hint: "Each change redraws the panel, with a flash: slower is easier on it.",
       },
+      {
+        key: "label",
+        label: "In the corner",
+        type: "select",
+        options: [
+          { value: "none", label: "Nothing" },
+          { value: "name", label: "Name" },
+          { value: "date", label: "Date taken" },
+          { value: "both", label: "Both" },
+        ],
+        hint: "Small, on white, so it reads over any photo. The date is the camera's, when the photo has one.",
+      },
     ] satisfies Field[];
   },
   periodMs: EVERY["15m"],
   periodFor: (config) => EVERY[config.every] ?? EVERY["15m"],
   mock: false,
   data: (config, now) => {
+    const all = allPhotos();
+    const meta = new Map(all.map((p) => [p.id, p]));
     // Picks of photos since deleted are already gone from the config, so none left picked means all of them.
-    const ids = config.photos.length ? config.photos : allPhotos().map((p) => p.id);
-    if (!ids.length) return { src: null };
+    let ids = config.photos.length ? config.photos : all.map((p) => p.id);
+    if (!ids.length) return { src: null, label: "" };
+    if (config.order === "today") {
+      const today = ids.filter((id) => {
+        const t = meta.get(id)?.takenAt;
+        return t && sameDay(t, now);
+      });
+      if (today.length) ids = today;
+    }
     const turn = Math.floor(now.getTime() / (EVERY[config.every] ?? EVERY["15m"]));
-    const id = pick(ids, turn, config.order);
+    const id = pick(ids, turn, config.order === "order" ? "order" : "shuffle");
+    const label = labelFor(config.label, meta.get(id)?.name ?? "", meta.get(id)?.takenAt ?? null);
     // Photos are framed and dithered when they're saved: the frame is the photo's own, as the panel shows it.
     const file = store.getImageFile(id, isOriginal() ? "png" : "mono");
-    if (!file) return { src: null };
+    if (!file) return { src: null, label: "" };
     const type = file.data[0] === 0xff && file.data[1] === 0xd8 ? "image/jpeg" : "image/png";
-    return { src: `data:${type};base64,${Buffer.from(file.data).toString("base64")}` };
+    return { src: `data:${type};base64,${Buffer.from(file.data).toString("base64")}`, label };
   },
   view: ({ data }) =>
     data.src ? (
-      <div style={sheet}>
+      <div style={{ ...sheet, position: "relative" }}>
         <img src={data.src} width={800} height={480} />
+        {data.label ? <Label text={data.label} /> : null}
       </div>
     ) : (
       <div style={{ ...sheet, flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 64 }}>
@@ -102,3 +145,29 @@ export default defineApp({
       </div>
     ),
 });
+
+/** The corner label: black on a white card, so it reads over light and dark photos alike. Long names are cut. */
+function Label({ text }: { text: string }) {
+  let t = text.trim();
+  const SIZE = 18;
+  // At most about half the panel's width.
+  while (t.length > 1 && textWidth(t, SIZE, "sans") > 360) t = t.slice(0, -2).trimEnd() + "…";
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 14,
+        right: 14,
+        display: "flex",
+        padding: "6px 12px",
+        borderRadius: 10,
+        background: "#fff",
+        border: "2px solid #000",
+        fontSize: SIZE,
+        fontWeight: 600,
+      }}
+    >
+      {t}
+    </div>
+  );
+}

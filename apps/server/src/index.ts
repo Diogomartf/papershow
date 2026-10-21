@@ -592,16 +592,16 @@ app.put("/api/images/:id", async (c) => {
   if (scene.id !== c.req.param("id")) return c.json({ error: "id mismatch" }, 400);
   const was = store.getImageMeta(scene.id);
   if (was && !mayChange(c, was.madeBy)) return notYours(c);
+  // A photo stays a photo, and a drawing a drawing, whatever a later save says.
+  const kind = was?.kind ?? (form.get("kind") === "photo" ? "photo" : "drawing");
   if (!was) {
-    const wait = tooMany(c, "make");
+    const wait = tooMany(c, kind === "photo" ? "photo" : "make");
     if (wait) return wait;
   } else guestChanged(c, { kind: "image", id: was.id });
   const bytes = async (k: string) => new Uint8Array(await (form.get(k) as File).arrayBuffer());
   // The panel's files are made here from the 1-bit PNG, so what the panel draws is what everyone sees.
   const panel = panelFiles(await bytes("mono"));
   if (!panel) return c.json({ error: "That drawing didn't come through. Try saving again?" }, 400);
-  // A photo stays a photo, and a drawing a drawing, whatever a later save says.
-  const kind = was?.kind ?? (form.get("kind") === "photo" ? "photo" : "drawing");
   store.putImage(scene, { png: await bytes("png"), ...panel }, c.get("me").id, kind);
   const verb = kind === "photo" ? (was ? "reframed-photo" : "added-photo") : was ? "redrew" : "drew";
   note(c, verb, { item: named({ kind: "image", id: scene.id }) });

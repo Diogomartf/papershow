@@ -4,7 +4,15 @@ import { Oops, signedOut } from "./house";
 import type { Scene } from "@papershow/scene";
 
 /** A drawing from Draw, or a photo in the Photos library. */
-export type ImageMeta = { id: string; name: string; updatedAt: number; madeBy: string | null; kind: "drawing" | "photo" };
+export type ImageMeta = {
+  id: string;
+  name: string;
+  updatedAt: number;
+  madeBy: string | null;
+  kind: "drawing" | "photo";
+  /** When a photo was taken, when it's known. */
+  takenAt: number | null;
+};
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);

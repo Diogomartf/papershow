@@ -2430,3 +2430,18 @@ fieldset.plain:disabled > * { opacity: .55; }
   .rail .photo-grid li { flex: none; width: 96px; }
   .photos-drop { display: none; }
 }
+
+/* Draw's bar has the most in it. It runs as a row that wraps: as the window narrows the extras go first (the
+   wordmark, then Text's word and the photo's thumbnail), and only then do the actions drop to a row of their own. */
+@media (min-width: 721px) {
+  .bar.draw-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .draw-bar > .bar-left, .draw-bar > .segmented { flex: none; }
+  .draw-bar > .bar-right { flex: none; margin-left: auto; }
+}
+/* Everything at its full size takes about 1750px. */
+@media (min-width: 721px) and (max-width: 1799px) {
+  .draw-bar .wordmark, .draw-bar .text-label, .draw-bar .photo-card img { display: none; }
+  .draw-bar .bar-left .name { width: 14ch; }
+  .draw-bar .nav a { padding: 6px 6px; }
+  .bar.draw-bar { column-gap: 12px; }
+}

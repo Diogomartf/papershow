@@ -5,7 +5,7 @@ import { LiveLink } from "./LiveLink";
 import { MeMenu } from "./MeMenu";
 import { Nav, navigate } from "./Nav";
 import { PhotoLayer } from "./PhotoLayer";
-import { paintMono, photoFor, renderScene } from "./render";
+import { cantOpen, paintMono, photoFor, renderScene } from "./render";
 import { addToShow, ask, setLive } from "./slides";
 import { loadItems } from "./sources";
 import { deleteImage, fileUrl, getImage, listImages, putImage, type ImageMeta } from "./store";
@@ -13,6 +13,7 @@ import { mine, Oops, reason, tint, useMe } from "./house";
 import { useLiveState } from "./live";
 import { shortId } from "./id";
 import { cue, DONE, type Cue } from "./sound";
+import { takenAt } from "./exif";
 
 /**
  * How much of a photo the library keeps: its short side up to twice the panel's width, so cropping in close
@@ -33,6 +34,8 @@ async function photoScene(file: File): Promise<Scene> {
     texts: [],
     photo: await photoFor(file, KEEP),
     photoAt: PHOTO_FILL,
+    // A camera's date if it wrote one; otherwise the file's, which is close for a screenshot or a saved picture.
+    takenAt: (await takenAt(file)) ?? (file.lastModified || undefined),
     createdAt: now,
     updatedAt: now,
   };
@@ -53,6 +56,8 @@ export function Photos({ id }: { id: string | null }) {
   const [adding, setAdding] = useState<{ done: number; total: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // Delete takes a second press: the photo also leaves every playlist and the show.
+  const [deleting, setDeleting] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const preview = useRef<HTMLCanvasElement>(null);
   const lastSaved = useRef("");
@@ -82,6 +87,7 @@ export function Photos({ id }: { id: string | null }) {
   useEffect(() => {
     setScene(null);
     setNatural(null);
+    setDeleting(false);
     if (!id) return;
     let gone = false;
     getImage(id).then(
@@ -159,7 +165,7 @@ export function Photos({ id }: { id: string | null }) {
         added++;
       } catch (err) {
         // Past the hour's allowance the rest would fail the same way: say why and stop.
-        flash(reason(err, `Couldn't add ${file.name}`), "error");
+        flash(reason(err, cantOpen(file)), "error");
         console.error(err);
         if (err instanceof Oops && err.status === 429) break;
       }
@@ -326,6 +332,11 @@ export function Photos({ id }: { id: string | null }) {
                 />
                 <span className="saved" data-on={saved}>{!canChange ? "" : saved ? "Saved" : "Saving…"}</span>
               </div>
+              {meta.takenAt && (
+                <p className="muted kind-line">
+                  Taken {new Date(meta.takenAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}
+                </p>
+              )}
 
               {!canChange && (
                 <p className="made-by">
@@ -397,8 +408,15 @@ export function Photos({ id }: { id: string | null }) {
                 <button className="ghost" onClick={saveVersion} title="Keep this framing as a photo of its own, to frame another way">
                   Save as version
                 </button>
-                {canChange && <button className="ghost danger" onClick={remove}>Delete</button>}
+                {canChange && !deleting && <button className="ghost danger" onClick={() => setDeleting(true)}>Delete</button>}
               </div>
+              {deleting && (
+                <div className="manage-confirm">
+                  <span>Delete {scene.name}? It comes out of every playlist and the show too. This can't be undone.</span>
+                  <button className="ghost" onClick={() => setDeleting(false)}>Keep</button>
+                  <button className="danger-solid" onClick={remove}>Delete photo</button>
+                </div>
+              )}
               <p className="muted photos-tip">
                 To show several in turn, or one at random, make a <a href="/apps/new/photos" onClick={(e) => (e.preventDefault(), navigate("/apps/new/photos"))}>Photos app</a>.
               </p>
