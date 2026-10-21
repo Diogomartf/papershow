@@ -12,6 +12,7 @@ import { reason } from "./house";
 import { useSortable } from "./sortable";
 import { useItems, type Item } from "./sources";
 import { useUndoToast } from "./Undo";
+import { cue } from "./sound";
 
 const fmt = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`);
 const hhmm = (t: number) => {
@@ -115,16 +116,16 @@ function Deck({ thumbs }: { thumbs: string[] }) {
 
 function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   useEffect(() => {
-    const key = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const key = (e: KeyboardEvent) => e.key === "Escape" && (cue("close"), onClose());
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [onClose]);
   return (
-    <div className="pg-scrim" onClick={onClose}>
+    <div className="pg-scrim" data-cuelume-close onClick={onClose}>
       <div className="pg-sheet" role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="pg-sheet-head">
           <h2>{title}</h2>
-          <button className="pg-close" onClick={onClose} aria-label="Close">✕</button>
+          <button className="pg-close" data-cuelume-close onClick={onClose} aria-label="Close">✕</button>
         </div>
         {children}
       </div>
@@ -271,7 +272,7 @@ export function Show() {
     api.setLive({ mode: "pin", source, forS }).then((s) => {
       accept(s);
       const until = s.live.mode === "pin" && s.live.until ? new Date(s.live.until) : null;
-      toast.show(`${name} is on the panel${until ? ` until ${hhmm(until.getTime())}` : ""} 📺`);
+      toast.show(`${name} is on the panel${until ? ` until ${hhmm(until.getTime())}` : ""} 📺`, undefined, null);
     }, refused);
   const airTurn = (t: Turn) => air(t.source, Math.max(60, Math.round((t.endsAt - t.at) / 1000)), turnName(t));
   const airEntry = (e: ShowEntry) => {
@@ -281,10 +282,10 @@ export function Show() {
   };
 
   // ── Changing the program ──
-  const failed = (msg: string) => () => toast.show(msg);
+  const failed = (msg: string) => () => toast.show(msg, undefined, "error");
   /** The server said why it won't (a limit, say): show that. */
   function refused(e: unknown) {
-    toast.show(reason(e, "That didn't work"));
+    toast.show(reason(e, "That didn't work"), undefined, "error");
   }
   const addTime = () => {
     // An hour or three after the last block, or the first free hour of the day.
@@ -293,7 +294,7 @@ export function Show() {
     // Otherwise any free hour, from 6:00 on, the way the day runs.
     const hours = [Math.floor(last / 60) + 3, Math.floor(last / 60) + 1, ...Array.from({ length: 24 }, (_, h) => (h + 6) % 24)];
     const h = hours.map((x) => x % 24).find((x) => !taken.has(`${String(x).padStart(2, "0")}:00`));
-    if (h === undefined) return toast.show("Every hour already has something");
+    if (h === undefined) return toast.show("Every hour already has something", undefined, "error");
     api.addBlock(tab, `${String(h).padStart(2, "0")}:00`).then((s) => {
       accept(s);
       requestAnimationFrame(() => cards.current.get(s.created)?.scrollIntoView({ behavior: "smooth", block: "center" }));
@@ -301,7 +302,7 @@ export function Show() {
   };
   const moveTime = (b: Block, start: string) =>
     api.moveBlock(b.id, start).then(accept, () => {
-      toast.show(`There's already something at ${start}`);
+      toast.show(`There's already something at ${start}`, undefined, "error");
       api.getState().then(accept);
     });
   const removeTime = (b: Block) => {
@@ -326,7 +327,7 @@ export function Show() {
 
   // Tiles sort by dragging, within their block.
   const { lifted, order, bind, float } = useSortable((_, ids) =>
-    api.reorderShow(ids).then(accept, () => toast.show("Couldn't move it")),
+    api.reorderShow(ids).then(accept, () => toast.show("Couldn't move it", undefined, "error")),
   );
   /** A block's entries, in the order being dragged into while a tile is lifted. */
   const sortedOf = (blockId: string) => {
@@ -613,7 +614,9 @@ export function Show() {
                           data-swatch={t.swatch}
                           style={{ left: vpct(a), width: vpct(len) }}
                           title={`${clockOf(sinceDayFrom(t.at))} ${nameOf(t.entry)}`}
-                          onClick={() => !drag.current?.moved && setEditing(t.entry.id)}
+                          // Quiet when the press was a pan of the day bar: only opening it sounds.
+                          data-quiet
+                          onClick={() => !drag.current?.moved && (cue("open"), setEditing(t.entry.id))}
                         >
                           {len >= span * 0.06 && <span>{nameOf(t.entry)}</span>}
                         </button>
@@ -737,14 +740,14 @@ export function Show() {
                           // Where it will land.
                           <div className="sort-ghost" style={{ height: lifted.height }} aria-hidden />
                         ) : (
-                          <button className="pg-tile" data-off={!e.enabled} data-on={on && onTurn?.entryId === e.id} onClick={() => setEditing(e.id)}>
+                          <button className="pg-tile" data-cuelume-open data-off={!e.enabled} data-on={on && onTurn?.entryId === e.id} onClick={() => setEditing(e.id)}>
                             {tileBody(e, on && onTurn?.entryId === e.id)}
                           </button>
                         )}
                       </li>
                     ))}
                     <li>
-                      <button className="pg-tile pg-add" onClick={() => setAdding(b.id)}>
+                      <button className="pg-tile pg-add" data-cuelume-open onClick={() => setAdding(b.id)}>
                         <span className="pg-thumb">
                           <span>＋</span>
                         </span>

@@ -10,6 +10,7 @@ import * as house from "./house";
 import { reason, ROLE_NAMES, ROLES, tint, useMe, when, type Person } from "./house";
 import { AROUND_MS } from "./People";
 import { useUndoToast } from "./Undo";
+import { cue } from "./sound";
 import type { State } from "./slides";
 
 export function Manage() {
@@ -42,7 +43,7 @@ export function Manage() {
       if (next && typeof next === "object" && "sequence" in next) accept(next as State);
       if (done) toast.show(done);
     } catch (e) {
-      toast.show(reason(e, "That didn't work"));
+      toast.show(reason(e, "That didn't work"), undefined, "error");
     }
   };
 
@@ -86,7 +87,7 @@ export function Manage() {
         <section className="people-section">
           <div className="section-head">
             <h2>Manage people</h2>
-            <a className="ghost" href="/people" onClick={(e) => (e.preventDefault(), navigate("/people"))}>
+            <a className="ghost" href="/people" data-quiet onClick={(e) => (e.preventDefault(), cue(["navigate", { direction: "back" }]), navigate("/people"))}>
               Back to the house
             </a>
           </div>

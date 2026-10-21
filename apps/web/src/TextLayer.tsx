@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PANEL, TEXT_FONT, TEXT_LINE, type TextItem } from "@papershow/scene";
 import { shortId } from "./id";
+import { cue } from "./sound";
 
 const SIZES = [24, 32, 48, 64, 96, 128, 160, 200, 240, 280];
 /** How big scaling by a corner can make or shrink a text, in panel pixels. */
@@ -91,9 +92,13 @@ export function TextLayer({
     const onKey = (e: KeyboardEvent) => {
       if ((e.key === "Delete" || e.key === "Backspace") && !(e.target as HTMLElement).closest("input, [contenteditable]")) {
         e.preventDefault();
+        cue(["close", { emphasis: "subtle" }]);
         remove(selected);
       }
-      if (e.key === "Enter") setEditing(selected);
+      if (e.key === "Enter") {
+        cue(["open", { emphasis: "subtle" }]);
+        setEditing(selected);
+      }
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);

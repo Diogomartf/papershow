@@ -1007,7 +1007,7 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .seq-strip li[data-live="true"] .seq-time { color: var(--signal); }
 .seq-strip strong { font-size: 13px; font-weight: 560; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .seq-strip small { font-size: 12px; }
-.seq-strip:has(li[data-new-list="true"]) { padding-top: 22px; }
+.seq-strip:has(.seq-list) { padding-top: 22px; }
 
 /* ── Floating menu, remove, undo ─────────────────── */
 
@@ -2127,6 +2127,12 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
 }
 .me-item:hover, .me-item:focus-visible { outline: none; background: var(--tint); color: var(--ink); }
 .me-item .face-mini { border-radius: 22%; }
+/* Sound, on or off for this device: the state sits at the end of the row. */
+.me-sound { justify-content: space-between; }
+.me-sound-state { font: 600 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.me-sound[aria-checked="true"] .me-sound-state { color: var(--ink); }
+.me-volume { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 6px 8px; color: var(--ink-2); font-size: 14px; font-weight: 520; }
+.me-volume input { flex: 1; min-width: 0; accent-color: var(--ink); }
 .knock-item { background: var(--danger-tint); color: var(--ink); }
 .me-pop hr { border: 0; border-top: 1px solid var(--line); margin: 6px 4px; }
 .knock-badge {

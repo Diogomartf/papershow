@@ -10,6 +10,7 @@ import { Nav, navigate } from "./Nav";
 import * as house from "./house";
 import { says, tint, useMe, when, type Invite, type Person } from "./house";
 import { useUndoToast } from "./Undo";
+import { cue } from "./sound";
 
 /** Seen in the last five minutes: around right now. */
 export const AROUND_MS = 5 * 60_000;
@@ -41,7 +42,7 @@ export function People() {
       if (next && typeof next === "object" && "sequence" in next) accept(next as Parameters<typeof accept>[0]);
       if (done) toast.show(done);
     } catch (e) {
-      toast.show(e instanceof Error ? e.message : "That didn't work");
+      toast.show(e instanceof Error ? e.message : "That didn't work", undefined, "error");
     }
   };
 
@@ -158,7 +159,7 @@ export function People() {
                 <a className="ghost" href="/people/manage" onClick={(e) => (e.preventDefault(), navigate("/people/manage"))}>
                   Manage people{out.length ? ` · ${out.length} removed` : ""}
                 </a>
-                <button className="primary" onClick={() => act(async () => setInvite(await house.createInvite("member")))}>
+                <button className="primary" data-cuelume-open onClick={() => act(async () => setInvite(await house.createInvite("member")))}>
                   Invite someone 🎟️
                 </button>
               </div>
@@ -329,13 +330,13 @@ function InviteSheet({
   const panelLeft = invite.onPanelUntil ? Math.max(0, invite.onPanelUntil - now) : 0;
   const mmss = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}`;
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && (cue("close"), onClose());
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
     <>
-      <div className="scrim" data-on onClick={onClose} />
+      <div className="scrim" data-on data-cuelume-close onClick={onClose} />
       <div className="invite-sheet" role="dialog" aria-label="Invite someone">
         <h2>Come in! 🎟️</h2>
         <div className="segmented invite-role" role="radiogroup" aria-label="Joins as">
@@ -379,7 +380,7 @@ function InviteSheet({
               Show on the panel
             </button>
           )}
-          <button className="primary" onClick={onClose}>
+          <button className="primary" data-cuelume-close onClick={onClose}>
             Done
           </button>
         </div>

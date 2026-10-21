@@ -11,6 +11,7 @@ import { useLiveState, useNow } from "./live";
 import { FloatingMenu, MenuDivider, MenuItem, useUndoToast } from "./Undo";
 import type { Playlist as PlaylistT, Slide, State } from "./slides";
 import { navigate } from "./Nav";
+import { cue } from "./sound";
 import { mine, reason, tint, useMe } from "./house";
 
 /** Timeline zoom, in pixels per minute. */
@@ -192,7 +193,7 @@ export function Playlist({ id }: { id: string | null }) {
   const pin = (source: Source, forS?: number) => api.setLive({ mode: "pin", source, forS }).then(accept, failed);
   /** The server said no, say to wait out a limit: tell them why. */
   function failed(e: unknown) {
-    toast.show(reason(e, "That didn't work"));
+    toast.show(reason(e, "That didn't work"), undefined, "error");
   }
 
   /** Swap a clip with its neighbour: reordering without dragging. */
@@ -218,8 +219,14 @@ export function Playlist({ id }: { id: string | null }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!selected || (e.target as HTMLElement).closest("input, select, textarea")) return;
-      if (e.key === "Backspace" || e.key === "Delete") remove(selected);
-      if (e.key === "Escape") setSelected(null);
+      if (e.key === "Backspace" || e.key === "Delete") {
+        cue(["close", { emphasis: "strong" }]);
+        remove(selected);
+      }
+      if (e.key === "Escape") {
+        cue(["close", { emphasis: "subtle" }]);
+        setSelected(null);
+      }
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);

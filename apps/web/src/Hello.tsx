@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import * as house from "./house";
 import { tint, type Face, type Hello as HelloData, type Profile } from "./house";
+import { cue } from "./sound";
 
 type Props = {
   hello: HelloData;
@@ -34,6 +35,12 @@ export function Hello({ hello, joinCode, onIn, startAs }: Props) {
   useEffect(() => {
     document.title = "Papershow";
   }, []);
+
+  // Let in: the confetti moment. Knocked: a quiet ready. Turned away: a muted no.
+  useEffect(() => {
+    if (stage.at === "welcome") cue(["success", { emphasis: "strong" }]);
+    if (stage.at === "not-now") cue("error");
+  }, [stage.at]);
 
   // Knocking: wait for an admin. The server answers as soon as anything changes.
   useEffect(() => {
@@ -191,7 +198,7 @@ function Door({ children, onBack }: { children: ReactNode; onBack?: () => void }
     <div className="door">
       <header className="door-bar">
         {onBack ? (
-          <button className="door-back" onClick={onBack} aria-label="Back">
+          <button className="door-back" data-quiet onClick={() => (cue(["navigate", { direction: "back" }]), onBack())} aria-label="Back">
             ←
           </button>
         ) : (
@@ -268,6 +275,7 @@ export function Keypad({
 
   useEffect(() => {
     if (!wrong) return;
+    cue("error");
     dots.current?.animate(
       [{ transform: "translateX(0)" }, { transform: "translateX(-12px)" }, { transform: "translateX(10px)" }, { transform: "translateX(-6px)" }, { transform: "translateX(0)" }],
       { duration: 360, easing: "ease-out" },
@@ -291,8 +299,14 @@ export function Keypad({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement).tagName === "INPUT") return;
-      if (keys.includes(e.key)) keyboard.current.tap(e.key);
-      else if (e.key === "Backspace") keyboard.current.undo();
+      // Typed, it sounds like typing; the buttons tap.
+      if (keys.includes(e.key)) {
+        cue(["type", { key: "printable" }]);
+        keyboard.current.tap(e.key);
+      } else if (e.key === "Backspace") {
+        cue(["type", { key: "delete" }]);
+        keyboard.current.undo();
+      }
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
@@ -317,7 +331,7 @@ export function Keypad({
         <button className="key" onClick={() => tap(zero)} disabled={disabled}>
           {zero}
         </button>
-        <button className="key undo" onClick={undo} disabled={!picked.length || disabled} aria-label="Undo">
+        <button className="key undo" data-quiet onClick={() => (cue(["type", { key: "delete" }]), undo())} disabled={!picked.length || disabled} aria-label="Undo">
           ⌫
         </button>
       </div>
@@ -376,6 +390,7 @@ function Join({
     try {
       await onDone({ name: name.trim(), face, color }, secret, invite);
     } catch (e) {
+      cue("error");
       setError(e instanceof Error ? e.message : "Something went wrong. Try again?");
       if (e instanceof house.Oops && e.status === 410) setInvite(null);
       // A name already taken is fixed on the first step.
@@ -399,7 +414,7 @@ function Join({
           className="door-step"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!name.trim()) return setError("What's your name?");
+            if (!name.trim()) return (cue(["error", { emphasis: "subtle" }]), setError("What's your name?"));
             setError(null);
             setStep("face");
           }}

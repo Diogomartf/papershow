@@ -143,7 +143,7 @@ export function Dashboard() {
               const who = state.people.find((p) => p.id === a.by);
               const name = itemOf(a.source)?.name ?? "something";
               const answer = (yes: boolean) =>
-                (yes ? api.sayYes(a.id) : api.dropAsk(a.id)).then(accept, (e) => toast.show(reason(e, "That didn't work")));
+                (yes ? api.sayYes(a.id) : api.dropAsk(a.id)).then(accept, (e) => toast.show(reason(e, "That didn't work"), undefined, "error"));
               return (
                 <div key={a.id} className="card knock-mini ask-card">
                   <h2>{guest ? "Waiting for a yes" : "Can I show this?"}</h2>
@@ -269,7 +269,7 @@ export function Dashboard() {
                 const key = `${t.key}-${t.at}`;
                 return (
                   <li key={key} data-live={live} data-new-list={newList && (state!.show.length > 1)} data-open={menu?.key === key}>
-                    {newList && state!.show.length > 1 && <span className="seq-list">{t.playlistId ? playlistName(t.playlistId) : "Single"}</span>}
+                    {newList && t.playlistId && state!.show.length > 1 && <span className="seq-list">{playlistName(t.playlistId)}</span>}
                     <button
                       className="seq-frame"
                       aria-haspopup="menu"
@@ -301,7 +301,7 @@ export function Dashboard() {
           const name = itemOf(turn.source)?.name ?? "clip";
           const clip = turn.clipId ? state.slides.find((x) => x.id === turn.clipId) : undefined;
           const entry = state.show.find((e) => e.id === turn.entryId);
-          const failed = (e: unknown) => toast.show(reason(e, "That didn't work"));
+          const failed = (e: unknown) => toast.show(reason(e, "That didn't work"), undefined, "error");
           if (guest)
             return (
               <FloatingMenu anchor={menu.el} onClose={closeMenu}>

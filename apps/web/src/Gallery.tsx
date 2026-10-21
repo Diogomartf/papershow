@@ -4,6 +4,7 @@ import { deleteImage, fileUrl, getImage, imageUrl, listImages, type ImageMeta } 
 import { ask, setLive } from "./slides";
 import { mine, tint, useMe } from "./house";
 import { useLiveState } from "./live";
+import { cue } from "./sound";
 
 type Props = {
   open: boolean;
@@ -28,7 +29,7 @@ export function Gallery({ open, refreshKey, currentId, onClose, onOpen, showFor,
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && (cue("close"), onClose());
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
@@ -52,11 +53,11 @@ export function Gallery({ open, refreshKey, currentId, onClose, onOpen, showFor,
 
   return (
     <>
-      <div className="scrim" data-on={open} onClick={onClose} />
+      <div className="scrim" data-on={open} data-cuelume-close onClick={onClose} />
       <aside className="sheet" data-on={open} aria-hidden={!open}>
         <div className="sheet-head">
           <h2>Gallery</h2>
-          <button className="ghost" onClick={onClose}>Close</button>
+          <button className="ghost" data-cuelume-close onClick={onClose}>Close</button>
         </div>
         {items?.length === 0 ? (
           <p className="empty">Nothing saved yet. Press ⌘S to save what's on the panel.</p>

@@ -16,6 +16,7 @@ import { MeMenu } from "./MeMenu";
 import { TextLayer } from "./TextLayer";
 import { PhotoLayer } from "./PhotoLayer";
 import { shortId } from "./id";
+import { cue, DONE, type Cue } from "./sound";
 
 // Ink mode: greys dither, colours become greys.
 const SWATCHES = ["#111111", "#555555", "#999999", "#d4d4d4", "#ffffff", "#e5484d", "#f5a524", "#3e63dd", "#30a46c"];
@@ -177,7 +178,9 @@ export default function App() {
     return () => el.removeEventListener("pointerdown", onDown, true);
   }, [loaded]);
 
-  const flash = (msg: string) => {
+  /** A toast, sounding like what it reports: done unless it says otherwise. */
+  const flash = (msg: string, sound: Cue | null = DONE) => {
+    cue(sound);
     setToast(msg);
     window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 2400);
   };
@@ -192,7 +195,10 @@ export default function App() {
     // await is a popup as far as Safari is concerned.
     const tab = then === "open" ? window.open("", "_blank") : null;
     setSaving(true);
-    if (then === "show") setBeam("sending");
+    if (then === "show") {
+      setBeam("sending");
+      cue(["loading", { emphasis: "subtle" }]);
+    }
     try {
       let current = { ...scene, strokes: draw.current?.getStrokes() ?? scene.strokes, updatedAt: Date.now() };
       const files = await renderScene(current);
@@ -222,11 +228,12 @@ export default function App() {
       }
       const saved = copied ? "Saved as your own copy" : "Saved";
       const shown = guest ? "asked to show it 🙋" : `on the panel for ${forLabel(showFor)}`;
-      flash(then === "show" ? `${saved} · ${shown}` : tab ? `${saved} · opened in a new tab` : saved);
+      // Up on the panel, live.ts already played it as the new state came in.
+      flash(then === "show" ? `${saved} · ${shown}` : tab ? `${saved} · opened in a new tab` : saved, then === "show" && !guest ? null : DONE);
     } catch (err) {
       setBeam(null);
       tab?.close();
-      flash(reason(err, "Couldn't save. Try again"));
+      flash(reason(err, "Couldn't save. Try again"), "error");
       console.error(err);
     } finally {
       setSaving(false);
@@ -252,7 +259,7 @@ export default function App() {
       setTyping(false);
       setPlacing(true);
     } catch (err) {
-      flash("Couldn't open that picture");
+      flash("Couldn't open that picture", "error");
       console.error(err);
     }
   };
@@ -282,9 +289,13 @@ export default function App() {
         e.preventDefault();
         save();
       }
+      // The pens' own undo and redo, out of a text field.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && !(e.target as HTMLElement).closest("input, textarea, [contenteditable]"))
+        cue(["navigate", { emphasis: "subtle", direction: e.shiftKey ? "forward" : "back" }]);
       // T for text, Escape back to drawing, unless you're typing somewhere.
       if ((e.target as HTMLElement).closest("input, textarea, [contenteditable]") || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key.toLowerCase() === "t") {
+        cue("toggle");
         setTyping((t) => !t);
         setPlacing(false);
       }
@@ -388,7 +399,7 @@ export default function App() {
               e.target.value = "";
             }}
           />
-          <button className="ghost" onClick={() => setGalleryOpen(true)}>Gallery</button>
+          <button className="ghost" data-cuelume-open onClick={() => setGalleryOpen(true)}>Gallery</button>
           <button className="ghost" onClick={() => save("open")} disabled={saving} title="Save, then open the picture in a new tab">
             Open
           </button>
@@ -487,8 +498,8 @@ export default function App() {
         onClose={() => setGalleryOpen(false)}
         onOpen={open}
         showFor={showFor}
-        onLive={(name) => flash(guest ? `Asked to show ${name} 🙋` : `${name} is on the panel for ${forLabel(showFor)}`)}
-        onFail={(err) => flash(reason(err, "That didn't work"))}
+        onLive={(name) => (guest ? flash(`Asked to show ${name} 🙋`) : flash(`${name} is on the panel for ${forLabel(showFor)}`, null))}
+        onFail={(err) => flash(reason(err, "That didn't work"), "error")}
       />
 
       <div className="toast" data-on={!!toast} role="status">{toast}</div>

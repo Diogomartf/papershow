@@ -59,6 +59,7 @@ On a phone, use the Tailscale address even at home: it's HTTPS, which Draw needs
 | Inter, Source Serif 4, UnifrakturMaguntia (`@expo-google-fonts`) | Fonts on the panel |
 | React 19, Vite | The web app |
 | [drawesome](https://www.npmjs.com/package/drawesome) | Draw's pens, eraser and undo |
+| [cuelume](https://cuelume.dev) | The web app's interaction sounds, synthesized with Web Audio (no audio files) |
 | oxlint, TypeScript | Checking the code |
 
 The panel client uses only Python's standard library and Pillow.
@@ -336,7 +337,7 @@ SQLite at `apps/server/data/imagegen.db` (set `DB=/path` to move it). Tables: `i
 
 ## Sections
 
-The nav runs Dashboard, Show, Apps, Draw (guests get no Show). Your face sits in the top-right corner: its menu lists who's knocking and guests' asks, switches to someone else in the house (straight to their PIN, for a tablet that changes hands), opens The house and the Log (not for guests), and signs out. Every page has the light switch (the page dims after sunset on its own; the switch holds until the next sunrise or sunset) and a live thumbnail of the panel, linking to `/live`.
+The nav runs Dashboard, Show, Apps, Draw (guests get no Show). Your face sits in the top-right corner: its menu lists who's knocking and guests' asks, switches to someone else in the house (straight to their PIN, for a tablet that changes hands), opens The house and the Log (not for guests), switches **Sound** on or off and sets its volume for this device, and signs out. Every page has the light switch (the page dims after sunset on its own; the switch holds until the next sunrise or sunset) and a live thumbnail of the panel, linking to `/live`.
 
 ### Dashboard (`/`)
 
@@ -425,6 +426,7 @@ The web app looks like the device it drives: the panel sits in a wooden frame on
 | `LiveLink` | Every page | A live thumbnail of the panel with "Open /live" under it. All live views in a tab share one long-poll. |
 | `FloatingMenu`, `MenuItem` | Playlist clips, Dashboard sequence | Small action menus on the theme's surface, with icons and a separate, red **Remove**. |
 | `LightSwitch` | Every page | Light and dark follow the sun; a flip holds until the next sunrise or sunset. |
+| Sound (`sound.ts`) | Every page | Every press, switch, tab, menu, link and keystroke makes a small sound, and so do outcomes: saved, on the panel, didn't work, someone at the door. **Sound** in your face's menu turns it off or down on this device. |
 | E-ink / Original | Apps preview, Draw (Ink / E-ink) | See exactly what the panel will show, or the full-colour version. |
 
 ## The panel's contract

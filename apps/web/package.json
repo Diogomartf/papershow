@@ -12,6 +12,7 @@
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
     "@papershow/scene": "workspace:*",
+    "cuelume": "^0.2.8",
     "drawesome": "^0.1.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
