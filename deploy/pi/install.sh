@@ -32,6 +32,12 @@ if [ ! -f "$here/install.sh" ] || [ ! -f "$here/../../package.json" ]; then
   # follow releases. A branch when asked for one, or main before the first release.
   release=$(git -C "$dir" tag -l 'v*' --sort=-v:refname </dev/null | grep -v -- - | head -1 || true)
   if [ -z "${PAPERSHOW_BRANCH:-}" ] && [ -n "$release" ]; then
+    # Checked as paper:update does, once an earlier install has pinned the release keys.
+    signers=/etc/papershow/allowed_signers
+    if [ -f "$signers" ] && ! git -C "$dir" -c gpg.ssh.allowedSignersFile="$signers" verify-tag "$release" >/dev/null 2>&1 </dev/null; then
+      echo "$release isn't signed with a Papershow release key, so it wasn't installed." >&2
+      exit 1
+    fi
     git -C "$dir" switch --quiet --detach "$release" </dev/null
   else
     git -C "$dir" switch --quiet "${PAPERSHOW_BRANCH:-main}" </dev/null
@@ -120,6 +126,23 @@ fi
 if [ "$auto" = 1 ] && ! sudo -k -n true 2>/dev/null; then
   echo "sudo asks $user for a password, so Papershow can't update itself at night. Run paper:update now and then." >&2
   auto=0
+fi
+
+# The keys releases are signed with, pinned outside the checkout, where paper:update checks new releases
+# against them. Written on the first install; after that, replaced only from a release they verify, so
+# a tag or a branch can't swap in a key of its own.
+signers=/etc/papershow/allowed_signers
+if [ ! -f "$signers" ]; then
+  sudo install -D -m 644 deploy/pi/allowed_signers "$signers"
+elif ! git symbolic-ref -q HEAD >/dev/null && ! cmp -s deploy/pi/allowed_signers "$signers"; then
+  # Any release tag on this commit will do: someone else's tag on the same commit mustn't hide the signed one.
+  for release in $(git tag -l 'v*' --points-at HEAD); do
+    if git -c gpg.ssh.allowedSignersFile="$signers" verify-tag "$release" >/dev/null 2>&1; then
+      sudo install -m 644 deploy/pi/allowed_signers "$signers"
+      echo "Release keys updated from $release."
+      break
+    fi
+  done
 fi
 
 # Already set up means this run is an update; it changes only the last line of the output.

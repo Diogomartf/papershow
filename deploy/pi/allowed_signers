@@ -1,0 +1,5 @@
+# The keys Papershow releases are signed with, in ssh-keygen's allowed signers format. install.sh pins
+# this list in /etc/papershow/allowed_signers on the first install, and paper:update installs only
+# releases signed by a key there. To add or replace a key, change this file in a release signed with
+# a key Pis already trust: they take the new list from it.
+diogomf@hey.com namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ3p21wes1P6SW+wpXFFOVK0qREASYVTw8GYUqPE0q/F Papershow releases

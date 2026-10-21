@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Takes Papershow off the Pi: stops and removes its services (server, panel, the paper.local name,
-# the nightly update and the health check), the paper: commands and its Wi-Fi setting, blanks the
+# the nightly update and the health check), the paper: commands, the release keys and its Wi-Fi setting, blanks the
 # panel, and removes its Tailscale address. Your drawings and shows stay in /var/lib/papershow
 # unless you pass --purge. Node, pnpm's cache, the Python libraries, avahi, SPI and Tailscale itself
 # stay too: other things on the Pi may use them. Run deploy/pi/install.sh to put it all back.
@@ -25,6 +25,12 @@ for name in update channel status logs help; do
   if [[ "$(readlink "$link" 2>/dev/null)" == */deploy/pi/paper.sh ]]; then sudo rm -f "$link"; fi
 done
 echo "Removed the paper: commands."
+
+if [ -d /etc/papershow ]; then
+  sudo rm -f /etc/papershow/allowed_signers
+  sudo rmdir /etc/papershow 2>/dev/null || true
+  echo "Removed the release keys."
+fi
 
 if [ -f /etc/NetworkManager/conf.d/papershow-wifi.conf ]; then
   sudo rm -f /etc/NetworkManager/conf.d/papershow-wifi.conf
