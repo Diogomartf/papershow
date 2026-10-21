@@ -108,7 +108,7 @@ const AUTO = "data-sound-auto";
 function cueFor(el: Element): [attr: string, emphasis?: "subtle" | "strong"] | null {
   const role = el.getAttribute("role");
   const type = el instanceof HTMLInputElement ? el.type : null;
-  if (type === "file" || type === "submit" || type === "button") return ["tap", "subtle"];
+  if (type === "file" || type === "submit" || type === "button") return ["toggle", "subtle"];
   if (type === "checkbox" || role === "switch" || role === "checkbox" || role === "menuitemcheckbox" || el.hasAttribute("aria-pressed"))
     return ["toggle"];
   if (type === "radio" || type === "range" || el.tagName === "SELECT") return ["select", type === "range" ? "subtle" : undefined];
@@ -118,10 +118,10 @@ function cueFor(el: Element): [attr: string, emphasis?: "subtle" | "strong"] | n
   if (role === "menuitem") return ["select"];
   if (el.getAttribute("aria-expanded") === "true") return ["close", "subtle"];
   if (el.hasAttribute("aria-expanded") || el.hasAttribute("aria-haspopup")) return ["open", "subtle"];
-  if (el.hasAttribute("download")) return ["tap"];
+  if (el.hasAttribute("download")) return ["toggle"];
   if (el.tagName === "A") return ["navigate"];
-  if (el.classList.contains("primary")) return ["tap"];
-  return ["tap", "subtle"];
+  if (el.classList.contains("primary")) return ["toggle"];
+  return ["toggle", "subtle"];
 }
 
 /** Give the control under an event its cue, unless it chose its own. Runs again each time: a menu that's open closes. */

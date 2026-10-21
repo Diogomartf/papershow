@@ -90,7 +90,7 @@ export function useSortable(onDrop: (group: string, ids: string[]) => Promise<un
       if (!p.live) return void (press.current = null);
       const l = liftNow.current;
       if (l && l.ids.join() !== p.ids.join()) {
-        cue(["tap", { emphasis: "strong" }]);
+        cue(["toggle", { emphasis: "strong" }]);
         setLift({ ...l, landed: true });
         onDrop(l.group, l.ids).finally(() => setLift(null));
       } else {

@@ -17,6 +17,7 @@ import { TextLayer } from "./TextLayer";
 import { PhotoLayer } from "./PhotoLayer";
 import { shortId } from "./id";
 import { cue, DONE, type Cue } from "./sound";
+import { inkSounds } from "./ink";
 
 // Ink mode: greys dither, colours become greys.
 const SWATCHES = ["#111111", "#555555", "#999999", "#d4d4d4", "#ffffff", "#e5484d", "#f5a524", "#3e63dd", "#30a46c"];
@@ -177,6 +178,9 @@ export default function App() {
     el.addEventListener("pointerdown", onDown, true);
     return () => el.removeEventListener("pointerdown", onDown, true);
   }, [loaded]);
+
+  // Each pen sounds like itself as it draws.
+  useEffect(() => (panel.current ? inkSounds(panel.current) : undefined), [loaded]);
 
   /** A toast, sounding like what it reports: done unless it says otherwise. */
   const flash = (msg: string, sound: Cue | null = DONE) => {

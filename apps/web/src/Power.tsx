@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { Sleep } from "./slides";
+import { cue } from "./sound";
 
 /** Today as 'YYYY-MM-DD', local time, for the date input's minimum. */
 const today = () => {
@@ -79,6 +80,7 @@ export function Power({ sleep, back, onChange }: { sleep: Sleep; back: number | 
             pathLength="1"
             onAnimationEnd={() => {
               stop();
+              cue("success");
               onChange({ away: true });
             }}
           />
