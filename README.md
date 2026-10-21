@@ -200,7 +200,7 @@ The install adds these commands:
 | `paper:channel` | What updates follow. `paper:channel main` puts the Pi in dev mode: every commit merged to `main` reaches it that night. `paper:channel releases` goes back to releases, and a branch's name follows that branch, to try a PR on the real panel; commits on a branch aren't checked like releases. It switches right away and reinstalls if the code changed; alone, it says which one the Pi follows. `paper:status` shows it too, on the Updates line. |
 | `paper:status` | Whether the server and panel are running, the version (`v0.2.0` on a release, `v0.2.0+3` three commits after one) and whether a newer one is out, where to open Papershow, whether it updates itself and when it last checked, which keys are set, what the panel last drew, and the last health check. |
 | `paper:logs` | Follows the server's and the panel's logs, coloured by service, with problems in red, warnings in yellow and drawn frames in green. `paper:logs server`, `paper:logs panel`, `paper:logs update` (the nightly updates) or `paper:logs health` (the temperature every 15 minutes) for one; journalctl options go after, like `paper:logs panel -n 200`. |
-| `paper:help` | Lists these commands. |
+| `paper:help` | Lists these commands and how to use each, with examples. `paper:<command> --help` shows the same. |
 
 Installed before these commands existed? Update once the long way, which adds them:
 

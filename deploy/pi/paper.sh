@@ -11,7 +11,7 @@
 #                          commit on a branch, as a dev. It switches now and reinstalls if the code changed.
 #   paper:status           what's running, which version, where to open it, what the panel last drew
 #   paper:logs [server|panel|update|health] [journalctl options]   follow the logs, both services by default
-#   paper:help             list these commands
+#   paper:help             list these commands and how to use them; paper:<command> --help does too
 #
 # Or call it directly: deploy/pi/paper.sh status. deploy/pi/paper.sh version prints the version
 # alone, for install.sh.
@@ -25,14 +25,46 @@ if [ "$cmd" = paper.sh ]; then
   shift || true
 fi
 
+# The brand blue (--focus in the web app), on a terminal and without NO_COLOR.
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  blue=$'\e[1;38;2;62;99;221m' bold=$'\e[1m' dim=$'\e[2m' off=$'\e[0m'
+else
+  blue= bold= dim= off=
+fi
+
 help() {
-  cat <<'EOF'
-Papershow on this Pi:
-  paper:status            what's running, which version, where to open it, what the panel last drew
-  paper:logs              follow the logs; paper:logs server, panel, update or health for one
-  paper:update            get the latest release and reinstall (it also checks every night on its own)
-  paper:channel           what updates follow; paper:channel main for every commit (dev), releases to go back
-  paper:help              this list
+  cat <<EOF
+$blue
+  ████   ███  ████  █████ ████   ████ █   █  ███  █   █
+  █   █ █   █ █   █ █     █   █ █     █   █ █   █ █   █
+  ████  █████ ████  ████  ████   ███  █████ █   █ █ █ █
+  █     █   █ █     █     █  █      █ █   █ █   █ █ █ █
+  █     █   █ █     █████ █   █ ████  █   █  ███   █ █
+$off
+  $blue$(version)$off  An e-ink slideshow, on this Pi.
+
+${blue}CHECK ON IT$off
+  ${bold}paper:status$off              what's running and where to open it, the version
+                            and whether a newer one is out, the last frame drawn
+  ${bold}paper:logs$off                follow the server and panel logs (Ctrl-C stops)
+  ${bold}paper:logs server$off         only one: server, panel, update (nightly updates)
+                            or health (the temperature every 15 minutes)
+  ${bold}paper:logs panel -n 200$off   journalctl options go after: the last 200 lines
+
+${blue}UPDATE$off
+  ${bold}paper:update$off              get the latest release and reinstall; if there's
+                            nothing new, it stops. .env stays. The Pi also does
+                            this every night on its own
+  ${bold}paper:channel$off             say what updates follow
+  ${bold}paper:channel main$off        follow every commit on main (dev)
+  ${bold}paper:channel releases$off    go back to releases, the default
+  ${bold}paper:channel <branch>$off    follow a branch, to try a PR on the real panel
+
+${blue}HELP$off
+  ${bold}paper:help$off                this list; paper:<command> --help works too
+
+${dim}Keys and settings are in $repo/.env
+More: https://github.com/Diogomartf/papershow#commands-on-the-pi$off
 EOF
 }
 
@@ -101,6 +133,9 @@ port() {
   p=$(systemctl show papershow -p Environment --value 2>/dev/null | tr ' ' '\n' | grep '^PORT=' | cut -d= -f2 || true)
   echo "${p:-5194}"
 }
+
+# paper:update --help shouldn't update, and paper:logs --help shouldn't hand it to journalctl.
+case "${1:-}" in -h | --help) cmd=help ;; esac
 
 case "$cmd" in
   update)
