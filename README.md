@@ -1,6 +1,6 @@
 <h1><img src="docs/logo.png" alt="Papershow" width="420" /></h1>
 
-An e-ink slideshow for an 800×480 black-and-white panel (Waveshare 7.5″). You draw pictures and set up apps (clocks, AI text, news, prices) in the browser, arrange them into a show, and the panel fetches whatever is on air from `/live`.
+An e-ink slideshow for an 800×480 black-and-white panel (Waveshare 7.5″). You draw pictures, add photos and set up apps (clocks, AI text, news, prices) in the browser, arrange them into a show, and the panel fetches whatever is on air from `/live`.
 
 All the work happens on the server. The panel never renders anything: it downloads a finished 1-bit frame and redraws only when that frame changes, because e-ink refreshes are slow and flash.
 
@@ -270,7 +270,7 @@ Environment=PANEL_PARTIAL=0
 
 | Path | What it is |
 |---|---|
-| `apps/web` | Vite + React front end: Dashboard, Show, Playlists, Apps, Draw. |
+| `apps/web` | Vite + React front end: Dashboard, Show, Playlists, Apps, Photos, Draw. |
 | `apps/server` | Hono on Node: API, SQLite store, scheduler, app renderer, `/live`. |
 | `apps/server/src/apps` | One file per app (clock, AI, news, crypto, stocks…). See [AGENTS.md](AGENTS.md) for how to write one. |
 | `apps/panel` | The Pi client: follows `/live.bin` and draws it on the Waveshare panel. Python, not part of the pnpm workspace. |
@@ -282,7 +282,7 @@ The panel client only knows a server URL, so it can follow a server on the same 
 
 ### Two ways a frame gets made
 
-**Drawings are rendered in the browser.** Draw is a canvas editor (the [drawesome](https://www.npmjs.com/package/drawesome) pens plus a text layer). On save, the browser renders three files from the scene: a colour picture (PNG, or JPEG over a photo), a 1-bit PNG and the panel's raw 1bpp frame. It uploads them with the scene JSON to `PUT /api/images/:id`. The server stores them as they are.
+**Drawings and photos are rendered in the browser.** Draw is a canvas editor (the [drawesome](https://www.npmjs.com/package/drawesome) pens plus a text layer). On save, the browser renders three files from the scene: a colour picture (PNG, or JPEG over a photo), a 1-bit PNG and the panel's raw 1bpp frame. It uploads them with the scene JSON to `PUT /api/images/:id`. The server stores them as they are. A photo from Photos is the same thing with nothing drawn on it: a scene that's only a photo and where it sits, saved with `kind: photo`, so it plays, pins and goes in playlists like any drawing.
 
 **Apps are rendered on the server, on demand.** Each app is a TypeScript module with a `data()` function (fetch prices, ask a model…) and a `view()` that returns JSX. The pipeline:
 
@@ -321,11 +321,11 @@ Papershow is the house's panel, so everyone in the house can use it. Signing in 
 - **Someone new** taps **I'm new**, picks a name, a face, a colour and a PIN, and knocks. Anyone in the household (admins too) gets a **Let in / As a guest / Not now** card on the Dashboard and a badge on their face in the corner; the knocking screen opens by itself when they're let in.
 - **Invite**: on the People page an admin taps **Invite someone**: a QR code and a six-letter code that work for 10 minutes, with **Household** or **Guest** at the top for who it lets in as (switching keeps the same code). Scanning it (or typing the code under **I'm new**) skips the knock, and the newcomer joins as what the invite says. Without anyone to say yes: the newcomer is in at once. **Show on the panel** puts the same code and QR on the e-ink for 2 minutes (or until someone joins), to scan it there; **Take it down** ends it sooner, and closing the invite leaves it up for its 2 minutes. It beats the night, but not Off.
 - **Asking to show.** A guest's **Show now** is **Ask to show** (in Draw, its Gallery, Apps and the Dashboard's sequence). The household and admins get a **Can I show this?** card on the Dashboard with the picture, and a badge on their face; **Show it** puts it on the panel for as long as the guest picked, marked with who said yes, and **Not now** drops it. A guest has one ask at a time (a new one replaces it), can take it back, and an ask nobody answers lapses after 30 minutes. If a guest changes a drawing or app that's waiting on an ask, on the panel by one, or in a playlist or the show, the ask goes and it comes off the panel and out of the show: the yes was for how it looked.
-- **Going easy on the panel.** Everyone but admins has an hourly allowance, so one person can't flood the feed: Show now and asks (household 12, guests 4), making things: new drawings, apps and playlists, and adding to the show or a playlist (household 40, guests 10), and app previews as settings are typed (household 2,000, guests 600). Past it, the action says how many minutes to wait. Kept in memory: a restart forgives.
-- **The library is shared.** Everyone sees and can use every drawing, app and playlist (Show now, add to the show, duplicate), each with its maker's face. Only the maker or an admin changes or deletes one. Saving someone else's drawing in Draw saves your own copy.
+- **Going easy on the panel.** Everyone but admins has an hourly allowance, so one person can't flood the feed: Show now and asks (household 12, guests 4), making things: new drawings, apps and playlists, and adding to the show or a playlist (household 40, guests 10), new photos, which come an album at a time (household 300, guests 60), and app previews as settings are typed (household 2,000, guests 600). Past it, the action says how many minutes to wait. Kept in memory: a restart forgives.
+- **The library is shared.** Everyone sees and can use every drawing, photo, app and playlist (Show now, add to the show, duplicate), each with its maker's face. Only the maker or an admin changes or deletes one. Saving someone else's drawing in Draw saves your own copy.
 - **The show** is the household's to edit. Night hours and Off are admins' only.
 - **Admins** manage people on **Manage people** (`/people/manage`): set anyone's role, and remove people: they're signed out everywhere, and the things they made stay. There's always at least one admin. Someone removed can be let back in, or deleted with **Delete everything**: them, their drawings, apps and playlists (and so their places in the show and in others' playlists), and every log line by or about them. It takes a second press and can't be undone; the log keeps only how much went.
-- **The log** records who did what, for 90 days: drawings, apps, playlists, the show, Show now and guests' asks, night and Off, and people coming in. Edits in a row to the same thing count once. Lines about a drawing or app show it small; tap it to open it. The Log page filters by person and by topic (on the panel, program, drawings and apps, night and off, people and invites).
+- **The log** records who did what, for 90 days: drawings, photos, apps, playlists, the show, Show now and guests' asks, night and Off, and people coming in. Edits in a row to the same thing count once. Lines about a drawing or app show it small; tap it to open it. The Log page filters by person and by topic (on the panel, program, drawings and apps, night and off, people and invites).
 - Wrong PINs: five tries, then a minute's wait, doubling after each further miss up to an hour, so 10,000 PINs can't be tried one by one. The wait is per device, so someone guessing your PIN can't lock you out of yours.
 - Knocking needs no one signed in, so it's limited: five knocks an hour from one device, and at most 20 people knocking at once.
 
@@ -335,11 +335,11 @@ Pages paint once, complete: who's signed in, the house's state and the library a
 
 ### Storage
 
-SQLite at `apps/server/data/imagegen.db` (set `DB=/path` to move it). Tables: `images` (scene JSON plus the three rendered files), `apps` (kind, name, settings JSON), `playlists`, `slides` (playlist clips), `show` (entries, durations, repeats, times), `settings` (pin and night), `people` (name, face, colour, hashed PIN, role, status), `sessions` (one per signed-in device, token hashed), `invites` (with the role they let in as), `asks` (guests' asks to show, waiting for a yes), `log`. Images, apps and playlists have a `made_by`. The draft you're drawing stays in the browser's IndexedDB until you save.
+SQLite at `apps/server/data/imagegen.db` (set `DB=/path` to move it). Tables: `images` (scene JSON plus the three rendered files; `kind` is `drawing` or `photo`), `apps` (kind, name, settings JSON), `playlists`, `slides` (playlist clips), `show` (entries, durations, repeats, times), `settings` (pin and night), `people` (name, face, colour, hashed PIN, role, status), `sessions` (one per signed-in device, token hashed), `invites` (with the role they let in as), `asks` (guests' asks to show, waiting for a yes), `log`. Images, apps and playlists have a `made_by`. The draft you're drawing stays in the browser's IndexedDB until you save.
 
 ## Sections
 
-The nav runs Dashboard, Show, Apps, Draw (guests get no Show). Your face sits in the top-right corner: its menu lists who's knocking and guests' asks, switches to someone else in the house (straight to their PIN, for a tablet that changes hands), opens The house and the Log (not for guests), switches **Sound** on or off and sets its volume for this device, and signs out. Every page has the light switch (the page dims after sunset on its own; the switch holds until the next sunrise or sunset) and a live thumbnail of the panel, linking to `/live`.
+The nav runs Dashboard, Show, Apps, Photos, Draw (guests get no Show). Your face sits in the top-right corner: its menu lists who's knocking and guests' asks, switches to someone else in the house (straight to their PIN, for a tablet that changes hands), opens The house and the Log (not for guests), switches **Sound** on or off and sets its volume for this device, and signs out. Every page has the light switch (the page dims after sunset on its own; the switch holds until the next sunrise or sunset) and a live thumbnail of the panel, linking to `/live`.
 
 ### Dashboard (`/`)
 
@@ -380,6 +380,7 @@ Every app has **Fill**. It sets the main text as large as it can be while it sti
 | Custom news (any news site from its address: its latest story, or the one leading its front page; Poster, Clean, Classic, Title or Fill) | News | the site's feed or front page | — | 15 min |
 | Crypto (up to 4 of 10 tokens, USD/EUR; Standard or Fill) | Stocks & tokens | CoinGecko prices, Trust Wallet logos | — | 5 min |
 | Stocks (top gainers or losers; Standard or Fill) | Stocks & tokens | Massive, logos from logo.dev | `MASSIVE_API_KEY`, `LOGO_DEV_TOKEN` (logos) | 15 min |
+| Photos (your photos one at a time, as framed on the Photos page: the ones you pick, in the order picked, or all of them; in order, shuffled so each comes up once a round, or On this day: the ones taken on today's date in any year, and all of them on a day with none; optionally the name, the date taken or both in the corner) | Photos | Your photos | — | every minute, 5 or 15 minutes, hourly or daily (15 min by default) |
 
 Details per source:
 - **Groq**: `openai/gpt-oss-20b` by default (`GROQ_MODEL` to change it). Each AI app has a model picker filled from Groq's live model list. The same prompt in the same period is asked once. A key Groq rejects counts as missing until the server restarts.
@@ -393,9 +394,13 @@ Details per source:
 
 Every source keeps its last good result if a fetch fails. The news apps read unofficial public feeds and pages, and only ever use the headline, summary, byline and photo.
 
+### Photos (`/photos`)
+
+The house's photos, ready to use. **Add photos** (or drop them anywhere on the page) adds as many as you pick, each kept at up to twice the panel's width on its short side so there's detail to crop into. Each remembers when it was taken, from the camera's EXIF (or else the file's date), shown under its name. HEIC photos open in Safari, and iPhones send JPEGs; other browsers can't open HEIC, and say so. Tap one to frame it on the panel, as in Draw's **Move**: drag to move it, pinch, scroll or pull a corner to crop in or show more, drag just outside a corner to turn it; near the middle it snaps to the centre, with a line showing which way. **Fill** covers the panel edge to edge, **Whole** shows all of it with paper around, and **Turn** (↻) turns it a quarter (staying whole if it was). **Save as version** keeps the framing as a photo of its own (Beach 2, Beach 3…), to frame the same picture another way: a close crop and the whole thing. **Photo / E-ink** switches between the picture and what the panel will show. The framing saves as you go, and is what everything else uses: **Show now** (or **Ask to show**), **Add to show**, playlists, and the **Photos** app. **Draw on it** starts a drawing with the photo under it. Only the person who added a photo, or an admin, frames or deletes it. **Delete** asks first: the photo also comes out of every playlist and the show.
+
 ### Draw (`/draw`)
 
-A drawing board the size of the panel. Pens, eraser, undo and swatches come from drawesome. **Text** (or `T`) switches to typing: click to add text, drag to move it with centre guides, pull a corner to scale it. **Ink / E-ink** previews the drawing as the panel will show it, with the swatches cut down to black and white. **Save** (⌘S) stores it on the server. **Photo** puts a picture from your phone or computer under the drawing, filling the panel and dithered for e-ink; draw or type on it, or send it as it is. The photo's card in the bar has **Move**, which works as in Figma: drag the photo to move it, drag a corner to resize it, drag just outside a corner to turn it to any angle (Shift for 15° steps), or pinch and twist with two fingers; **Whole** fits all of it on the panel. **Remove** takes it off. **Open** saves and opens its page in a new tab, which has **Open in Draw** to come back to it, and a big **Back** button. **Show now** saves and puts it on the panel ahead of the program, for as long as the list beside it says (1 minute to 3 hours, 5 minutes unless you pick otherwise; it remembers your pick), then the program carries on. **Gallery** reopens or deletes saved drawings, or puts one on the panel for that long. The draft autosaves in the browser. Coming back to Draw starts a new canvas, unless the last drawing has changes you haven't saved.
+A drawing board the size of the panel. Pens, eraser, undo and swatches come from drawesome. **Text** (or `T`) switches to typing: click to add text, drag to move it with centre guides, pull a corner to scale it. **Ink / E-ink** previews the drawing as the panel will show it, with the swatches cut down to black and white. **Save** (⌘S) stores it on the server. **Photo** puts one of the house's photos (framed as it is in Photos) or a picture from your phone or computer under the drawing, filling the panel and dithered for e-ink; draw or type on it, or send it as it is. The photo's card in the bar has **Move**, which works as in Figma: drag the photo to move it, drag a corner to resize it, drag just outside a corner to turn it to any angle (Shift for 15° steps), or pinch and twist with two fingers; near the middle it snaps to the centre, with guide lines. **Whole** fits all of it on the panel, and ↻ turns it a quarter. **Remove** takes it off. **Open** saves and opens its page in a new tab, which has **Open in Draw** to come back to it, and a big **Back** button. **Show now** saves and puts it on the panel ahead of the program, for as long as the list beside it says (1 minute to 3 hours, 5 minutes unless you pick otherwise; it remembers your pick), then the program carries on. **Gallery** reopens or deletes saved drawings, or puts one on the panel for that long. The draft autosaves in the browser. Coming back to Draw starts a new canvas, unless the last drawing has changes you haven't saved.
 
 ### People (`/people`)
 
@@ -463,9 +468,9 @@ Long-poll: send `?wait=1` with `If-None-Match: <etag>`. The server holds the req
 | `POST /api/asks`, `POST /api/asks/:id/yes`, `DELETE /api/asks/:id` | A guest's Show now: ask (`{ source, forS?, from? }`); the household says yes (it goes live for `forS`) or Not now (delete), and the guest can take it back (delete). |
 | `GET /api/log?before=&person=&limit=` | The log, newest first. Not for guests. |
 | `GET /api/state`, `GET /api/state/wait` | Everything the app shows: on air, show, playlists, clips, sequence, night, you, people, guests' asks, the last few log entries (none for guests). `wait` long-polls up to 25 s. |
-| `GET /api/images`, `GET /api/images/:id` | Saved drawings; one drawing with its scene. |
+| `GET /api/images`, `GET /api/images/:id` | Saved drawings and photos (`kind`: `drawing` or `photo`); one with its scene. |
 | `GET /api/images/:id/:kind` | `png`, `mono` or `bin` file. |
-| `PUT /api/images/:id`, `DELETE /api/images/:id` | Save (multipart: `scene`, `png`, `mono`, `bin`) or delete. |
+| `PUT /api/images/:id`, `DELETE /api/images/:id` | Save (multipart: `scene`, `png`, `mono`, `bin`, and `kind: photo` for a new photo; a saved image keeps its kind) or delete. |
 | `GET /api/apps/catalog` | App kinds: name, category, source, settings fields, defaults, mock. |
 | `GET /api/apps`, `POST /api/apps` | Your app instances; create one (`{ kind, name?, config? }`). |
 | `GET`, `PATCH`, `DELETE /api/apps/:id` | One instance. |

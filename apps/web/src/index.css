@@ -1676,8 +1676,8 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
   .bar-right.draw-actions { flex: 1 1 100%; flex-wrap: wrap; row-gap: 6px; }
   .draw-actions .text-label { display: none; }
   /* The photo's buttons still fit a phone-sized panel, still big enough for a thumb */
-  .photo-tools { bottom: 8px; gap: 4px; padding: 4px; border-radius: 18px; }
-  .photo-tools button { min-width: 44px; height: 44px; padding: 0 10px; font-size: 15px; border-radius: 13px; }
+  .photo-tools { bottom: 8px; gap: 4px; padding: 4px; }
+  .photo-tools button { min-width: 44px; height: 44px; padding: 0 12px; font-size: 15px; }
   .stage { padding-top: 12px; grid-template-rows: auto auto; align-content: start; }
   /* Drawesome sizes its bar to its widest panel; scale it to the phone (zoom keeps taps aligned) */
   .panel [class*="Draw_toolbar"] { zoom: .76; }
@@ -1774,14 +1774,16 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
 .photo-tools {
   position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
   display: flex; gap: 6px; padding: 6px;
-  border-radius: 22px; background: var(--surface);
+  /* A pill, and round buttons in it: the gaps between them and its edge stay even all the way round. */
+  border-radius: 999px; background: var(--surface);
+  z-index: 3; /* over the centre guides */
   box-shadow: 0 0 0 1px var(--line), 0 10px 24px -10px var(--drop);
   white-space: nowrap; cursor: default;
 }
 .photo-tools button {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-width: 56px; height: 56px; padding: 0 18px;
-  border: 0; border-radius: 16px;
+  border: 0; border-radius: 999px;
   background: var(--tint); color: var(--ink);
   font: inherit; font-size: 18px; font-weight: 680;
   transition: transform 160ms var(--ease-out), background-color 120ms ease-out;
@@ -1812,7 +1814,7 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
 .handle.ne { right: -5px; top: -5px; cursor: nesw-resize; }
 .handle.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
 
-/* Centre guides while dragging a text: a line through the middle when it's centred */
+/* Centre guides while dragging a text or a photo: a line through the middle when it's centred */
 .guide {
   position: absolute; z-index: 1; pointer-events: none;
   background: #ff3b8d;
@@ -2365,3 +2367,81 @@ fieldset.plain:disabled > * { opacity: .55; }
 
 /* Who an invite lets in as, at the top of the invite. */
 .invite-role { margin: 4px auto 8px; }
+
+/* ── Photos ────────────────────────────────────────── */
+
+.photos-add { margin: 14px 0 4px; }
+.photos-add .primary { width: 100%; justify-content: center; padding: 9px 14px; }
+.rail .photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.photo-grid a {
+  display: block; border-radius: 6px; overflow: hidden;
+  background: var(--paper);
+  box-shadow: 0 0 0 1px var(--line);
+  transition: box-shadow 140ms;
+}
+.photo-grid a:hover { box-shadow: 0 0 0 1px var(--ink-3); }
+.photo-grid a[aria-current="page"] { box-shadow: 0 0 0 2px var(--ink); }
+.photo-grid img { display: block; width: 100%; aspect-ratio: 5 / 3; object-fit: cover; filter: var(--dim); }
+/* Fill and Whole say which one the photo is at now. */
+.setting .segmented button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 0 0 0.5px rgba(0,0,0,.06);
+}
+.photos-empty {
+  position: absolute; inset: 0;
+  display: grid; place-content: center; justify-items: center; gap: 10px;
+  padding: 24px; text-align: center;
+  color: var(--ink-3);
+}
+.photos-empty strong { color: var(--ink); font-size: 18px; font-weight: 600; }
+.photos-empty span { max-width: 40ch; line-height: 1.45; margin-bottom: 6px; }
+.photos-tip { margin: -4px 0 0; font-size: 13px; line-height: 1.45; }
+.photos-tip a { color: var(--ink-2); }
+/* Dragging files over the page: a big target to let go on. */
+.photos-drop {
+  position: fixed; inset: 12px; z-index: 50;
+  display: grid; place-items: center;
+  border-radius: 18px; border: 2px dashed var(--ink-3);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  font-size: 20px; font-weight: 600; color: var(--ink);
+  opacity: 0; pointer-events: none;
+  transition: opacity 140ms var(--ease-out);
+}
+.photos[data-dragging="true"] .photos-drop { opacity: 1; }
+
+/* A Photos app's picks: thumbnails to tap, numbered in the order they show. */
+.picks[data-thumbs] { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; width: 100%; }
+.picks[data-thumbs] button { position: relative; height: auto; padding: 0; border-radius: 6px; overflow: hidden; background: var(--paper); }
+.picks[data-thumbs] button img { display: block; width: 100%; aspect-ratio: 5 / 3; object-fit: cover; filter: var(--dim); }
+.picks[data-thumbs] button[aria-pressed="true"] { background: var(--paper); box-shadow: 0 0 0 2px var(--ink); }
+.picks[data-thumbs] .pick-n {
+  position: absolute; top: 4px; left: 4px;
+  padding: 3px 6px; border-radius: 999px;
+  background: var(--ink); color: var(--surface); opacity: 1;
+}
+
+/* Draw's Photo: from this device, above the house's photos. */
+.picker-device { padding: 0 14px 8px; }
+
+@media (max-width: 720px) {
+  .photos-add { margin-top: 8px; }
+  .rail .photo-grid { display: flex; overflow-x: auto; scrollbar-width: none; }
+  .rail .photo-grid li { flex: none; width: 96px; }
+  .photos-drop { display: none; }
+}
+
+/* Draw's bar has the most in it. It runs as a row that wraps: as the window narrows the extras go first (the
+   wordmark, then Text's word and the photo's thumbnail), and only then do the actions drop to a row of their own. */
+@media (min-width: 721px) {
+  .bar.draw-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .draw-bar > .bar-left, .draw-bar > .segmented { flex: none; }
+  .draw-bar > .bar-right { flex: none; margin-left: auto; }
+}
+/* Everything at its full size takes about 1750px. */
+@media (min-width: 721px) and (max-width: 1799px) {
+  .draw-bar .wordmark, .draw-bar .text-label, .draw-bar .photo-card img { display: none; }
+  .draw-bar .bar-left .name { width: 14ch; }
+  .draw-bar .nav a { padding: 6px 6px; }
+  .bar.draw-bar { column-gap: 12px; }
+}

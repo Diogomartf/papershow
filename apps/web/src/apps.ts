@@ -7,9 +7,9 @@ export type Field =
   | { key: string; label: string; type: "toggle"; hint?: string }
   | { key: string; label: string; type: "select"; options: { value: string; label: string }[]; hint?: string }
   | { key: string; label: string; type: "list"; placeholder?: string; hint?: string }
-  | { key: string; label: string; type: "picks"; options: { value: string; label: string }[]; max?: number; hint?: string };
+  | { key: string; label: string; type: "picks"; options: { value: string; label: string; thumb?: string }[]; max?: number; hint?: string };
 
-export type Category = "clock" | "ai" | "news" | "markets";
+export type Category = "clock" | "ai" | "news" | "markets" | "photos";
 
 /** Category headings, in the order the "New app" list shows them. */
 export const CATEGORIES: { id: Category; label: string }[] = [
@@ -17,6 +17,7 @@ export const CATEGORIES: { id: Category; label: string }[] = [
   { id: "ai", label: "AI" },
   { id: "news", label: "News" },
   { id: "markets", label: "Stocks & tokens" },
+  { id: "photos", label: "Photos" },
 ];
 
 export type AppKind = {

@@ -18,6 +18,7 @@ const SECTIONS = [
   { id: "dashboard", href: "/", label: "Dashboard" },
   { id: "show", href: "/show", label: "Show" },
   { id: "apps", href: "/apps", label: "Apps" },
+  { id: "photos", href: "/photos", label: "Photos" },
   { id: "draw", href: "/draw", label: "Draw" },
 ] as const;
 

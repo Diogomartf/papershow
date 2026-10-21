@@ -89,12 +89,12 @@ async function sceneToCanvas(scene: Scene, mono = false): Promise<HTMLCanvasElem
 }
 
 /**
- * A picked photo, whole, small enough to keep in the scene: its short side at most the panel's width,
- * which fills the panel whichever way it's turned.
+ * A picked photo, whole, small enough to keep in the scene: its short side at most `short` (the panel's width,
+ * which fills the panel whichever way it's turned), its long side at most three times that.
  */
-export async function photoFor(file: Blob): Promise<string> {
+export async function photoFor(file: Blob, short: number = PANEL.w): Promise<string> {
   const bmp = await createImageBitmap(file);
-  const k = Math.min(1, PANEL.w / Math.min(bmp.width, bmp.height), (3 * PANEL.w) / Math.max(bmp.width, bmp.height));
+  const k = Math.min(1, short / Math.min(bmp.width, bmp.height), (3 * short) / Math.max(bmp.width, bmp.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bmp.width * k);
   canvas.height = Math.round(bmp.height * k);
@@ -104,6 +104,17 @@ export async function photoFor(file: Blob): Promise<string> {
   ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
   bmp.close();
   return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+/**
+ * Why a picture wouldn't open, for a toast. HEIC (iPhone photos copied off the phone) opens in Safari but not in
+ * Chrome or Firefox; Safari and iPhones hand over a JPEG instead when uploading.
+ */
+export function cantOpen(file: File) {
+  const heic = /image\/hei[cf]/.test(file.type) || /\.hei[cf]$/i.test(file.name);
+  return heic
+    ? `${file.name} is a HEIC photo, which this browser can't open. Add it from Safari, or save it as JPEG first`
+    : `Couldn't open ${file.name}`;
 }
 
 /** Dither a canvas in place to what the e-ink panel will show. */

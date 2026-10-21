@@ -35,6 +35,8 @@ export type Scene = {
   photo?: string;
   /** Where the photo sits. Without it, the photo fills the panel. */
   photoAt?: PhotoAt;
+  /** When the photo was taken (ms since epoch), from its EXIF or else the file's date. Photos only; not always known. */
+  takenAt?: number;
   createdAt: number;
   updatedAt: number;
 };

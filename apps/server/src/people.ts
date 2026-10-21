@@ -349,15 +349,18 @@ export function panelInvite(now = Date.now()): Invite | undefined {
 
 /**
  * "live": Show now and asking to show. "make": new drawings, apps and playlists, and adding to the show.
+ * "photo": new photos, which come an album at a time.
  * "preview": an app's preview as its settings are typed. Each can fetch pages or ask the AI, so it's generous
  * (a clock's preview ticks every 15 s) but not endless.
  */
-export type Bucket = "live" | "make" | "preview";
+export type Bucket = "live" | "make" | "photo" | "preview";
 
 /** Goes per hour, by role. Admins have no limit. */
 export const LIMITS: Record<Bucket, Record<Exclude<Role, "admin">, number>> = {
   live: { member: 12, guest: 4 },
   make: { member: 40, guest: 10 },
+  // Adding photos comes an album at a time, so it has its own, bigger allowance.
+  photo: { member: 300, guest: 60 },
   preview: { member: 2000, guest: 600 },
 };
 

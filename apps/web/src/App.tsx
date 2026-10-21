@@ -3,8 +3,8 @@ import { Draw, type DrawHandle, type Stroke } from "drawesome";
 import "drawesome/styles.css";
 import "@fontsource-variable/inter";
 import { PANEL, PHOTO_FILL, type PhotoAt, type Scene, type TextItem } from "@papershow/scene";
-import { paintMono, photoFor, renderScene } from "./render";
-import { getDraft, getImage, getSaved, imageUrl, putDraft, putImage, putSaved } from "./store";
+import { cantOpen, paintMono, photoFor, renderScene } from "./render";
+import { getDraft, getImage, getSaved, imageUrl, listImages, putDraft, putImage, putSaved, type ImageMeta } from "./store";
 import { Oops, reason, useMe } from "./house";
 import { Gallery } from "./Gallery";
 import { ask, setLive } from "./slides";
@@ -15,6 +15,7 @@ import { LightSwitch } from "./LightSwitch";
 import { MeMenu } from "./MeMenu";
 import { TextLayer } from "./TextLayer";
 import { PhotoLayer } from "./PhotoLayer";
+import { PhotoPicker } from "./PhotoPicker";
 import { shortId } from "./id";
 import { cue, DONE, type Cue } from "./sound";
 import { inkSounds } from "./ink";
@@ -81,6 +82,15 @@ function nameFromText(texts: TextItem[] | undefined): string {
   return UNTITLED;
 }
 
+/** `s` with the photo `p` from the library under it, framed as it is there. An untitled drawing takes the photo's name. */
+const withPhoto = (s: Scene, p: Scene, named = false): Scene => ({
+  ...s,
+  photo: p.photo,
+  photoAt: p.photoAt ?? PHOTO_FILL,
+  name: named || s.name !== UNTITLED ? s.name : p.name,
+  updatedAt: Date.now(),
+});
+
 type View = "ink" | "eink";
 
 /** What the panel would show of a drawing: two scenes with the same key look the same. */
@@ -111,6 +121,9 @@ export default function App() {
   const guest = useMe().me.role === "guest";
   const now = useNow(skew, 5000);
   const photoInput = useRef<HTMLInputElement>(null);
+  // The house's photos, for Photo: picked from the library, or from this device when there are none.
+  const [library, setLibrary] = useState<ImageMeta[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
   // True once the name field is typed in. Until then the name follows the text, instead of staying Untitled.
   const nameEdited = useRef(false);
 
@@ -124,12 +137,16 @@ export default function App() {
 
   useEffect(() => {
     document.title = "Draw · Papershow";
-    // /draw?open=<id> (from a picture's own page) opens that drawing, as saved.
-    const id = new URLSearchParams(location.search).get("open");
+    listImages().then((xs) => setLibrary(xs.filter((x) => x.kind === "photo")), () => {});
+    // /draw?open=<id> (from a picture's own page) opens that drawing, as saved. A photo isn't drawn over in place:
+    // it starts a new drawing on it, as /draw?photo=<id> (from Photos) does.
+    const params = new URLSearchParams(location.search);
+    const id = params.get("open") ?? params.get("photo");
     if (id) {
       history.replaceState(null, "", "/draw");
       getImage(id).then(
-        ({ scene }) => {
+        ({ scene, kind }) => {
+          if (kind === "photo") return setScene(adopt(withPhoto(newScene(), scene)));
           putSaved(scene);
           setSavedLooks(looksKey(scene));
           setScene(adopt(scene));
@@ -263,8 +280,21 @@ export default function App() {
       setTyping(false);
       setPlacing(true);
     } catch (err) {
-      flash("Couldn't open that picture", "error");
+      flash(cantOpen(file), "error");
       console.error(err);
+    }
+  };
+
+  /** One of the house's photos under the drawing, framed as it is in Photos. */
+  const fromLibrary = async (id: string) => {
+    setPickerOpen(false);
+    try {
+      const { scene: p } = await getImage(id);
+      setScene((s) => (s ? withPhoto(s, p, nameEdited.current) : s));
+      setTyping(false);
+      setPlacing(false);
+    } catch (err) {
+      flash(reason(err, "Couldn't open that photo"), "error");
     }
   };
 
@@ -323,7 +353,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="bar">
+      <header className="bar draw-bar">
         <div className="bar-left">
           <Nav current="draw" />
           <span className="divider" aria-hidden />
@@ -389,7 +419,12 @@ export default function App() {
               </button>
             </span>
           ) : (
-            <button className="ghost" onClick={() => photoInput.current?.click()} title="Put a photo on the panel, and draw on it if you like">
+            <button
+              className="ghost"
+              data-cuelume-open={library.length ? true : undefined}
+              onClick={() => (library.length ? setPickerOpen(true) : photoInput.current?.click())}
+              title="Put a photo on the panel, and draw on it if you like"
+            >
               Photo
             </button>
           )}
@@ -504,6 +539,17 @@ export default function App() {
         showFor={showFor}
         onLive={(name) => (guest ? flash(`Asked to show ${name} 🙋`) : flash(`${name} is on the panel for ${forLabel(showFor)}`, null))}
         onFail={(err) => flash(reason(err, "That didn't work"), "error")}
+      />
+
+      <PhotoPicker
+        open={pickerOpen}
+        photos={library}
+        onClose={() => setPickerOpen(false)}
+        onPick={fromLibrary}
+        onDevice={() => {
+          setPickerOpen(false);
+          photoInput.current?.click();
+        }}
       />
 
       <div className="toast" data-on={!!toast} role="status">{toast}</div>

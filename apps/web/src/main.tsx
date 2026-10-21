@@ -10,6 +10,7 @@ import { Log } from "./Log.tsx";
 import { Manage } from "./Manage.tsx";
 import { navigate } from "./Nav.tsx";
 import { People } from "./People.tsx";
+import { Photos } from "./Photos.tsx";
 import { hello as getHello, Me, SIGNED_OUT, signOut, useMe, type Hello as HelloData } from "./house";
 import { Playlist } from "./Playlist.tsx";
 import { Show } from "./Show.tsx";
@@ -46,6 +47,8 @@ function Router() {
   if (fresh) return <Apps id={null} newKind={fresh[1]} />;
   const app = path.match(/^\/apps(?:\/([\w-]+))?/);
   if (app) return <Apps id={app[1] ?? null} />;
+  const photo = path.match(/^\/photos(?:\/([\w-]+))?/);
+  if (photo) return <Photos id={photo[1] ?? null} />;
   if (path.startsWith("/draw")) return <App />;
   if (path.startsWith("/people/manage")) return <Manage />;
   if (path.startsWith("/people")) return <People />;

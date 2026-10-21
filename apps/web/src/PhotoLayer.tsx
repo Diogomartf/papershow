@@ -9,6 +9,8 @@ const STEP = 1.25;
 /** Turning snaps straight within this many degrees; with Shift it goes in steps of 15, as in Figma. */
 const SNAP_DEG = 4;
 const SHIFT_STEP = 15;
+/** Screen pixels within which a dragged photo snaps to the centre, as text does. */
+const SNAP_PX = 8;
 /** The photo's corners, as which way they lie from its centre. */
 const CORNERS = [
   { sx: -1, sy: -1, resize: "nwse-resize" },
@@ -45,7 +47,8 @@ export function PhotoLayer({
   at: PhotoAt;
   onChange: (at: PhotoAt) => void;
   active: boolean;
-  onDone: () => void;
+  /** Back to drawing. Without it there's no Done: the photo is all there is to move. */
+  onDone?: () => void;
   /** The e-ink preview shows the photo dithered instead. */
   hidden: boolean;
 }) {
@@ -101,6 +104,8 @@ export function PhotoLayer({
   // Fingers on the layer, and where the photo and the fingers were when the gesture (re)started.
   const pointers = useRef(new Map<number, Point>());
   const start = useRef<{ at: PhotoAt; mid: Point; dist: number; angle: number } | null>(null);
+  // Centre guides while dragging: which lines show.
+  const [guides, setGuides] = useState<{ v: boolean; h: boolean } | null>(null);
 
   const gesture = () => {
     const pts = [...pointers.current.values()];
@@ -127,16 +132,27 @@ export function PhotoLayer({
     const s = start.current;
     const { mid, dist, angle } = gesture();
     const k = PANEL.w / layer.current!.getBoundingClientRect().width;
+    let x = s.at.x + (mid.x - s.mid.x) * k;
+    let y = s.at.y + (mid.y - s.mid.y) * k;
+    // Close to the middle: snap onto it and show the guide, Instagram style.
+    const v = Math.abs(x - PANEL.w / 2) < SNAP_PX * k;
+    const hz = Math.abs(y - PANEL.h / 2) < SNAP_PX * k;
+    if (v) x = PANEL.w / 2;
+    if (hz) y = PANEL.h / 2;
+    // A little tap on phones that can, the moment it locks on.
+    if ((v && !guides?.v) || (hz && !guides?.h)) navigator.vibrate?.(8);
+    setGuides({ v, h: hz });
     place({
       ...s.at,
-      x: s.at.x + (mid.x - s.mid.x) * k,
-      y: s.at.y + (mid.y - s.mid.y) * k,
+      x,
+      y,
       scale: s.dist && dist ? s.at.scale * (dist / s.dist) : s.at.scale,
       angle: s.dist && dist ? s.at.angle + angle - s.angle : s.at.angle,
     });
   };
   const onUp = (e: React.PointerEvent) => {
     pointers.current.delete(e.pointerId);
+    if (!pointers.current.size) setGuides(null);
     restart();
   };
 
@@ -200,6 +216,12 @@ export function PhotoLayer({
         onPointerCancel={onUp}
       >
         {active && box && <div className="photo-frame" style={box} />}
+        {active && guides && (
+          <>
+            <span className="guide v" data-on={guides.v} aria-hidden />
+            <span className="guide h" data-on={guides.h} aria-hidden />
+          </>
+        )}
         {active &&
           corners?.map((c) => (
             <div key={`${c.sx}${c.sy}`}>
@@ -237,7 +259,18 @@ export function PhotoLayer({
             >
               {whole ? "Fill" : "Whole"}
             </button>
-            <button className="photo-done" onClick={onDone}>Done</button>
+            <button
+              onClick={() => {
+                // A quarter turn from the nearest straight angle. Whole stays whole: on its side it fits at another scale.
+                const angle = (Math.round(at.angle / 90) * 90 + 90) % 360;
+                place({ ...at, angle, scale: whole && natural ? photoFit(natural.w, natural.h, angle) : at.scale });
+              }}
+              aria-label="Turn"
+              title="Turn a quarter, clockwise"
+            >
+              <span aria-hidden>↻</span>
+            </button>
+            {onDone && <button className="photo-done" onClick={onDone}>Done</button>}
           </div>
         )}
       </div>

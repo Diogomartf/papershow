@@ -104,7 +104,12 @@ export const LOG_TOPICS = [
       "made-playlist", "renamed-playlist", "deleted-playlist", "added-to-playlist", "removed-from-playlist", "changed-playlist",
     ],
   },
-  { key: "made", label: "Drawings and apps", icon: "✏️", verbs: ["drew", "redrew", "erased", "made-app", "tuned-app", "deleted-app"] },
+  {
+    key: "made",
+    label: "Drawings, photos and apps",
+    icon: "✏️",
+    verbs: ["drew", "redrew", "erased", "added-photo", "reframed-photo", "deleted-photo", "made-app", "tuned-app", "deleted-app"],
+  },
   { key: "night", label: "Night and off", icon: "🌙", verbs: ["changed-night", "turned-off", "turned-on"] },
   {
     key: "people",
@@ -173,6 +178,9 @@ export function says(e: LogEntry): string {
     case "drew": return `drew ${item} ✏️`;
     case "redrew": return `touched up ${item}`;
     case "erased": return `deleted the drawing ${item}`;
+    case "added-photo": return `added the photo ${item} 🖼️`;
+    case "reframed-photo": return `reframed ${item}`;
+    case "deleted-photo": return `deleted the photo ${item}`;
     case "made-app": return `set up ${item}`;
     case "tuned-app": return `tuned ${item}`;
     case "deleted-app": return `deleted ${item}`;
