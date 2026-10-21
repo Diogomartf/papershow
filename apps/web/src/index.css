@@ -1676,8 +1676,8 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
   .bar-right.draw-actions { flex: 1 1 100%; flex-wrap: wrap; row-gap: 6px; }
   .draw-actions .text-label { display: none; }
   /* The photo's buttons still fit a phone-sized panel, still big enough for a thumb */
-  .photo-tools { bottom: 8px; gap: 4px; padding: 4px; border-radius: 18px; }
-  .photo-tools button { min-width: 44px; height: 44px; padding: 0 10px; font-size: 15px; border-radius: 13px; }
+  .photo-tools { bottom: 8px; gap: 4px; padding: 4px; }
+  .photo-tools button { min-width: 44px; height: 44px; padding: 0 12px; font-size: 15px; }
   .stage { padding-top: 12px; grid-template-rows: auto auto; align-content: start; }
   /* Drawesome sizes its bar to its widest panel; scale it to the phone (zoom keeps taps aligned) */
   .panel [class*="Draw_toolbar"] { zoom: .76; }
@@ -1774,14 +1774,16 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
 .photo-tools {
   position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
   display: flex; gap: 6px; padding: 6px;
-  border-radius: 22px; background: var(--surface);
+  /* A pill, and round buttons in it: the gaps between them and its edge stay even all the way round. */
+  border-radius: 999px; background: var(--surface);
+  z-index: 3; /* over the centre guides */
   box-shadow: 0 0 0 1px var(--line), 0 10px 24px -10px var(--drop);
   white-space: nowrap; cursor: default;
 }
 .photo-tools button {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-width: 56px; height: 56px; padding: 0 18px;
-  border: 0; border-radius: 16px;
+  border: 0; border-radius: 999px;
   background: var(--tint); color: var(--ink);
   font: inherit; font-size: 18px; font-weight: 680;
   transition: transform 160ms var(--ease-out), background-color 120ms ease-out;
@@ -1812,7 +1814,7 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
 .handle.ne { right: -5px; top: -5px; cursor: nesw-resize; }
 .handle.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
 
-/* Centre guides while dragging a text: a line through the middle when it's centred */
+/* Centre guides while dragging a text or a photo: a line through the middle when it's centred */
 .guide {
   position: absolute; z-index: 1; pointer-events: none;
   background: #ff3b8d;

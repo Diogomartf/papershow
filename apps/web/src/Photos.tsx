@@ -172,6 +172,25 @@ export function Photos({ id }: { id: string | null }) {
     flash(added === 1 ? "Added a photo" : `Added ${added} photos`);
   };
 
+  /**
+   * The same picture as a photo of its own, framed as it is now, to frame another way: a close crop and the whole
+   * thing, say. Named after this one with the next free number.
+   */
+  const saveVersion = tried(async () => {
+    if (!scene) return;
+    const base = scene.name.replace(/ \d+$/, "");
+    const taken = new Set(photos?.map((p) => p.name));
+    let n = 2;
+    while (taken.has(`${base} ${n}`)) n++;
+    const now = Date.now();
+    const copy: Scene = { ...scene, id: shortId(), name: `${base} ${n}`, createdAt: now, updatedAt: now };
+    const m = await putImage(copy, await renderScene(copy), "photo");
+    setPhotos((xs) => [m, ...(xs ?? [])]);
+    void loadItems().catch(() => {});
+    navigate(`/photos/${m.id}`);
+    flash(`Saved ${m.name}: frame it however you like`);
+  });
+
   const remove = tried(async () => {
     if (!meta) return;
     await deleteImage(meta.id);
@@ -374,6 +393,9 @@ export function Photos({ id }: { id: string | null }) {
                 )}
                 <button className="ghost" onClick={() => navigate(`/draw?photo=${encodeURIComponent(meta.id)}`)} title="Start a drawing on this photo">
                   Draw on it
+                </button>
+                <button className="ghost" onClick={saveVersion} title="Keep this framing as a photo of its own, to frame another way">
+                  Save as version
                 </button>
                 {canChange && <button className="ghost danger" onClick={remove}>Delete</button>}
               </div>
