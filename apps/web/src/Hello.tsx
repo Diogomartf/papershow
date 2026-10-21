@@ -89,7 +89,7 @@ export function Hello({ hello, joinCode, onIn, startAs }: Props) {
             <ul className="door-faces">
               {h.people.map((p) => (
                 <li key={p.id}>
-                  <button className="profile" onClick={() => setStage({ at: "secret", who: p })}>
+                  <button className="profile" data-cuelume-select onClick={() => setStage({ at: "secret", who: p })}>
                     <span className="profile-pic" style={tint(p.color)} aria-hidden>{p.face}</span>
                     <span className="profile-name">{p.name}</span>
                   </button>
@@ -299,7 +299,6 @@ export function Keypad({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement).tagName === "INPUT") return;
-      // Typed, it sounds like typing; the buttons tap.
       if (keys.includes(e.key)) {
         cue(["type", { key: "printable" }]);
         keyboard.current.tap(e.key);
@@ -323,12 +322,12 @@ export function Keypad({
       </div>
       <div className="keypad" data-disabled={disabled}>
         {keys.slice(0, -1).map((k) => (
-          <button key={k} className="key" onClick={() => tap(k)} disabled={disabled}>
+          <button key={k} className="key" data-quiet onClick={() => (cue(["type", { key: "printable" }]), tap(k))} disabled={disabled}>
             {k}
           </button>
         ))}
         <span aria-hidden />
-        <button className="key" onClick={() => tap(zero)} disabled={disabled}>
+        <button className="key" data-quiet onClick={() => (cue(["type", { key: "printable" }]), tap(zero))} disabled={disabled}>
           {zero}
         </button>
         <button className="key undo" data-quiet onClick={() => (cue(["type", { key: "delete" }]), undo())} disabled={!picked.length || disabled} aria-label="Undo">
