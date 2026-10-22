@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { EinkImage } from "./EinkImage";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
@@ -6,6 +6,7 @@ import { MeMenu } from "./MeMenu";
 import { Nav, navigate } from "./Nav";
 import { cantOpen, photoScene, renderScene } from "./render";
 import { Deck, Sheet } from "./Sheet";
+import { useSortable } from "./sortable";
 import * as api from "./slides";
 import { type PartyClip, type PartyStory as Story, type PartySummary, type Turn } from "./slides";
 import { useItems, type Source } from "./sources";
@@ -45,6 +46,75 @@ const nextAt = (hhmm: string, now: number) => {
 
 /** A picture of what played: a drawing or photo as it is, an app as it looked then. */
 const thumbOf = (source: Source, at: number) => (source.kind === "image" ? `/api/images/${source.id}/mono.png` : api.frameAt(source, at));
+
+/** Something from the party looked at up close: what it showed, when, and who added it. */
+type Looking = { source: Source; at: number; name: string; by: Person | undefined; when: string };
+
+/** Keep a picture: a phone offers its share sheet (Save Image, to the camera roll); a computer downloads it. */
+async function keep(src: string, name: string) {
+  const blob = await (await fetch(src)).blob();
+  const file = new File([blob], `${name.trim() || "party"}.${blob.type === "image/jpeg" ? "jpg" : "png"}`, { type: blob.type });
+  if (matchMedia("(pointer: coarse)").matches && navigator.canShare?.({ files: [file] })) return navigator.share({ files: [file] });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(file);
+  a.download = file.name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/**
+ * A drawing, photo or app from the party, big, with Save. A drawing or photo also comes in its colours (Ink), as
+ * it was made; an app is the panel's frame as it was then. `children`: what else can be done with it.
+ */
+function Look({ look, onClose, onError, children }: { look: Looking; onClose: () => void; onError: (e: unknown) => void; children?: ReactNode }) {
+  const [ink, setInk] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const image = look.source.kind === "image";
+  const src = image ? `/api/images/${look.source.id}/${ink ? "png" : "mono"}.png` : api.frameAt(look.source, look.at);
+  const save = () => {
+    setSaving(true);
+    keep(src, look.name)
+      // Closing the share sheet without picking anything isn't a failure.
+      .catch((e) => e instanceof DOMException && e.name === "AbortError" ? undefined : onError(e))
+      .finally(() => setSaving(false));
+  };
+  return (
+    <Sheet title={look.name} onClose={onClose}>
+      <div className="pg-sheet-hero party-look">
+        <img src={src} alt={look.name} width={800} height={480} data-ink={ink} />
+        <small>
+          {look.by ? (
+            <>
+              <Face p={look.by} /> {look.by.name} ·{" "}
+            </>
+          ) : null}
+          <span className="tabular">{look.when}</span>
+        </small>
+      </div>
+      <div className="party-look-actions">
+        {image && (
+          <div className="segmented" role="radiogroup" aria-label="Version">
+            <button role="radio" aria-checked={!ink} onClick={() => setInk(false)}>E-ink</button>
+            <button role="radio" aria-checked={ink} onClick={() => setInk(true)}>Ink</button>
+          </div>
+        )}
+        {children}
+        <button className="primary" onClick={save} disabled={saving}>
+          {saving ? "Saving…" : "⬇︎ Save"}
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
+/** A picture in a list that opens big when tapped. */
+function Thumb({ src, onOpen }: { src: string; onOpen: () => void }) {
+  return (
+    <button className="party-thumb" onClick={onOpen} aria-label="Look at it up close">
+      <img src={src} alt="" loading="lazy" draggable={false} />
+    </button>
+  );
+}
 
 function Face({ p }: { p: Person | undefined }) {
   return (
@@ -140,6 +210,7 @@ export function Party() {
   const [adding, setAdding] = useState<{ done: number; total: number } | null>(null);
   const photos = useRef<HTMLInputElement>(null);
   const [past, setPast] = useState<PartySummary[] | null>(null);
+  const [looking, setLooking] = useState<(Looking & { clip?: PartyClip; againId?: string }) | null>(null);
 
   const party = state?.party ?? null;
   useEffect(() => {
@@ -187,11 +258,13 @@ export function Party() {
   const again = (clipId: string, name: string) =>
     api.playAgain(clipId).then((s) => {
       accept(s);
+      setLooking(null);
       toast.show(`${name} is on next 🔁`);
     }, failed);
 
   const remove = (c: PartyClip) =>
     api.removeFromParty(c.id).then((s) => {
+      setLooking(null);
       accept(s);
       toast.show(`Took ${c.name} out of the party`);
     }, failed);
@@ -209,6 +282,47 @@ export function Party() {
   const showing = state?.showing;
   const live = showing && !showing.blank ? `/live.png?e=${encodeURIComponent(showing.etag)}` : null;
   const nowClip = onNow && clipOf(onNow);
+
+  // The household sorts what's coming up by dragging; what's on stays where it is.
+  const { lifted, order, bind, float } = useSortable((_, ids) => api.orderParty(ids).then(accept, failed));
+  const upNext = turns.filter((t) => t !== onNow && t.clipId);
+  const upNextIds = upNext.map((t) => t.clipId!);
+  const sortedTurns = [...(onNow ? [onNow] : []), ...order("party", upNextIds).flatMap((id) => upNext.find((t) => t.clipId === id) ?? [])];
+  const liftedTurn = lifted && upNext.find((t) => t.clipId === lifted.id);
+  /** One turn of Coming up, as a row: in the list, and floating under the pointer while it's dragged. */
+  const turnRow = (t: Turn) => {
+    const c = clipOf(t);
+    const by = personOf(c?.addedBy ?? null);
+    const mayRemove = c && (household || c.addedBy === me.id);
+    const when = t === onNow ? "On now" : `On at ${hhmm(t.at)}`;
+    return (
+      <>
+        <Thumb src={api.frameAt(t.source, t.at)} onOpen={() => setLooking({ source: t.source, at: t.at, name: c?.name ?? "…", by, when, clip: mayRemove ? c : undefined })} />
+        <div>
+          <strong>{c?.name ?? "…"}</strong>
+          <small>
+            {by ? (
+              <>
+                <Face p={by} /> {by.name}
+              </>
+            ) : (
+              `From ${playlistName ?? "the start"}`
+            )}
+          </small>
+        </div>
+        <span className="tabular party-at">{t === onNow ? "Now" : hhmm(t.at)}</span>
+        {mayRemove ? (
+          <button className="party-remove danger" onClick={() => remove(c)} aria-label={`Take ${c.name} out`} title="Take it out of the party">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" />
+            </svg>
+          </button>
+        ) : (
+          <span />
+        )}
+      </>
+    );
+  };
 
   return (
     <div className="app">
@@ -292,38 +406,23 @@ export function Party() {
 
             <section className="party-loop" aria-label="Coming up">
               <h2>Coming up</h2>
+              {household && upNext.length > 1 && <p className="pg-quiet">Drag to change what plays next.</p>}
               {turns.length ? (
                 <ol>
-                  {turns.map((t) => {
-                    const c = clipOf(t);
-                    const by = personOf(c?.addedBy ?? null);
-                    const mayRemove = c && (household || c.addedBy === me.id);
-                    return (
-                      <li key={`${t.key}-${t.at}`} data-on={t === onNow}>
-                        <img src={api.frameAt(t.source, t.at)} alt="" loading="lazy" />
-                        <div>
-                          <strong>{c?.name ?? "…"}</strong>
-                          <small>
-                            {by ? (
-                              <>
-                                <Face p={by} /> {by.name}
-                              </>
-                            ) : (
-                              `From ${playlistName ?? "the start"}`
-                            )}
-                          </small>
-                        </div>
-                        <span className="tabular party-at">{t === onNow ? "Now" : hhmm(t.at)}</span>
-                        {mayRemove && (
-                          <button className="party-remove danger" onClick={() => remove(c)} aria-label={`Take ${c.name} out`} title="Take it out of the party">
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                              <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" />
-                            </svg>
-                          </button>
-                        )}
+                  {sortedTurns.map((t) =>
+                    lifted && lifted.id === t.clipId ? (
+                      <li key={t.key} className="sort-ghost" style={{ height: lifted.height }} aria-hidden />
+                    ) : (
+                      <li
+                        key={t.key}
+                        data-on={t === onNow}
+                        data-sorts={household && t !== onNow}
+                        {...(household && t !== onNow ? bind("party", t.clipId!, upNextIds) : {})}
+                      >
+                        {turnRow(t)}
                       </li>
-                    );
-                  })}
+                    ),
+                  )}
                 </ol>
               ) : (
                 <p className="pg-quiet">Nothing in the party yet. The first drawing or photo goes straight on.</p>
@@ -342,7 +441,14 @@ export function Party() {
                       const still = !p.gone && party.clips.some((c) => c.id === p.clipId);
                       return (
                         <li key={p.at}>
-                          {p.gone ? <span className="party-cover-empty">…</span> : <img src={thumbOf(p.source, p.at)} alt="" loading="lazy" />}
+                          {p.gone ? (
+                            <span className="party-cover-empty">…</span>
+                          ) : (
+                            <Thumb
+                              src={thumbOf(p.source, p.at)}
+                              onOpen={() => setLooking({ source: p.source, at: p.at, name: p.name, by, when: `Was on at ${hhmm(p.at)}`, againId: still ? p.clipId : undefined })}
+                            />
+                          )}
                           <div>
                             <strong>{p.name}</strong>
                             <small>
@@ -438,6 +544,25 @@ export function Party() {
           </ul>
         </Sheet>
       )}
+      {looking && (
+        <Look look={looking} onClose={() => setLooking(null)} onError={failed}>
+          {looking.clip && (
+            <button className="ghost danger" onClick={() => remove(looking.clip!)}>
+              Take it out
+            </button>
+          )}
+          {looking.againId && (
+            <button className="ghost" onClick={() => again(looking.againId!, looking.name)}>
+              🔁 Again
+            </button>
+          )}
+        </Look>
+      )}
+      {liftedTurn && lifted && (
+        <div ref={float} className="sort-float party-loop" style={{ width: lifted.width, height: lifted.height }} aria-hidden>
+          <li>{turnRow(liftedTurn)}</li>
+        </div>
+      )}
       {toast.node}
     </div>
   );
@@ -456,6 +581,8 @@ export function PartyStory({ id }: { id: string }) {
   }, [story]);
   const people = state?.people ?? [];
   const personOf = (pid: string | null) => (pid ? people.find((p) => p.id === pid) ?? (pid === me.id ? me : undefined) : undefined);
+  const [looking, setLooking] = useState<Looking | null>(null);
+  const toast = useUndoToast();
 
   return (
     <div className="app">
@@ -508,7 +635,11 @@ export function PartyStory({ id }: { id: string }) {
                     const by = personOf(p.addedBy);
                     return (
                       <li key={p.at}>
-                        {p.gone ? <span className="party-cover-empty">…</span> : <img src={thumbOf(p.source, p.at)} alt="" loading="lazy" />}
+                        {p.gone ? (
+                          <span className="party-cover-empty">…</span>
+                        ) : (
+                          <Thumb src={thumbOf(p.source, p.at)} onOpen={() => setLooking({ source: p.source, at: p.at, name: p.name, by, when: `Was on at ${hhmm(p.at)}` })} />
+                        )}
                         <div>
                           <strong>{p.name}</strong>
                           <small>
@@ -535,7 +666,14 @@ export function PartyStory({ id }: { id: string }) {
                 const by = personOf(c.addedBy);
                 return (
                   <li key={c.id} data-gone={c.gone} data-own={c.own}>
-                    {c.gone ? <span className="party-cover-empty">…</span> : <img src={thumbOf(c.source, c.addedAt)} alt="" loading="lazy" />}
+                    {c.gone ? (
+                      <span className="party-cover-empty">…</span>
+                    ) : (
+                      <Thumb
+                        src={thumbOf(c.source, c.addedAt)}
+                        onOpen={() => setLooking({ source: c.source, at: c.addedAt, name: c.name, by, when: by ? `Added at ${hhmm(c.addedAt)}` : `From ${story.playlist ?? "the start"}` })}
+                      />
+                    )}
                     <strong>{c.name}</strong>
                     <small className="tabular">
                       {by ? (
@@ -553,6 +691,8 @@ export function PartyStory({ id }: { id: string }) {
           </>
         )}
       </main>
+      {looking && <Look look={looking} onClose={() => setLooking(null)} onError={(e) => toast.show(reason(e, "Couldn't save it"), undefined, "error")} />}
+      {toast.node}
     </div>
   );
 }

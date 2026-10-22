@@ -824,6 +824,14 @@ export function movePartyClip(partyId: string, clipId: string, at: number, now: 
   db.exec("commit");
 }
 
+/** Put the party's loop in the order of `ids`, from its start. */
+export function orderPartyClips(ids: string[]) {
+  const stmt = db.prepare("update party_clips set position = ? where id = ?");
+  db.exec("begin");
+  ids.forEach((id, i) => stmt.run(i, id));
+  db.exec("commit");
+}
+
 export function removePartyClip(id: string) {
   db.prepare("delete from party_clips where id = ?").run(id);
 }

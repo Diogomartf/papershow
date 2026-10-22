@@ -102,7 +102,7 @@ export const hideInvite = (code: string) => call<unknown>(`/api/invites/${code}/
 export const inviteQr = (code: string) => `/api/invites/${code}/qr.svg`;
 /** The log's topics, each the verbs it covers. */
 export const LOG_TOPICS = [
-  { key: "panel", label: "On the panel", icon: "📺", verbs: ["showed-now", "resumed", "asked-to-show", "said-yes", "said-not-now", "started-party", "changed-party", "ended-party", "added-to-party", "replayed-at-party", "party-wrapped"] },
+  { key: "panel", label: "On the panel", icon: "📺", verbs: ["showed-now", "resumed", "asked-to-show", "said-yes", "said-not-now", "started-party", "changed-party", "ended-party", "added-to-party", "replayed-at-party", "reordered-party", "party-wrapped"] },
   {
     key: "program",
     label: "Program",
@@ -212,6 +212,7 @@ export function says(e: LogEntry): string {
     case "ended-party": return "ended the party, back to the program";
     case "added-to-party": return s.made === "photo" ? `added a photo to the party 📷` : s.made ? `drew ${item} at the party ✏️` : `put ${item} on at the party 🎉`;
     case "replayed-at-party": return `played ${item} again at the party 🔁`;
+    case "reordered-party": return "changed what plays next at the party";
     case "party-wrapped":
       return `threw a party, ${clock(Number(s.from))}–${clock(Number(s.to))}: ${Number(s.things)} ${s.things === 1 ? "thing" : "things"} added${Number(s.people) ? ` by ${Number(s.people)} ${s.people === 1 ? "person" : "people"}` : ""} 🎉`;
     case "asked-to-show": return `asked to put ${item} on the panel 🙋`;

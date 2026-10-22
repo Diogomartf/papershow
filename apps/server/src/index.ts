@@ -1299,6 +1299,31 @@ app.post("/api/party/clips/:id/next", async (c) => {
   return c.json(await state(c));
 });
 
+/**
+ * The household sorts what's coming up (`{ ids }`: the party's clips after the one on air, in the order they're to
+ * play). What's on stays on; anything not in `ids` (it may have been added meanwhile) comes after, as it was.
+ */
+app.put("/api/party/order", async (c) => {
+  const { ids } = await c.req.json<{ ids?: string[] }>();
+  if (!Array.isArray(ids)) return c.json({ error: "ids, in order" }, 400);
+  const now = Date.now();
+  const party = store.currentParty(now);
+  if (!party) return c.json({ error: "There's no party on right now" }, 409);
+  catchUp(party, now);
+  const { s } = partyOnAir(now);
+  const clips = store.partyClips(party.id);
+  const cur = clips.findIndex((x) => x.id === s?.slideId);
+  // The loop as it plays from what's on: then the sorted ones, then the rest in their places.
+  const fromNow = [...clips.slice(cur + 1), ...clips.slice(0, Math.max(0, cur))].map((x) => x.id);
+  const sorted = ids.filter((id, i) => fromNow.includes(id) && ids.indexOf(id) === i);
+  store.orderPartyClips([...(cur >= 0 ? [clips[cur].id] : []), ...sorted, ...fromNow.filter((id) => !sorted.includes(id))]);
+  keepPlace(party.id, s, -1, now);
+  noteOnAir(party.id, now);
+  note(c, "reordered-party");
+  changed();
+  return c.json(await state(c));
+});
+
 /** Take something out of the party: whoever added it, or the household. What was made there goes with it. */
 app.delete("/api/party/clips/:id", async (c) => {
   const clip = store.getPartyClip(c.req.param("id"));

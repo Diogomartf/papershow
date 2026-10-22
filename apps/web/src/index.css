@@ -1375,6 +1375,17 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .party-again:active { transform: scale(0.96); }
 .party-earlier li { opacity: .9; }
 .party-loop .party-cover-empty { width: 96px; font-size: 20px; }
+/* A picture in the party's lists opens big; dragging a row of Coming up sorts it. */
+.party-thumb { display: block; padding: 0; border: 0; border-radius: 10px; background: none; cursor: zoom-in; }
+.party-story .party-thumb { width: 100%; border-radius: 12px; }
+.party-loop li[data-sorts="true"] { cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.party-loop li.sort-ghost { padding: 0; background: var(--ghost); box-shadow: 0 0 0 1.5px var(--ghost-edge) inset, 0 0 18px 2px var(--ghost-glow); }
+.sort-float.party-loop > li { list-style: none; }
+.party-look img { image-rendering: pixelated; }
+.party-look img[data-ink="true"] { image-rendering: auto; }
+.party-look small { display: flex; align-items: center; gap: 6px; font-size: 15px; }
+.party-look-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
+.party-look-actions .segmented { margin-right: auto; }
 .party-all { margin-top: 8px; }
 .party-loop li[data-on="true"] .party-at { color: var(--on-air); }
 .party-off { display: grid; justify-items: center; gap: 10px; padding: 48px 16px; text-align: center; }

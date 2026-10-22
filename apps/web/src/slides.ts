@@ -198,6 +198,8 @@ export const startParty = (playlistId: string | null, until: number) => call("/a
 export const addToParty = (source: Source) => call("/api/party/clips", "POST", { source });
 /** Play something from the party again, next. */
 export const playAgain = (clipId: string) => call(`/api/party/clips/${clipId}/next`, "POST");
+/** Sort what's coming up at the party: its clips after the one on air, in order. */
+export const orderParty = (ids: string[]) => call("/api/party/order", "PUT", { ids });
 /** Take something out of the party; what was made there goes with it. */
 export const removeFromParty = (clipId: string) => call(`/api/party/clips/${clipId}`, "DELETE");
 
