@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { EinkImage } from "./EinkImage";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { FadeImage } from "./EinkImage";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
 import { MeMenu } from "./MeMenu";
 import { Nav, navigate } from "./Nav";
 import { cantOpen, photoScene, renderScene } from "./render";
 import { Deck, Sheet } from "./Sheet";
+import { Grip } from "./Grip";
 import { useSortable } from "./sortable";
 import * as api from "./slides";
-import { type PartyClip, type PartyStory as Story, type PartySummary, type Turn } from "./slides";
+import { type PartyClip, type PartyStory as Story, type PartySummary, type PartyTheme, type Turn } from "./slides";
 import { useItems, type Source } from "./sources";
 import { Oops, reason, tint, useMe, visiting, type Person } from "./house";
 import { useLiveState, useNow } from "./live";
@@ -27,13 +28,47 @@ const countdown = (ms: number) => {
 const day = (t: number) => new Date(t).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
 const things = (n: number) => `${n} ${n === 1 ? "thing" : "things"}`;
 
-/** How long a party goes on: an end time is worked out when it starts. The server keeps it to the next morning. */
-const LENGTHS = [
-  { key: "2h", label: "2 hours" },
-  { key: "4h", label: "4 hours" },
-  { key: "morning", label: "Until morning" },
+/** When a party ends, as a time of night: the next one after it starts. The server keeps it to the next morning. */
+const ENDS = [
+  { at: "22:00", label: "22:00" },
+  { at: "00:00", label: "Midnight" },
+  { at: "01:00", label: "1:00" },
+  { at: "03:00", label: "3:00" },
 ] as const;
-type Length = (typeof LENGTHS)[number]["key"];
+
+const QUARTER = 15 * 60_000;
+
+/**
+ * When a party ends, on a slider in quarter hours from a little after now to the morning, with the time big above it.
+ * `onDone` is for letting go, so a party that's on changes once rather than at every step.
+ */
+function EndSlider({ value, now, morning, onChange, onDone }: { value: number; now: number; morning: number; onChange: (t: number) => void; onDone?: () => void }) {
+  const min = Math.min(Math.ceil(now / QUARTER) * QUARTER + QUARTER, morning);
+  const at = Math.min(Math.max(value, min), morning);
+  return (
+    <div className="party-end">
+      <p className="party-end-at tabular">
+        <strong>{hhmm(at)}</strong> <small>{countdown(at - now)} from now</small>
+      </p>
+      <input
+        type="range"
+        aria-label="Ends at"
+        aria-valuetext={hhmm(at)}
+        min={min}
+        max={morning}
+        step={QUARTER}
+        value={at}
+        onChange={(e) => onChange(Number(e.target.value))}
+        onPointerUp={onDone}
+        onKeyUp={onDone}
+      />
+      <p className="party-end-ends tabular">
+        <span>{hhmm(min)}</span>
+        <span>{hhmm(morning)}</span>
+      </p>
+    </div>
+  );
+}
 
 /** The next `hhmm` after `now`: today's, or tomorrow's once it has passed. */
 const nextAt = (hhmm: string, now: number) => {
@@ -81,7 +116,7 @@ function Look({ look, onClose, onError, children }: { look: Looking; onClose: ()
   return (
     <Sheet title={look.name} onClose={onClose}>
       <div className="pg-sheet-hero party-look">
-        <img src={src} alt={look.name} width={800} height={480} data-ink={ink} />
+        <FadeImage src={src} alt={look.name} className={ink ? "is-ink" : undefined} />
         <small>
           {look.by ? (
             <>
@@ -111,8 +146,71 @@ function Look({ look, onClose, onError, children }: { look: Looking; onClose: ()
 function Thumb({ src, onOpen }: { src: string; onOpen: () => void }) {
   return (
     <button className="party-thumb" onClick={onOpen} aria-label="Look at it up close">
-      <img src={src} alt="" loading="lazy" draggable={false} />
+      <FadeImage src={src} />
     </button>
+  );
+}
+
+/**
+ * The looks a party can have. Each restyles the Party page (colours, type, the progress bar: see index.css) and
+ * says a few things its own way.
+ */
+const THEMES: { key: PartyTheme; name: string; emoji: string; line: string; on: string; next: string }[] = [
+  { key: "fun", name: "Fun", emoji: "🎉", line: "Confetti and colour", on: "The party's on", next: "Next in" },
+  { key: "classy", name: "Classy", emoji: "🥂", line: "Black tie, cream and gold", on: "This evening", next: "Next in" },
+  { key: "cave", name: "Man cave", emoji: "🍺", line: "Dark wood and neon", on: "The cave's open", next: "Next round in" },
+  { key: "severance", name: "Severance", emoji: "🗂️", line: "Calm, clean and fluorescent", on: "Session in progress", next: "Next file in" },
+  { key: "girls", name: "Girls' night", emoji: "💖", line: "Pink, glitter and hearts", on: "Girls' night's on", next: "Next cutie in" },
+];
+const themeOf = (key: PartyTheme | undefined) => THEMES.find((t) => t.key === key) ?? THEMES[0];
+
+/** Pick a party's look: a little card in each one's own colours. */
+function ThemePicker({ value, onChange }: { value: PartyTheme; onChange: (t: PartyTheme) => void }) {
+  return (
+    <div className="party-themes" role="radiogroup" aria-label="Look">
+      {THEMES.map((t) => (
+        <button key={t.key} className="party-theme" data-party-look={t.key} role="radio" aria-checked={value === t.key} onClick={() => onChange(t.key)}>
+          <span className="party-theme-swatch" aria-hidden>
+            {t.emoji}
+          </span>
+          <strong>{t.name}</strong>
+          <small>{t.line}</small>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Confetti takes the party's colours (index.css sets them for each look). */
+const CONFETTI = ["--pt-c1", "--pt-c2", "--pt-c3", "--pt-c4", "--pt-c5", "--pt-c6"];
+/** Steady "random": the same burst draws the same way every render. */
+const scatter = (n: number) => (Math.sin(n * 12.9898) * 43758.5453) % 1;
+
+/** A burst of confetti each time `burst` goes up: something's just gone into the party. */
+function Confetti({ burst }: { burst: number }) {
+  if (!burst) return null;
+  return (
+    <div className="party-confetti" key={burst} aria-hidden>
+      {Array.from({ length: 42 }, (_, i) => {
+        const r = (k: number) => Math.abs(scatter(burst * 97 + i * 7 + k));
+        return (
+          <i
+            key={i}
+            style={
+              {
+                "--c": `var(${CONFETTI[i % CONFETTI.length]})`,
+                "--x": `${(r(1) - 0.5) * 90}vw`,
+                "--up": `${-20 - r(2) * 30}vh`,
+                "--y": `${30 + r(3) * 40}vh`,
+                "--r": `${(r(4) - 0.5) * 1440}deg`,
+                "--d": `${r(5) * 120}ms`,
+                "--w": `${6 + r(6) * 6}px`,
+              } as CSSProperties
+            }
+          />
+        );
+      })}
+    </div>
   );
 }
 
@@ -134,13 +232,17 @@ export function StartParty({ onClose }: { onClose: () => void }) {
   const { itemOf } = useItems();
   // A playlist called Party is picked to start with: it's probably the one.
   const [from, setFrom] = useState<string | null>(() => playlists.find((p) => /party|festa/i.test(p.name))?.id ?? null);
-  const [length, setLength] = useState<Length>("morning");
+  // The end as a time of night ("03:00"), so it stays put while the clock moves.
+  const [ends, setEnds] = useState("03:00");
+  const [theme, setTheme] = useState<PartyTheme>("fun");
   const sleep = state?.sleep;
   const morning = nextAt(sleep?.enabled ? sleep.end : "08:00", now);
-  const until = length === "2h" ? now + 2 * 3_600_000 : length === "4h" ? now + 4 * 3_600_000 : morning;
+  // Only the times still to come tonight: at 23:00, 22:00 would be tomorrow's, past the morning.
+  const choices = ENDS.filter((e) => nextAt(e.at, now) < morning);
+  const until = Math.min(nextAt(ends, now), morning);
 
   const start = () =>
-    api.startParty(from, until).then(
+    api.startParty(from, until, theme).then(
       (s) => {
         accept(s);
         onClose();
@@ -174,22 +276,28 @@ export function StartParty({ onClose }: { onClose: () => void }) {
           </li>
         ))}
       </ul>
+      <h3 className="pg-pick-label">Look</h3>
+      <ThemePicker value={theme} onChange={setTheme} />
       <h3 className="pg-pick-label">Until</h3>
       <div className="pg-lengths pg-party-lengths" role="radiogroup" aria-label="Until">
-        {LENGTHS.map((l) => (
-          <button key={l.key} role="radio" aria-checked={length === l.key} onClick={() => setLength(l.key)}>
-            {l.label}
-            {l.key === "morning" && <small className="tabular">{hhmm(morning)}</small>}
+        {choices.map((e) => (
+          <button key={e.at} role="radio" aria-checked={until === nextAt(e.at, now)} onClick={() => setEnds(e.at)}>
+            {e.label}
           </button>
         ))}
+        <button role="radio" aria-checked={until === morning} onClick={() => setEnds(hhmm(morning))}>
+          Morning
+          <small className="tabular">{hhmm(morning)}</small>
+        </button>
       </div>
+      <EndSlider value={until} now={now} morning={morning} onChange={(t) => setEnds(hhmm(t))} />
       <div className="pg-actions">
         <button className="pg-big pg-go" onClick={start}>
           🎉 Start the party
         </button>
         <p className="pg-quiet">
-          Everyone draws and adds photos on the Party page, and each goes on next. What's made there stays with the party, not in the house's
-          library. It ends by {hhmm(morning)} at the latest, then the program carries on and the party's story goes in the log.
+          Everyone draws and adds photos on the Party page, and each joins the queue. What's made there stays with the party, not in the house's
+          library. It ends at {hhmm(until)}, {hhmm(morning)} at the latest, then the program carries on and the party's story goes in the log.
         </p>
       </div>
       {toast.node}
@@ -207,10 +315,16 @@ export function Party() {
   const toast = useUndoToast();
   const [starting, setStarting] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [settings, setSettings] = useState(false);
+  // Where the end slider is while it's held; it's saved on letting go.
+  const [endDraft, setEndDraft] = useState<number | null>(null);
   const [adding, setAdding] = useState<{ done: number; total: number } | null>(null);
   const photos = useRef<HTMLInputElement>(null);
   const [past, setPast] = useState<PartySummary[] | null>(null);
-  const [looking, setLooking] = useState<(Looking & { clip?: PartyClip; againId?: string }) | null>(null);
+  const [looking, setLooking] = useState<(Looking & { clip?: PartyClip; againId?: string; nowId?: string }) | null>(null);
+  // Confetti each time something goes in.
+  const [burst, setBurst] = useState(0);
+  const pop = () => setBurst((b) => b + 1);
 
   const party = state?.party ?? null;
   useEffect(() => {
@@ -245,21 +359,34 @@ export function Party() {
       setAdding((a) => a && { ...a, done: a.done + 1 });
     }
     setAdding(null);
-    if (added) toast.show(`${added === 1 ? "Your photo is" : `${added} photos are`} in the party 🎉`);
+    if (added) {
+      pop();
+      toast.show(`${added === 1 ? "Your photo is" : `${added} photos are`} in the party 🎉`);
+    }
   };
 
   const fromHouse = (source: Source, name: string) =>
     api.addToParty(source).then((s) => {
       accept(s);
       setPicking(false);
-      toast.show(`${name} is on next 🎉`);
+      pop();
+      toast.show(`${name} is in the queue 🎉`);
     }, failed);
 
   const again = (clipId: string, name: string) =>
     api.playAgain(clipId).then((s) => {
       accept(s);
       setLooking(null);
+      pop();
       toast.show(`${name} is on next 🔁`);
+    }, failed);
+
+  const showNow = (clipId: string, name: string) =>
+    api.showNowAtParty(clipId).then((s) => {
+      accept(s);
+      setLooking(null);
+      pop();
+      toast.show(`${name} is on the panel 📺`);
     }, failed);
 
   const remove = (c: PartyClip) =>
@@ -269,11 +396,15 @@ export function Party() {
       toast.show(`Took ${c.name} out of the party`);
     }, failed);
 
-  const end = () =>
+  // Ending it opens its story, so the party just had is the one you see.
+  const end = () => {
+    const id = party?.id;
     api.endParty().then((s) => {
       accept(s);
-      toast.show("Back to the program. The party's story is in the log 🎉");
+      if (id) navigate(`/parties/${id}`);
+      else toast.show("Back to the program. The party's story is in the log 🎉");
     }, failed);
+  };
 
   // One time round the party's loop, from what's on now.
   const turns: Turn[] = (state?.sequence ?? []).filter((t) => t.blockId === "party");
@@ -289,15 +420,24 @@ export function Party() {
   const upNextIds = upNext.map((t) => t.clipId!);
   const sortedTurns = [...(onNow ? [onNow] : []), ...order("party", upNextIds).flatMap((id) => upNext.find((t) => t.clipId === id) ?? [])];
   const liftedTurn = lifted && upNext.find((t) => t.clipId === lifted.id);
+  /** A turn of Coming up, up close. */
+  const lookAt = (t: Turn) => {
+    const c = clipOf(t);
+    const mayRemove = c && (household || c.addedBy === me.id);
+    setLooking({ source: t.source, at: t.at, name: c?.name ?? "…", by: personOf(c?.addedBy ?? null), when: t === onNow ? "On now" : `On at ${hhmm(t.at)}`, clip: mayRemove ? c : undefined, nowId: household && t !== onNow ? t.clipId ?? undefined : undefined });
+  };
+  const nextTurn = sortedTurns.find((t) => t !== onNow);
+  const look = themeOf(party?.theme);
+  const turnPct = onNow ? Math.min(100, Math.max(0, ((now - onNow.at) / (onNow.endsAt - onNow.at)) * 100)) : 0;
   /** One turn of Coming up, as a row: in the list, and floating under the pointer while it's dragged. */
   const turnRow = (t: Turn) => {
     const c = clipOf(t);
+    const sorts = household && t !== onNow;
     const by = personOf(c?.addedBy ?? null);
     const mayRemove = c && (household || c.addedBy === me.id);
-    const when = t === onNow ? "On now" : `On at ${hhmm(t.at)}`;
     return (
       <>
-        <Thumb src={api.frameAt(t.source, t.at)} onOpen={() => setLooking({ source: t.source, at: t.at, name: c?.name ?? "…", by, when, clip: mayRemove ? c : undefined })} />
+        <Thumb src={thumbOf(t.source, t.at)} onOpen={() => lookAt(t)} />
         <div>
           <strong>{c?.name ?? "…"}</strong>
           <small>
@@ -310,7 +450,16 @@ export function Party() {
             )}
           </small>
         </div>
-        <span className="tabular party-at">{t === onNow ? "Now" : hhmm(t.at)}</span>
+        <span className="party-at-cell">
+          <span className="tabular party-at">{t === onNow ? "Now" : hhmm(t.at)}</span>
+          {/* Shows on hover, in the time's place; always there where there's no hover. */}
+          {household && t !== onNow && t.clipId && (
+            <button className="party-now-btn" onClick={() => showNow(t.clipId!, c?.name ?? "It")} title="Put it on the panel now">
+              <span aria-hidden>▶</span> <span className="party-now-label">Show now</span>
+            </button>
+          )}
+        </span>
+        {sorts && <Grip />}
         {mayRemove ? (
           <button className="party-remove danger" onClick={() => remove(c)} aria-label={`Take ${c.name} out`} title="Take it out of the party">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -325,7 +474,7 @@ export function Party() {
   };
 
   return (
-    <div className="app">
+    <div className="app" data-party-look={party?.theme ?? "fun"}>
       <header className="bar">
         <div className="bar-left">
           <Nav current="party" />
@@ -338,57 +487,82 @@ export function Party() {
         </div>
       </header>
 
-      <main className="pl-overview pg party">
+      <main className="pl-overview pg party-page">
         {party ? (
           <>
             <section className="party-hero" aria-label="On the panel">
-              <div className="pg-frame">{live ? <EinkImage src={live} /> : <span className="pg-frame-empty">🎈</span>}</div>
-              <div className="party-hero-text">
-                <span className="pg-badge" data-kind="party">
-                  Party
-                </span>
-                <h1>{nowClip?.name ?? (turns.length ? "…" : "Nothing yet")}</h1>
-                <p className="party-who">
-                  {nowClip?.addedBy ? (
-                    <>
-                      <Face p={personOf(nowClip.addedBy)} /> {nowClip.own ? "Made" : "Added"} by {personOf(nowClip.addedBy)?.name ?? "someone"}
-                    </>
-                  ) : nowClip ? (
-                    `From ${playlistName ?? "the start"}`
-                  ) : (
-                    "Draw something or add photos, and it goes on next."
-                  )}
-                </p>
-                <p className="pg-quiet tabular">
-                  Until {hhmm(party.endsAt)} · {countdown(party.endsAt - now)} left
-                </p>
-                {household && (
-                  <div className="pg-row">
-                    <button
-                      className="pg-big pg-soft"
-                      onClick={() => api.startParty(null, party.endsAt + 3_600_000).then(accept, failed)}
-                      title="The party goes on until the morning at the latest"
-                    >
-                      An hour more
-                    </button>
-                    <button className="pg-big" onClick={end}>
-                      ↩ End the party
-                    </button>
-                  </div>
+              <div className="party-snaps">
+                <div className="party-polaroid">
+                  <div className="pg-frame">{live ? <FadeImage src={live} /> : <span className="pg-frame-empty">🎈</span>}</div>
+                </div>
+                {/* What's on after this one, tucked over the corner. */}
+                {nextTurn && (
+                  <button className="party-next" onClick={() => lookAt(nextTurn)} aria-label={`Up next at ${hhmm(nextTurn.at)}: ${clipOf(nextTurn)?.name ?? "…"}`}>
+                    <FadeImage src={thumbOf(nextTurn.source, nextTurn.at)} />
+                    <span>
+                      Next <b className="tabular">{hhmm(nextTurn.at)}</b>
+                    </span>
+                  </button>
                 )}
+              </div>
+              <div className="party-hero-text">
+                {/* How long the party has left goes with the party, not with what's on. */}
+                <div className="party-status">
+                  <span className="party-on">{look.on}</span>
+                  {household && (
+                    <button className="party-gear" data-cuelume-open onClick={() => setSettings(true)} aria-label="Party settings" title="Party settings">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                      </svg>
+                    </button>
+                  )}
+                  <p className="party-clock tabular">
+                    <strong>{countdown(party.endsAt - now)} left</strong> · until {hhmm(party.endsAt)}
+                  </p>
+                </div>
+                {/* What's on the panel, at the bottom of the card: its name, who it's from, and how far through its turn. */}
+                <div className="party-hero-what">
+                  <span className="party-kicker">On the panel</span>
+                  <h1>{nowClip?.name ?? (turns.length ? "…" : "Nothing yet")}</h1>
+                  <p className="party-who">
+                    {nowClip?.addedBy ? (
+                      <>
+                        <Face p={personOf(nowClip.addedBy)} /> {nowClip.own ? "Made" : "Added"} by {personOf(nowClip.addedBy)?.name ?? "someone"}
+                        <span className="tabular"> · {hhmm(nowClip.addedAt)}</span>
+                      </>
+                    ) : nowClip ? (
+                      `From ${playlistName ?? "the start"}`
+                    ) : (
+                      "Draw something or add photos, and it goes straight on."
+                    )}
+                  </p>
+                  {onNow && nextTurn && (
+                    <div className="party-turn">
+                      {/* Each look draws this its own way (index.css): a runner on the bar, a beer filling up, blocks. */}
+                      <span className="party-turn-bar" aria-hidden>
+                        <i style={{ width: `${turnPct}%` }} />
+                      </span>
+                      <span className="tabular">
+                        {look.next} {countdown(onNow.endsAt - now).replace(/^0 min$/, "a moment")}
+                        {party.theme === "severance" && <b className="party-turn-pct"> · {Math.floor(turnPct)}%</b>}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </section>
 
             <section className="party-add" aria-label="Add to the party">
-              <button className="pg-big pg-go" onClick={() => navigate("/draw?party")}>
-                ✏️ Draw something
+              <button className="party-sticker" data-c="pink" onClick={() => navigate("/draw?party")}>
+                <span aria-hidden>✏️</span> Draw something
               </button>
-              <button className="pg-big pg-go" onClick={() => photos.current?.click()} disabled={!!adding}>
-                {adding ? `Adding ${adding.done + 1} of ${adding.total}…` : "📷 Add photos"}
+              <button className="party-sticker" data-c="yellow" onClick={() => photos.current?.click()} disabled={!!adding}>
+                <span aria-hidden>📷</span> {adding ? `Adding ${adding.done + 1} of ${adding.total}…` : "Add photos"}
               </button>
               {household && (
-                <button className="pg-big pg-soft" data-cuelume-open onClick={() => setPicking(true)}>
-                  🏠 From the house
+                <button className="party-sticker" data-c="lilac" data-cuelume-open onClick={() => setPicking(true)}>
+                  <span aria-hidden>🏠</span> From the house
                 </button>
               )}
               <input
@@ -404,32 +578,39 @@ export function Party() {
               />
             </section>
 
-            <section className="party-loop" aria-label="Coming up">
-              <h2>Coming up</h2>
-              {household && upNext.length > 1 && <p className="pg-quiet">Drag to change what plays next.</p>}
-              {turns.length ? (
+            {/* What's on, on a line of its own; then what's coming, to sort; then what's been. */}
+            {onNow ? (
+              <section className="party-loop party-now" aria-label="On now">
+                <h2>On now</h2>
                 <ol>
-                  {sortedTurns.map((t) =>
-                    lifted && lifted.id === t.clipId ? (
-                      <li key={t.key} className="sort-ghost" style={{ height: lifted.height }} aria-hidden />
-                    ) : (
-                      <li
-                        key={t.key}
-                        data-on={t === onNow}
-                        data-sorts={household && t !== onNow}
-                        {...(household && t !== onNow ? bind("party", t.clipId!, upNextIds) : {})}
-                      >
-                        {turnRow(t)}
-                      </li>
-                    ),
-                  )}
+                  <li data-on>{turnRow(onNow)}</li>
                 </ol>
-              ) : (
-                <p className="pg-quiet">Nothing in the party yet. The first drawing or photo goes straight on.</p>
-              )}
-            </section>
+              </section>
+            ) : (
+              !turns.length && <p className="pg-quiet">Nothing in the party yet. The first drawing or photo goes straight on.</p>
+            )}
 
-            {/* What's been on, newest first, to pick again. The turn on air is in Coming up. */}
+            {upNext.length > 0 && (
+              <section className="party-loop" aria-label="Coming up">
+                <h2>Coming up</h2>
+                {household && upNext.length > 1 && <p className="pg-quiet">Drag to change what plays next.</p>}
+                <ol>
+                  {sortedTurns
+                    .filter((t) => t !== onNow)
+                    .map((t) =>
+                      lifted && lifted.id === t.clipId ? (
+                        <li key={t.key} className="sort-ghost" style={{ height: lifted.height }} aria-hidden />
+                      ) : (
+                        <li key={t.key} data-sorts={household} {...(household ? bind("party", t.clipId!, upNextIds) : {})}>
+                          {turnRow(t)}
+                        </li>
+                      ),
+                    )}
+                </ol>
+              </section>
+            )}
+
+            {/* What's been on, newest first, to pick again. The turn on air is in On now. */}
             {party.played.filter((p) => p.at < (onNow?.at ?? now)).length > 0 && (
               <section className="party-loop party-earlier" aria-label="Earlier">
                 <h2>Earlier</h2>
@@ -484,7 +665,7 @@ export function Party() {
             {household ? (
               <>
                 <h1>No party right now</h1>
-                <p className="pg-quiet">Start one and the panel is the party's until it ends: everyone draws and adds photos, and each goes on next.</p>
+                <p className="pg-quiet">Start one and the panel is the party's until it ends: everyone draws and adds photos, and each joins the queue.</p>
                 <button className="pg-big pg-go" data-cuelume-open onClick={() => setStarting(true)}>
                   Start a party
                 </button>
@@ -503,7 +684,7 @@ export function Party() {
             <h2>Parties</h2>
             <ul>
               {past.map((p) => (
-                <li key={p.id}>
+                <li key={p.id} data-party-look={p.theme}>
                   <a
                     href={`/parties/${p.id}`}
                     onClick={(e) => {
@@ -512,7 +693,12 @@ export function Party() {
                       navigate(`/parties/${p.id}`);
                     }}
                   >
-                    {p.cover ? <img src={`/api/images/${p.cover}/mono.png`} alt="" loading="lazy" /> : <span className="party-cover-empty">🎉</span>}
+                    <span className="party-past-snap">
+                      {p.cover ? <img src={`/api/images/${p.cover}/mono.png`} alt="" loading="lazy" /> : <span className="party-cover-empty">{themeOf(p.theme).emoji}</span>}
+                    </span>
+                    <span className="party-past-look">
+                      {themeOf(p.theme).emoji} {themeOf(p.theme).name}
+                    </span>
                     <strong>{day(p.startedAt)}</strong>
                     <small className="tabular">
                       {hhmm(p.startedAt)}–{hhmm(p.endedAt ?? p.endsAt)} · {things(p.things)}
@@ -544,11 +730,59 @@ export function Party() {
           </ul>
         </Sheet>
       )}
+      {settings && party && (
+        <Sheet title="The party" onClose={() => setSettings(false)}>
+          <p className="party-settings-when tabular">
+            Started at {hhmm(party.startedAt)}
+            {party.startedBy && ` by ${personOf(party.startedBy)?.name ?? "someone"}`}
+            {playlistName && `, from ${playlistName}`}.
+          </p>
+          <h3 className="pg-pick-label">Ends at</h3>
+          <EndSlider
+            value={endDraft ?? party.endsAt}
+            now={now}
+            morning={nextAt(state?.sleep?.enabled ? state.sleep.end : "08:00", party.startedAt)}
+            onChange={setEndDraft}
+            onDone={() => {
+              if (endDraft === null || endDraft === party.endsAt) return setEndDraft(null);
+              api.startParty(null, endDraft).then(
+                (s) => {
+                  accept(s);
+                  setEndDraft(null);
+                },
+                (e) => {
+                  setEndDraft(null);
+                  failed(e);
+                },
+              );
+            }}
+          />
+          <div className="party-settings-actions">
+            <button
+              className="pg-big pg-go"
+              onClick={() => {
+                setSettings(false);
+                end();
+              }}
+            >
+              ↩ End the party
+            </button>
+          </div>
+          <h3 className="pg-pick-label">Look</h3>
+          <ThemePicker value={party.theme} onChange={(t) => api.setPartyTheme(t).then(accept, failed)} />
+          <p className="pg-quiet">A party goes on until the next morning at the latest. Ending it puts its story in the log, and its guests go home.</p>
+        </Sheet>
+      )}
       {looking && (
         <Look look={looking} onClose={() => setLooking(null)} onError={failed}>
           {looking.clip && (
             <button className="ghost danger" onClick={() => remove(looking.clip!)}>
               Take it out
+            </button>
+          )}
+          {looking.nowId && (
+            <button className="ghost" onClick={() => showNow(looking.nowId!, looking.name)}>
+              ▶ Show now
             </button>
           )}
           {looking.againId && (
@@ -560,9 +794,10 @@ export function Party() {
       )}
       {liftedTurn && lifted && (
         <div ref={float} className="sort-float party-loop" style={{ width: lifted.width, height: lifted.height }} aria-hidden>
-          <li>{turnRow(liftedTurn)}</li>
+          <li data-sorts>{turnRow(liftedTurn)}</li>
         </div>
       )}
+      <Confetti burst={burst} />
       {toast.node}
     </div>
   );
@@ -585,7 +820,7 @@ export function PartyStory({ id }: { id: string }) {
   const toast = useUndoToast();
 
   return (
-    <div className="app">
+    <div className="app" data-party-look={story?.theme ?? "fun"}>
       <header className="bar">
         <div className="bar-left">
           <Nav current="party" />
@@ -597,8 +832,8 @@ export function PartyStory({ id }: { id: string }) {
           <MeMenu />
         </div>
       </header>
-      <main className="pl-overview pg party">
-        <button className="pg-link" onClick={() => navigate("/party")}>
+      <main className="pl-overview pg party-page">
+        <button className="pg-link party-back" onClick={() => navigate("/party")}>
           ← Parties
         </button>
         {story === null && <p className="pg-quiet">That party isn't here any more.</p>}

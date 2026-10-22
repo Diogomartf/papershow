@@ -1180,11 +1180,16 @@ function nextSlot(partyId: string, s: ReturnType<typeof showing>, now: number, l
   return at;
 }
 
-/** Slip `source` into the party to play next. */
+/**
+ * Put `source` at the back of the party's queue: after everything coming up, just before what's on comes round
+ * again. Again is what jumps the queue, not adding.
+ */
 function addToParty(party: store.PartyRow, source: Source, by: string, now: number) {
   catchUp(party, now);
   const { s } = partyOnAir(now);
-  store.addPartyClip(party.id, nextSlot(party.id, s, now), source, PARTY_CLIP_S, by, now);
+  const clips = store.partyClips(party.id);
+  const cur = clips.findIndex((x) => x.id === s?.slideId);
+  store.addPartyClip(party.id, cur < 0 ? clips.length : cur, source, PARTY_CLIP_S, by, now);
   keepPlace(party.id, s, -1, now);
   noteOnAir(party.id, now);
 }
@@ -1194,21 +1199,30 @@ function addToParty(party: store.PartyRow, source: Source, by: string, now: numb
  * while one is on, change when it ends. It ends by the next morning at the latest.
  */
 app.put("/api/party", async (c) => {
-  const { playlistId, until } = await c.req.json<{ playlistId?: string | null; until?: number }>();
+  const { playlistId, until, theme } = await c.req.json<{ playlistId?: string | null; until?: number; theme?: string }>();
+  if (theme !== undefined && !store.isPartyTheme(theme)) return c.json({ error: `A party looks ${store.PARTY_THEMES.join(", ")}` }, 400);
   const now = Date.now();
   const cur = store.currentParty(now);
+  // While one's on, its look changes on its own, without touching when it ends.
+  if (cur && theme && until === undefined) {
+    store.setPartyTheme(cur.id, theme);
+    note(c, "changed-party-look", { theme });
+    changed();
+    return c.json(await state(c));
+  }
   const latest = morningAfter(cur?.startedAt ?? now);
   const end = Math.min(Number(until), latest);
   if (!(end > now)) return c.json({ error: "that end time has already passed" }, 400);
   if (cur) {
     store.setPartyEnd(cur.id, end);
+    if (theme) store.setPartyTheme(cur.id, theme);
     note(c, "changed-party", { until: end });
   } else {
     const playlist = playlistId ? store.getPlaylist(playlistId) : undefined;
     if (playlistId && !playlist) return c.json({ error: "no such playlist" }, 404);
     const wait = tooMany(c, "live");
     if (wait) return wait;
-    store.startParty(playlist?.id ?? null, now, end, c.get("me").id);
+    store.startParty(playlist?.id ?? null, now, end, c.get("me").id, theme && store.isPartyTheme(theme) ? theme : "fun");
     // A Show now would hide the party's start; the party is what was asked for.
     if (store.getLive().mode === "pin") store.setLive({ mode: "rotate" });
     note(c, "started-party", { ...(playlist && { playlist: namedPlaylist(playlist.id) }), until: end });
@@ -1230,7 +1244,7 @@ app.delete("/api/party", async (c) => {
   return c.json(await state(c));
 });
 
-/** The household adds something of the house's (a drawing, photo or app) to the party, to play next. */
+/** The household adds something of the house's (a drawing, photo or app) to the party, at the back of the queue. */
 app.post("/api/party/clips", async (c) => {
   const { source } = await c.req.json<{ source?: Source }>();
   if (!source || !["image", "app"].includes(source.kind) || !exists(source)) return c.json({ error: "no such image or app" }, 404);
@@ -1320,6 +1334,31 @@ app.put("/api/party/order", async (c) => {
   keepPlace(party.id, s, -1, now);
   noteOnAir(party.id, now);
   note(c, "reordered-party");
+  changed();
+  return c.json(await state(c));
+});
+
+/**
+ * The household puts something from the party on the panel now: it takes the place of what's on, which plays
+ * right after it, and the loop carries on from there.
+ */
+app.post("/api/party/clips/:id/now", async (c) => {
+  const clip = store.getPartyClip(c.req.param("id"));
+  const now = Date.now();
+  const party = store.currentParty(now);
+  if (!clip || party?.id !== clip.partyId) return c.json({ error: "That's not in the party any more" }, 404);
+  const { s } = partyOnAir(now);
+  if (s?.slideId === clip.id) return c.json(await state(c));
+  const wait = tooMany(c, "live");
+  if (wait) return wait;
+  catchUp(party, now);
+  const rest = store.partyClips(party.id).filter((x) => x.id !== clip.id);
+  const cur = rest.findIndex((x) => x.id === s?.slideId);
+  store.movePartyClip(party.id, clip.id, cur < 0 ? rest.length : cur, now);
+  // It starts now, from its beginning.
+  keepPlace(party.id, s && { ...s, slideId: clip.id, source: clip.source, clip: { startedAt: now, endsAt: now } }, -1, now);
+  noteOnAir(party.id, now);
+  note(c, "showed-now-at-party", { item: named(clip.source) });
   changed();
   return c.json(await state(c));
 });

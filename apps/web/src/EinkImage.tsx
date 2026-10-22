@@ -55,3 +55,49 @@ export function EinkImage({ src }: { src: string }) {
     </div>
   );
 }
+
+/**
+ * A picture that changes without a blink: the new one is decoded first, then fades in over the old one. For the
+ * pages around the panel, where the e-ink refresh above would be too much.
+ */
+export function FadeImage({ src, className, alt = "" }: { src: string; className?: string; alt?: string }) {
+  const [shown, setShown] = useState(src);
+  const [next, setNext] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (src === shown || src === next) return;
+    let live = true;
+    const img = new Image();
+    img.src = src;
+    img
+      .decode()
+      .catch(() => {})
+      .then(() => {
+        if (!live) return;
+        if (reduceMotion()) setShown(src);
+        else setNext(src);
+      });
+    return () => {
+      live = false;
+    };
+  }, [src, shown, next]);
+
+  return (
+    <span className={`fade-img ${className ?? ""}`}>
+      <img src={shown} alt={alt} draggable={false} />
+      {next && (
+        <img
+          key={next}
+          className="fade-img-next"
+          src={next}
+          alt=""
+          draggable={false}
+          onAnimationEnd={() => {
+            setShown(next);
+            setNext(null);
+          }}
+        />
+      )}
+    </span>
+  );
+}

@@ -83,10 +83,14 @@ export type PartyClip = { id: string; partyId: string; position: number; source:
 /** A turn that went on air at a party: which clip, what it showed, who added it, and whether it's still there. */
 export type PartyPlay = { clipId: string; source: Source; at: number; name: string; addedBy: string | null; gone: boolean };
 
+/** How a party's page looks. */
+export type PartyTheme = "fun" | "classy" | "cave" | "severance" | "girls";
+
 /** A party: its own loop in place of the program until `endsAt`, starting from a copy of `playlistId`. */
 export type Party = {
   id: string;
   playlistId: string | null;
+  theme: PartyTheme;
   startedAt: number;
   endsAt: number;
   endedAt: number | null;
@@ -193,11 +197,15 @@ export const sayYes = (id: string) => call(`/api/asks/${id}/yes`, "POST");
 /** Not now, or, for the guest who asked, take it back. */
 export const dropAsk = (id: string) => call(`/api/asks/${id}`, "DELETE");
 /** Start a party from a copy of `playlistId` (or nothing), until `until`; while one is on, move its end. The server keeps it to the next morning. */
-export const startParty = (playlistId: string | null, until: number) => call("/api/party", "PUT", { playlistId, until });
-/** Something of the house's into the party, to play next. */
+export const startParty = (playlistId: string | null, until: number, theme?: PartyTheme) => call("/api/party", "PUT", { playlistId, until, theme });
+/** Change how the party going on looks. */
+export const setPartyTheme = (theme: PartyTheme) => call("/api/party", "PUT", { theme });
+/** Something of the house's into the party, at the back of the queue. */
 export const addToParty = (source: Source) => call("/api/party/clips", "POST", { source });
 /** Play something from the party again, next. */
 export const playAgain = (clipId: string) => call(`/api/party/clips/${clipId}/next`, "POST");
+/** Put something from the party on the panel now; what it interrupts plays right after. */
+export const showNowAtParty = (clipId: string) => call(`/api/party/clips/${clipId}/now`, "POST");
 /** Sort what's coming up at the party: its clips after the one on air, in order. */
 export const orderParty = (ids: string[]) => call("/api/party/order", "PUT", { ids });
 /** Take something out of the party; what was made there goes with it. */

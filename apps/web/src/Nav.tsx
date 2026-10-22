@@ -37,10 +37,14 @@ export function Nav({ current }: { current: Section }) {
           // While a party's on, it sits next to the Dashboard.
           s.id === "dashboard" && party ? [s, { id: "party", href: "/party", label: "🎉 Party" }] : [s],
         );
+  const home = me.role === "party" ? "/party" : "/";
   return (
     <nav className="nav">
-      <img className="mark" src="/icon-nav.png" alt="" />
-      <span className="wordmark" role="img" aria-label="Papershow" />
+      {/* The logo goes home: the Dashboard, or the party for a party guest, whose home it is. */}
+      <a className="nav-home" href={home} onClick={go(home)} aria-label="Papershow, home">
+        <img className="mark" src="/icon-nav.png" alt="" />
+        <span className="wordmark" aria-hidden />
+      </a>
       {sections.map((s) => (
         <a key={s.id} href={s.href} aria-current={current === s.id ? "page" : undefined} onClick={go(s.href)}>
           {s.label}

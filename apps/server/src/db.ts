@@ -699,6 +699,19 @@ db.exec(`
   );
 `);
 
+// How a party looks on its page: its theme. Parties from before themes are the fun one.
+if (!(db.prepare("pragma table_info(parties)").all() as { name: string }[]).some((c) => c.name === "theme"))
+  db.exec("alter table parties add column theme text not null default 'fun'");
+
+/** The looks a party's page can have. */
+export const PARTY_THEMES = ["fun", "classy", "cave", "severance", "girls"] as const;
+export type PartyTheme = (typeof PARTY_THEMES)[number];
+export const isPartyTheme = (t: unknown): t is PartyTheme => PARTY_THEMES.includes(t as PartyTheme);
+
+export function setPartyTheme(id: string, theme: PartyTheme) {
+  db.prepare("update parties set theme = ? where id = ?").run(theme, id);
+}
+
 // When a clip was last put up to play next (added, or picked to play again): what's queued after the clip on air
 // goes in that order. Parties from before this have it as when they were added.
 if (!(db.prepare("pragma table_info(party_clips)").all() as { name: string }[]).some((c) => c.name === "queued_at")) {
@@ -746,7 +759,7 @@ export function partyPlays(partyId: string): PartyPlay[] {
 }
 
 /** A party, as kept: `endedAt` once it's over (ended early, or at `endsAt`). */
-export type PartyRow = { id: string; playlistId: string | null; startedAt: number; anchor: number; endsAt: number; endedAt: number | null; startedBy: string | null };
+export type PartyRow = { id: string; playlistId: string | null; startedAt: number; anchor: number; endsAt: number; endedAt: number | null; startedBy: string | null; theme: PartyTheme };
 
 /**
  * One thing in a party's loop. `addedBy` is null for what came from the playlist it started with. `queuedAt`: when
@@ -754,7 +767,7 @@ export type PartyRow = { id: string; playlistId: string | null; startedAt: numbe
  */
 export type PartyClip = { id: string; partyId: string; position: number; source: Source; durationS: number; addedBy: string | null; addedAt: number; queuedAt: number };
 
-const PARTY_ROW = "select id, playlist_id as playlistId, started_at as startedAt, anchor, ends_at as endsAt, ended_at as endedAt, started_by as startedBy from parties";
+const PARTY_ROW = "select id, playlist_id as playlistId, started_at as startedAt, anchor, ends_at as endsAt, ended_at as endedAt, started_by as startedBy, theme from parties";
 
 /** The party going on at `now`, if there is one. */
 export function currentParty(now = Date.now()): PartyRow | undefined {
@@ -787,10 +800,10 @@ export function partyClips(partyId: string): PartyClip[] {
 }
 
 /** Start a party at `now`, with a copy of what plays in `playlistId` (when there's one) to begin with. */
-export function startParty(playlistId: string | null, now: number, endsAt: number, by: string): PartyRow {
+export function startParty(playlistId: string | null, now: number, endsAt: number, by: string, theme: PartyTheme = "fun"): PartyRow {
   const id = crypto.randomUUID().slice(0, 8);
   db.exec("begin");
-  db.prepare("insert into parties (id, playlist_id, started_at, anchor, ends_at, started_by) values (?, ?, ?, ?, ?, ?)").run(id, playlistId, now, now, endsAt, by);
+  db.prepare("insert into parties (id, playlist_id, started_at, anchor, ends_at, started_by, theme) values (?, ?, ?, ?, ?, ?, ?)").run(id, playlistId, now, now, endsAt, by, theme);
   const seed = playlistId ? listSlides().filter((s) => s.playlistId === playlistId && s.enabled) : [];
   seed.forEach((s, i) => insertPartyClip(id, i, s.source, s.durationS, null, now));
   db.exec("commit");

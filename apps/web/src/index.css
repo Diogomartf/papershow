@@ -486,6 +486,8 @@ button.ghost:hover, .sheet .actions button:hover, .sheet .actions a:hover { back
 }
 .nav a:hover { color: var(--ink); }
 .nav a[aria-current="page"] { color: var(--ink); background: var(--tint); }
+.nav a.nav-home { display: flex; align-items: center; padding: 0; margin-right: 0; background: none; }
+.nav a.nav-home:active { transform: scale(.97); }
 .divider { width: 1px; height: 18px; margin: 0 6px; background: var(--line); }
 
 .muted { color: var(--ink-3); }
@@ -1330,36 +1332,374 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .pg-badge[data-kind="party"] { background: var(--c-pink); color: var(--ink); }
 .pg-badge[data-kind="party"]::before { content: "🎉"; letter-spacing: 0; }
 .pg-pick .pg-tile[aria-checked="true"] { box-shadow: 0 0 0 3px var(--ink), 0 8px 20px -16px var(--drop); }
-.pg-party-lengths { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pg-lengths.pg-party-lengths { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); }
 .pg-party-lengths button { display: grid; place-content: center; gap: 2px; padding: 6px; }
 .pg-party-lengths small { font-size: 13px; font-weight: 600; opacity: .75; }
-/* The Party page: what's on, the big ways in (draw, photos), and the loop coming up. */
-.party > section { margin-bottom: 28px; }
-.party h2 { margin: 0 0 12px; font-size: 24px; font-weight: 720; letter-spacing: -0.015em; }
-.party-hero {
-  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 20px; align-items: center;
-  padding: 14px; border-radius: var(--pg-r); background: color-mix(in oklch, var(--c-pink) 35%, var(--surface));
-  box-shadow: 0 0 0 2px var(--c-pink), 0 16px 36px -20px var(--drop);
+/* The end time on a slider: the time big above it, soonest and latest at its ends. */
+.party-end { display: grid; gap: 6px; }
+.party-end-at { margin: 0; display: flex; align-items: baseline; justify-content: center; gap: 10px; }
+.party-end-at strong { font-size: 40px; font-weight: 780; color: var(--ink); line-height: 1; }
+.party-end-at small { font-size: 15px; font-weight: 600; color: var(--ink-2); }
+.party-end-ends { margin: 0; display: flex; justify-content: space-between; font-size: 13px; font-weight: 650; color: var(--ink-3); }
+.party-end input {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 44px; margin: 0; background: none; cursor: pointer; touch-action: pan-y;
 }
-.party-hero-text { display: grid; gap: 8px; justify-items: start; }
-.party-hero h1 { margin: 0; font-size: 32px; font-weight: 720; letter-spacing: -0.025em; line-height: 1.1; text-wrap: balance; }
+.party-end input::-webkit-slider-runnable-track { height: 10px; border-radius: 999px; background: var(--line); }
+.party-end input::-moz-range-track { height: 10px; border-radius: 999px; background: var(--line); }
+.party-end input::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 34px; height: 34px; margin-top: -12px; border-radius: 50%;
+  background: var(--accent); border: 3px solid var(--surface); box-shadow: 0 0 0 2px var(--accent), 0 4px 10px -4px rgba(0,0,0,.4);
+}
+.party-end input::-moz-range-thumb {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--accent); border: 3px solid var(--surface); box-shadow: 0 0 0 2px var(--accent), 0 4px 10px -4px rgba(0,0,0,.4);
+}
+.party-end input:focus-visible { outline: none; }
+.party-end input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px var(--line); }
+/* ── Party looks ─────────────────────────────────────
+   A party's page wears its look: [data-party-look] sits on the page and sets these, and the Party page's own
+   styles below read them. Inside the page the house's ink, surface and lines follow the look too, so the lists
+   and cards match it; the sheets that open over it stay the house's. Fun is the default, in the house's colours. */
+[data-party-look] {
+  --pt-ink: var(--ink); --pt-ink-2: var(--ink-2); --pt-ink-3: var(--ink-3);
+  --pt-surface: var(--surface); --pt-line: var(--line); --pt-tint: var(--tint); --pt-card: var(--wall-lit); --pt-drop: var(--drop);
+  --pt-backdrop:
+    radial-gradient(60% 50% at 0% 0%, color-mix(in oklch, var(--c-pink) 45%, transparent), transparent 70%),
+    radial-gradient(50% 45% at 100% 10%, color-mix(in oklch, var(--c-lilac) 45%, transparent), transparent 70%),
+    radial-gradient(55% 40% at 50% 100%, color-mix(in oklch, var(--c-yellow) 35%, transparent), transparent 70%),
+    radial-gradient(circle at 20% 30%, var(--c-pink) 0 3px, transparent 4px) 0 0 / 140px 120px,
+    radial-gradient(circle at 70% 80%, var(--c-yellow) 0 3px, transparent 4px) 0 0 / 170px 150px,
+    radial-gradient(circle at 40% 60%, var(--c-teal) 0 2.5px, transparent 3.5px) 0 0 / 120px 190px,
+    radial-gradient(circle at 85% 25%, var(--c-lilac) 0 3px, transparent 4px) 0 0 / 200px 130px;
+  --pt-hero: linear-gradient(135deg,
+    color-mix(in oklch, var(--c-pink) 70%, var(--surface)),
+    color-mix(in oklch, var(--c-lilac) 60%, var(--surface)) 55%,
+    color-mix(in oklch, var(--c-orange) 45%, var(--surface)));
+  --pt-hero-shadow: 0 0 0 2px var(--ink), 6px 6px 0 var(--ink), 0 24px 48px -24px var(--drop);
+  --pt-card-shadow: 0 0 0 2px var(--ink), 3px 3px 0 var(--ink), 0 14px 26px -14px var(--drop);
+  --pt-now-shadow: 0 0 0 2px var(--ink), 4px 4px 0 var(--c-pink);
+  --pt-r: 30px; --pt-tilt: 1.6deg;
+  --pt-polaroid: #fffdf8; --pt-polaroid-shadow: 0 2px 0 rgba(0,0,0,.08), 0 18px 34px -18px var(--drop);
+  --pt-tape: color-mix(in oklch, var(--c-yellow) 80%, transparent);
+  --pt-chip: var(--ink); --pt-chip-ink: var(--wall-lit); --pt-dot: var(--c-pink); --pt-kicker: var(--ink-2);
+  --pt-s1: var(--c-pink); --pt-s2: var(--c-yellow); --pt-s3: var(--c-lilac); --pt-sticker-ink: var(--ink);
+  --pt-sticker-border: 2px solid var(--ink); --pt-sticker-r: 22px; --pt-sticker-weight: 780; --pt-sticker-spacing: -0.01em; --pt-sticker-case: none;
+  --pt-sticker-shadow: 4px 4px 0 var(--ink); --pt-sticker-shadow-up: 6px 6px 0 var(--ink); --pt-sticker-shadow-down: 1px 1px 0 var(--ink);
+  --pt-display: inherit; --pt-display-weight: 800; --pt-display-style: normal; --pt-display-spacing: -0.035em; --pt-display-case: none;
+  --pt-label-font: inherit;
+  --pt-bar-h: 12px; --pt-bar-r: 999px; --pt-track: color-mix(in oklch, var(--ink) 12%, transparent); --pt-track-edge: none;
+  --pt-fill: repeating-linear-gradient(-45deg, var(--c-pink) 0 10px, var(--c-yellow) 10px 20px); --pt-fill-size: auto;
+  --pt-fill-anim: party-stripes 1.2s linear infinite; --pt-runner: "🎉";
+  --pt-c1: var(--c-pink); --pt-c2: var(--c-yellow); --pt-c3: var(--c-lilac); --pt-c4: var(--c-teal); --pt-c5: var(--c-orange); --pt-c6: var(--c-lime);
+}
+/* Classy: the serious one. Black tie: near-black, cream, a line of gold, serif type, nothing crooked or loud. */
+[data-party-look="classy"] {
+  --gold: #c9a45c;
+  --pt-ink: #f3ead7; --pt-ink-2: #c8bda6; --pt-ink-3: #8f8571;
+  --pt-surface: #1c1915; --pt-line: rgba(201,164,92,.28); --pt-tint: rgba(243,234,215,.08); --pt-card: #12100d; --pt-drop: rgba(0,0,0,.6);
+  --pt-backdrop:
+    radial-gradient(80% 60% at 50% -10%, rgba(201,164,92,.18), transparent 70%),
+    repeating-linear-gradient(90deg, rgba(243,234,215,.025) 0 1px, transparent 1px 28px),
+    linear-gradient(180deg, #14120f, #0d0c0a);
+  --pt-hero: linear-gradient(160deg, #1f1b16, #15130f);
+  --pt-hero-shadow: 0 0 0 1px var(--gold), 0 0 0 7px #15130f, 0 0 0 8px rgba(201,164,92,.45), 0 30px 60px -30px #000;
+  --pt-card-shadow: 0 0 0 1px var(--gold), 0 14px 26px -14px #000;
+  --pt-now-shadow: 0 0 0 1px var(--gold);
+  --pt-r: 6px; --pt-tilt: 0deg;
+  --pt-polaroid: #f6f0e2; --pt-polaroid-shadow: 0 0 0 1px rgba(201,164,92,.6), 0 20px 40px -20px #000; --pt-tape: transparent;
+  --pt-chip: transparent; --pt-chip-ink: var(--gold); --pt-dot: var(--gold); --pt-kicker: var(--gold);
+  --pt-s1: var(--gold-leaf); --pt-s2: var(--gold-leaf); --pt-s3: var(--gold-leaf); --pt-sticker-ink: #1a140b;
+  --gold-leaf: linear-gradient(160deg, #f1dc9f 0%, #d4b06a 32%, #b38a43 62%, #e2c27f 100%);
+  --pt-sticker-border: 1px solid #f6e3ad; --pt-sticker-r: 4px; --pt-sticker-weight: 600; --pt-sticker-spacing: .06em; --pt-sticker-case: uppercase;
+  --pt-sticker-shadow: inset 0 1px 0 rgba(255,250,232,.7), inset 0 -2px 0 rgba(90,62,20,.35), 0 10px 22px -14px rgba(201,164,92,.6);
+  --pt-sticker-shadow-up: inset 0 1px 0 rgba(255,250,232,.8), inset 0 -2px 0 rgba(90,62,20,.35), 0 16px 30px -14px rgba(201,164,92,.8);
+  --pt-sticker-shadow-down: inset 0 2px 4px rgba(90,62,20,.45);
+  --pt-display: "Didot", "Bodoni 72", "Bodoni MT", "Playfair Display", Georgia, serif; --pt-display-weight: 400; --pt-display-style: italic; --pt-display-spacing: 0; --pt-display-case: none;
+  --pt-label-font: "Optima", "Avenir Next", "Gill Sans", sans-serif;
+  --pt-bar-h: 2px; --pt-bar-r: 0; --pt-track: rgba(243,234,215,.16); --pt-fill: var(--gold); --pt-fill-anim: none; --pt-runner: "◆";
+  --pt-c1: #c9a45c; --pt-c2: #f3ead7; --pt-c3: #e3cc94; --pt-c4: #a07c3b; --pt-c5: #fff8e7; --pt-c6: #d9b56f;
+}
+[data-party-look="classy"] .party-turn-bar i::after { font-size: 11px; color: var(--gold); filter: none; }
+[data-party-look="classy"] .party-on::before { animation: none; box-shadow: none; }
+/* Ink on gold leaf: the emoji go dark as engraving, and the label gets a faint highlight under it. */
+[data-party-look="classy"] .party-sticker { text-shadow: 0 1px 0 rgba(255,246,214,.55); }
+[data-party-look="classy"] .party-sticker span { filter: grayscale(1) contrast(1.3) brightness(.4); }
+/* Man cave: dark wood, a leather sofa's browns, amber neon, big condensed type, and a beer filling up. */
+[data-party-look="cave"] {
+  --amber: #ffa31a; --neon-red: #ff4d4d;
+  --pt-ink: #f6e7cf; --pt-ink-2: #cdb391; --pt-ink-3: #8e7559;
+  --pt-surface: #2a1c13; --pt-line: rgba(255,163,26,.18); --pt-tint: rgba(255,163,26,.1); --pt-card: #1a110b; --pt-drop: rgba(0,0,0,.7);
+  --pt-backdrop:
+    radial-gradient(70% 50% at 50% 0%, rgba(255,163,26,.16), transparent 70%),
+    repeating-linear-gradient(92deg, rgba(0,0,0,.18) 0 2px, transparent 2px 9px, rgba(255,220,180,.03) 9px 11px, transparent 11px 23px),
+    linear-gradient(180deg, #3a2618, #24170f);
+  --pt-hero: linear-gradient(160deg, #22160e, #1a110b);
+  --pt-hero-shadow: 0 0 0 2px var(--amber), 0 0 28px rgba(255,163,26,.45), inset 0 0 40px rgba(255,163,26,.08);
+  --pt-card-shadow: 0 0 0 2px var(--neon-red), 0 0 18px rgba(255,77,77,.5);
+  --pt-now-shadow: 0 0 0 2px var(--amber), 0 0 14px rgba(255,163,26,.4);
+  --pt-r: 14px; --pt-tilt: 2.4deg;
+  --pt-polaroid: #e9dcc2; --pt-polaroid-shadow: 0 20px 40px -18px #000; --pt-tape: rgba(206,178,128,.75);
+  --pt-chip: #120b07; --pt-chip-ink: var(--neon-red); --pt-dot: var(--neon-red); --pt-kicker: var(--amber);
+  --pt-s1: #3b2617; --pt-s2: #3b2617; --pt-s3: #3b2617; --pt-sticker-ink: #f6e7cf;
+  --pt-sticker-border: 2px solid var(--amber); --pt-sticker-r: 10px; --pt-sticker-weight: 800; --pt-sticker-spacing: .04em; --pt-sticker-case: uppercase;
+  --pt-sticker-shadow: 0 0 16px rgba(255,163,26,.35); --pt-sticker-shadow-up: 0 0 26px rgba(255,163,26,.6); --pt-sticker-shadow-down: 0 0 8px rgba(255,163,26,.3);
+  --pt-display: "Impact", "Haettenschweiler", "Arial Narrow Bold", "Oswald", sans-serif; --pt-display-weight: 400; --pt-display-style: normal; --pt-display-spacing: .02em; --pt-display-case: uppercase;
+  --pt-label-font: "Avenir Next Condensed", "Arial Narrow", sans-serif;
+  --pt-bar-h: 18px; --pt-bar-r: 6px; --pt-track: rgba(255,255,255,.06); --pt-track-edge: inset 0 0 0 2px rgba(246,231,207,.25);
+  --pt-fill:
+    radial-gradient(circle at 20% 70%, rgba(255,255,255,.55) 0 1.5px, transparent 2px) 0 0 / 14px 18px,
+    radial-gradient(circle at 70% 30%, rgba(255,255,255,.4) 0 1px, transparent 1.5px) 0 0 / 11px 18px,
+    linear-gradient(180deg, #ffc53d, #e08a00);
+  --pt-fill-size: auto; --pt-fill-anim: party-bubbles 2.4s linear infinite; --pt-runner: "🍺";
+  --pt-c1: #ffa31a; --pt-c2: #ff4d4d; --pt-c3: #f6e7cf; --pt-c4: #7a4a2a; --pt-c5: #ffd166; --pt-c6: #3fc1b0;
+}
+@keyframes party-bubbles { to { background-position: 0 -36px, 0 -36px, 0 0; } }
+[data-party-look="cave"] .party-on { text-shadow: 0 0 8px rgba(255,77,77,.8); box-shadow: 0 0 0 1px rgba(255,77,77,.6); }
+[data-party-look="cave"] .party-hero h1 { color: #ffd9a0; text-shadow: 0 0 18px rgba(255,163,26,.45); }
+/* Severance: an office of calm. Pale teal, fluorescent white, thin lines, nothing tilted, mono labels, and
+   progress counted out in blocks with its percentage. */
+[data-party-look="severance"] {
+  --lumon: #1f6f6a;
+  --pt-ink: #0e3b39; --pt-ink-2: #4d7774; --pt-ink-3: #86a6a3;
+  --pt-surface: #f7fbfa; --pt-line: #c5dad7; --pt-tint: rgba(31,111,106,.08); --pt-card: #f7fbfa; --pt-drop: rgba(14,59,57,.25);
+  --pt-backdrop:
+    linear-gradient(rgba(31,111,106,.07) 1px, transparent 1px) 0 0 / 100% 32px,
+    linear-gradient(90deg, rgba(31,111,106,.07) 1px, transparent 1px) 0 0 / 32px 100%,
+    linear-gradient(180deg, #eaf3f1, #dfecea);
+  --pt-hero: #f4f9f8;
+  --pt-hero-shadow: 0 0 0 1px #9fc3bf, 0 1px 0 #fff inset, 0 24px 40px -30px rgba(14,59,57,.4);
+  --pt-card-shadow: 0 0 0 1px #9fc3bf, 0 10px 20px -16px rgba(14,59,57,.4);
+  --pt-now-shadow: 0 0 0 1px var(--lumon), inset 4px 0 0 var(--lumon);
+  --pt-r: 4px; --pt-tilt: 0deg;
+  --pt-polaroid: #ffffff; --pt-polaroid-shadow: 0 0 0 1px #c5dad7; --pt-tape: transparent;
+  --pt-chip: var(--lumon); --pt-chip-ink: #e9fbf8; --pt-dot: #8ff0e2; --pt-kicker: var(--lumon);
+  --pt-s1: #ffffff; --pt-s2: #ffffff; --pt-s3: #ffffff; --pt-sticker-ink: var(--lumon);
+  --pt-sticker-border: 1px solid #9fc3bf; --pt-sticker-r: 3px; --pt-sticker-weight: 500; --pt-sticker-spacing: .08em; --pt-sticker-case: uppercase;
+  --pt-sticker-shadow: none; --pt-sticker-shadow-up: 0 0 0 1px var(--lumon); --pt-sticker-shadow-down: none;
+  --pt-display: "Helvetica Neue", Helvetica, Arial, sans-serif; --pt-display-weight: 300; --pt-display-style: normal; --pt-display-spacing: -0.01em; --pt-display-case: none;
+  --pt-label-font: ui-monospace, "SF Mono", Menlo, monospace;
+  --pt-bar-h: 16px; --pt-bar-r: 0;
+  --pt-track: repeating-linear-gradient(90deg, rgba(31,111,106,.14) 0 10px, transparent 10px 13px);
+  --pt-fill: repeating-linear-gradient(90deg, var(--lumon) 0 10px, transparent 10px 13px); --pt-fill-anim: none; --pt-runner: "";
+  --pt-c1: #1f6f6a; --pt-c2: #8ff0e2; --pt-c3: #ffffff; --pt-c4: #c5dad7; --pt-c5: #4d7774; --pt-c6: #b8e8e0;
+}
+[data-party-look="severance"] .party-sticker span { filter: grayscale(1) contrast(1.2); }
+[data-party-look="severance"] .party-on::before { border-radius: 0; animation-duration: 3s; }
+/* Girls' night: hot pink and lilac, glitter, washi tape, script type, round everything, a heart racing along. */
+[data-party-look="girls"] {
+  --hot: #ff4fa3; --berry: #7a1048;
+  --pt-ink: #4a0f2e; --pt-ink-2: #8a3d63; --pt-ink-3: #b97a99;
+  --pt-surface: #fff4f9; --pt-line: #ffc6e0; --pt-tint: rgba(255,79,163,.1); --pt-card: #fff4f9; --pt-drop: rgba(122,16,72,.3);
+  --pt-backdrop:
+    radial-gradient(circle at 30% 40%, #fff 0 1.5px, transparent 2px) 0 0 / 46px 52px,
+    radial-gradient(circle at 70% 20%, #ffd36b 0 1.5px, transparent 2px) 0 0 / 70px 64px,
+    radial-gradient(circle at 50% 80%, #ff8cc6 0 2.5px, transparent 3px) 0 0 / 90px 80px,
+    radial-gradient(60% 50% at 0% 0%, rgba(255,79,163,.35), transparent 70%),
+    radial-gradient(50% 45% at 100% 20%, rgba(201,160,255,.45), transparent 70%),
+    linear-gradient(180deg, #ffe4f1, #ffd6ea);
+  --pt-hero: linear-gradient(135deg, #ff8ac5, #ffb6da 50%, #d9b8ff);
+  --pt-hero-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--hot), 0 24px 48px -20px rgba(255,79,163,.6);
+  --pt-card-shadow: 0 0 0 2px var(--hot), 0 12px 24px -12px rgba(255,79,163,.6);
+  --pt-now-shadow: 0 0 0 2px var(--hot), 0 0 0 5px #ffd6ea;
+  --pt-r: 36px; --pt-tilt: 2.4deg;
+  --pt-polaroid: #ffffff; --pt-polaroid-shadow: 0 18px 34px -16px rgba(122,16,72,.45);
+  --pt-tape: repeating-linear-gradient(45deg, rgba(255,79,163,.75) 0 6px, rgba(255,255,255,.75) 6px 12px);
+  --pt-chip: var(--hot); --pt-chip-ink: #fff; --pt-dot: #fff; --pt-kicker: var(--berry);
+  --pt-s1: #ff7ab8; --pt-s2: #ffc2dd; --pt-s3: #d6b4ff; --pt-sticker-ink: var(--berry);
+  --pt-sticker-border: 2px solid #fff; --pt-sticker-r: 999px; --pt-sticker-weight: 800; --pt-sticker-spacing: 0; --pt-sticker-case: none;
+  --pt-sticker-shadow: 0 0 0 2px var(--hot), 0 10px 20px -10px rgba(255,79,163,.7);
+  --pt-sticker-shadow-up: 0 0 0 2px var(--hot), 0 16px 28px -10px rgba(255,79,163,.8); --pt-sticker-shadow-down: 0 0 0 2px var(--hot);
+  --pt-display: "Snell Roundhand", "Segoe Script", "Brush Script MT", cursive; --pt-display-weight: 700; --pt-display-style: normal; --pt-display-spacing: 0; --pt-display-case: none;
+  --pt-label-font: inherit;
+  --pt-bar-h: 14px; --pt-bar-r: 999px; --pt-track: rgba(255,255,255,.65); --pt-track-edge: inset 0 0 0 2px rgba(255,79,163,.35);
+  --pt-fill: linear-gradient(90deg, #ff4fa3, #c98cff, #ff4fa3); --pt-fill-size: 200% 100%; --pt-fill-anim: party-shimmer 2s linear infinite; --pt-runner: "💖";
+  --pt-c1: #ff4fa3; --pt-c2: #ff9fcf; --pt-c3: #c98cff; --pt-c4: #ffffff; --pt-c5: #ffd36b; --pt-c6: #ffc2a8;
+}
+@keyframes party-shimmer { to { background-position: -200% 0; } }
+/* Inside the page the house's own colours follow the look. */
+[data-party-look] .party-page {
+  --ink: var(--pt-ink); --ink-2: var(--pt-ink-2); --ink-3: var(--pt-ink-3);
+  --surface: var(--pt-surface); --line: var(--pt-line); --tint: var(--pt-tint); --wall-lit: var(--pt-card); --drop: var(--pt-drop);
+}
+[data-party-look] .party-page :is(.pg-quiet, .party-who, .party-clock, .party-turn) { color: var(--ink-2); }
+
+/* Picking a look: each card in its own colours. */
+.party-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.party-theme {
+  display: grid; justify-items: start; gap: 4px; padding: 12px; border: 0; border-radius: 16px; text-align: left;
+  background: var(--pt-hero); color: var(--pt-ink); box-shadow: 0 0 0 1px var(--pt-line);
+  font: inherit; transition: transform 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
+}
+.party-theme strong { font-family: var(--pt-display); font-weight: var(--pt-display-weight); font-style: var(--pt-display-style); font-size: 20px; line-height: 1.1; }
+.party-theme small { font-size: 13px; font-weight: 560; color: var(--pt-ink-2); }
+.party-theme-swatch { font-size: 26px; line-height: 1; }
+.party-theme[aria-checked="true"] { box-shadow: 0 0 0 3px var(--accent), 0 0 0 5px var(--wall-lit); }
+.party-theme:active { transform: scale(.97); }
+
+/* The Party page: what's on, the big ways in (draw, photos), and the loop coming up. */
+.party-page > section { margin-bottom: 28px; }
+/* A party's page dresses up in its look (below): its own backdrop, colours and type. */
+.party-page { background: var(--pt-backdrop); background-attachment: local; color: var(--ink); }
+.party-page h2 { margin: 0 0 12px; font-size: 24px; font-weight: 720; letter-spacing: -0.015em; }
+.party-hero {
+  position: relative;
+  display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 32px; align-items: center;
+  padding: 24px; border-radius: var(--pt-r);
+  background: var(--pt-hero);
+  box-shadow: var(--pt-hero-shadow);
+}
+/* What's on the panel, as a snapshot pinned up a little crooked; it straightens when you look at it. */
+.party-polaroid {
+  position: relative; padding: 10px 10px 30px; border-radius: 6px; background: var(--pt-polaroid);
+  box-shadow: var(--pt-polaroid-shadow);
+  transform: rotate(calc(var(--pt-tilt) * -1)); transition: transform 300ms var(--ease-out);
+}
+.party-polaroid:hover { transform: rotate(0deg) scale(1.01); }
+.party-polaroid::before {
+  content: ""; position: absolute; top: -12px; left: 50%; width: 92px; height: 26px; translate: -50% 0; rotate: 3deg;
+  background: var(--pt-tape); box-shadow: 0 1px 2px rgba(0,0,0,.08);
+}
+.party-polaroid .pg-frame { border-radius: 2px; box-shadow: none; }
+/* Up next: a smaller snapshot tucked over the main one's corner, crooked the other way. */
+.party-snaps { position: relative; margin: 0 22px 26px 0; }
+.party-next {
+  position: absolute; right: -22px; bottom: -26px; width: 34%;
+  display: grid; gap: 4px; padding: 6px 6px 4px; border: 0; border-radius: 5px; background: var(--pt-polaroid); color: #2a2620;
+  box-shadow: var(--pt-polaroid-shadow);
+  transform: rotate(calc(var(--pt-tilt) * 2.2)); transition: transform 260ms var(--ease-out); cursor: zoom-in;
+}
+.party-next img { display: block; width: 100%; aspect-ratio: 5 / 3; object-fit: cover; border-radius: 2px; background: var(--paper); filter: var(--dim); }
+.party-next span { font-size: 13px; font-weight: 650; letter-spacing: .02em; text-align: left; }
+.party-next b { font-weight: 800; }
+@media (hover: hover) { .party-next:hover { transform: rotate(0deg) scale(1.04); } }
+.party-on {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 10px; border-radius: 999px;
+  background: var(--pt-chip); color: var(--pt-chip-ink);
+  font-family: var(--pt-label-font); font-size: 13px; font-weight: 780; letter-spacing: .08em; text-transform: uppercase;
+}
+.party-on::before {
+  content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--pt-dot);
+  box-shadow: 0 0 0 0 var(--pt-dot); animation: party-beat 1.4s ease-out infinite;
+}
+@keyframes party-beat { 0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--pt-dot) 80%, transparent); } 100% { box-shadow: 0 0 0 10px transparent; } }
+/* The party's own state, as a card of its own: that it's on, how long it has left, and its settings. */
+.party-status {
+  position: absolute; top: -16px; right: 22px; z-index: 2; rotate: calc(var(--pt-tilt) * .9);
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 8px;
+  padding: 8px 8px 9px 10px; border-radius: 14px; background: var(--pt-card);
+  box-shadow: var(--pt-card-shadow);
+}
+.party-status .party-on { justify-self: start; }
+.party-status .party-clock { grid-column: 1 / -1; padding-left: 2px; font-size: 13px; }
+.party-status .party-on { gap: 6px; padding: 4px 10px 4px 8px; font-size: 11px; }
+.party-status .party-on::before { width: 7px; height: 7px; }
+.party-gear {
+  display: grid; place-items: center; width: 28px; height: 28px; padding: 0;
+  border: 0; border-radius: 50%; background: color-mix(in oklch, var(--ink) 10%, transparent); color: var(--ink);
+  transition: transform 300ms var(--ease-out), background-color 120ms ease-out;
+}
+.party-gear:hover { background: color-mix(in oklch, var(--ink) 16%, transparent); transform: rotate(45deg); }
+.party-settings-when { margin: 0; font-size: 17px; font-weight: 560; color: var(--ink-2); line-height: 1.45; }
+.party-settings-when strong { color: var(--ink); font-weight: 750; }
+.party-settings-actions { display: grid; gap: 10px; }
+.party-clock { margin: 0; font-size: 16px; font-weight: 600; color: var(--ink-2); }
+.party-clock strong { color: var(--ink); font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
+/* Right of the picture, under the party's card: what's on, a little above the middle. */
+.party-hero-text { align-self: stretch; display: grid; min-width: 0; padding-top: 44px; }
+.party-hero-what { align-self: center; display: grid; gap: 8px; justify-items: start; min-width: 0; padding-bottom: 18px; }
+.party-kicker { font-family: var(--pt-label-font); font-size: 13px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: var(--pt-kicker); }
+.party-turn { justify-self: stretch; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; margin-top: 6px; font-size: 15px; font-weight: 650; color: var(--ink-2); }
+/* How far through its turn what's on is, in the look's own way: --pt-runner rides the end of the fill. */
+.party-turn { font-family: var(--pt-label-font); }
+.party-turn-bar { position: relative; height: var(--pt-bar-h); border-radius: var(--pt-bar-r); background: var(--pt-track); box-shadow: var(--pt-track-edge); }
+.party-turn-bar i { position: relative; display: block; min-width: 2px; height: 100%; border-radius: inherit; background: var(--pt-fill); background-size: var(--pt-fill-size); transition: width 1s linear; animation: var(--pt-fill-anim); }
+.party-turn-bar i::after {
+  content: var(--pt-runner); position: absolute; right: 0; top: 50%; translate: 50% -50%;
+  font-size: 20px; line-height: 1; filter: drop-shadow(0 2px 2px rgba(0,0,0,.2));
+}
+.party-turn-pct { font-weight: 800; color: var(--ink); }
+@keyframes party-stripes { to { background-position: 40px 0; } }
+.party-hero h1 { margin: 0; font-family: var(--pt-display); font-size: clamp(34px, 4vw, 48px); font-weight: var(--pt-display-weight); font-style: var(--pt-display-style); letter-spacing: var(--pt-display-spacing); text-transform: var(--pt-display-case); line-height: 1.02; text-wrap: balance; overflow-wrap: anywhere; }
 .party-who { margin: 0; font-size: 17px; font-weight: 600; color: var(--ink-2); }
 .party-hero .pg-quiet { margin: 0; }
 .party-hero .pg-row { justify-self: stretch; margin-top: 6px; }
-.party-add { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.party-add { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
 .party-add .pg-big { min-height: 76px; font-size: 21px; }
-.party-loop ol, .party-past ul, .party-story { list-style: none; margin: 0; padding: 0; }
-.party-loop ol { display: grid; gap: 8px; }
-.party-loop li {
-  display: grid; grid-template-columns: 96px minmax(0, 1fr) auto auto; align-items: center; gap: 14px;
-  padding: 8px 12px 8px 8px; border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px var(--line);
+/* The ways in, as chunky stickers in the party's colours: they lift and tilt a touch under the pointer. */
+.party-sticker {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 84px; padding: 0 20px; border: var(--pt-sticker-border); border-radius: var(--pt-sticker-r);
+  background: var(--sticker); color: var(--pt-sticker-ink); box-shadow: var(--pt-sticker-shadow);
+  font: inherit; font-family: var(--pt-label-font); font-size: 21px; font-weight: var(--pt-sticker-weight); letter-spacing: var(--pt-sticker-spacing); text-transform: var(--pt-sticker-case);
+  transition: transform 180ms var(--ease-out), box-shadow 180ms var(--ease-out);
 }
-.party-loop li[data-on="true"] { box-shadow: 0 0 0 3px var(--c-pink); }
-.party-loop img { width: 96px; aspect-ratio: 5 / 3; border-radius: 10px; background: var(--paper); filter: var(--dim); }
+.party-sticker span { font-size: 28px; line-height: 1; transition: transform 240ms var(--ease-out); }
+.party-sticker[data-c="pink"] { --sticker: var(--pt-s1); }
+.party-sticker[data-c="yellow"] { --sticker: var(--pt-s2); }
+.party-sticker[data-c="lilac"] { --sticker: var(--pt-s3); }
+@media (hover: hover) {
+  .party-sticker:hover:not(:disabled) { transform: translate(-2px, -2px) rotate(-1deg); box-shadow: var(--pt-sticker-shadow-up); }
+  .party-sticker:hover:not(:disabled) span { transform: rotate(-12deg) scale(1.15); }
+}
+.party-sticker:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: var(--pt-sticker-shadow-down); }
+.party-sticker:disabled { opacity: .6; cursor: default; }
+/* Confetti for something new in the party: it bursts up from the middle and falls away. */
+.party-confetti { position: fixed; inset: 0; z-index: 60; overflow: hidden; pointer-events: none; }
+.party-confetti i {
+  position: absolute; left: 50%; top: 45%; width: var(--w); height: calc(var(--w) * 1.6); border-radius: 2px;
+  background: var(--c); opacity: 0;
+  animation: party-pop 1400ms cubic-bezier(.2, .6, .35, 1) var(--d) forwards;
+}
+@keyframes party-pop {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0); }
+  35% { opacity: 1; transform: translate(calc(var(--x) * .6), var(--up)) rotate(calc(var(--r) * .4)); }
+  100% { opacity: 0; transform: translate(var(--x), var(--y)) rotate(var(--r)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .party-confetti { display: none; }
+  .party-on::before { animation: none; }
+  .party-turn-bar i { animation: none; }
+  .party-polaroid, .party-polaroid:hover, .party-next, .party-next:hover, .party-gear:hover { transform: none; }
+}
+.party-loop ol, .party-past ul, .party-story { list-style: none; margin: 0; padding: 0; }
+.party-loop ol { display: grid; align-content: start; gap: 8px; }
+/* A row is as tall as its picture and a hair more: the picture opens big when tapped, so it needn't be large here. */
+.party-loop li {
+  --thumb: 112px;
+  display: grid; grid-template-columns: var(--thumb) minmax(0, 1fr) auto auto; align-items: center; gap: 14px;
+  min-height: 0; padding: 6px 10px 6px 6px; border-radius: 14px; background: var(--surface); box-shadow: 0 0 0 1px var(--line);
+}
+.party-loop li[data-on="true"] {
+  background: color-mix(in oklch, var(--pt-s1) 22%, var(--surface));
+  box-shadow: var(--pt-now-shadow);
+}
+.party-loop img { display: block; width: var(--thumb); height: auto; aspect-ratio: 5 / 3; object-fit: cover; border-radius: 9px; background: var(--paper); filter: var(--dim); }
 .party-loop li > div { display: grid; gap: 2px; min-width: 0; }
 .party-loop strong { font-size: 17px; font-weight: 680; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .party-loop small { font-size: 14px; font-weight: 560; color: var(--ink-2); }
 .party-at { font-size: 16px; font-weight: 680; color: var(--ink-2); }
+/* Show now takes the time's place on hover; where there's no hover it sits by it, as a small play button. */
+.party-at-cell { display: grid; justify-items: end; align-items: center; }
+.party-at-cell > * { grid-area: 1 / 1; }
+.party-now-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px; border: 0; border-radius: 999px;
+  background: var(--ink); color: var(--wall-lit); font: inherit; font-size: 14px; font-weight: 750; white-space: nowrap;
+  opacity: 0; pointer-events: none; transform: scale(.94);
+  transition: opacity 140ms ease-out, transform 160ms var(--ease-out);
+}
+.party-now-btn:active { transform: scale(.96); }
+.party-at { transition: opacity 120ms ease-out; }
+@media (hover: hover) {
+  .party-loop li:hover .party-now-btn, .party-loop li:focus-within .party-now-btn { opacity: 1; pointer-events: auto; transform: none; }
+  .party-loop li:hover .party-at-cell:has(.party-now-btn) .party-at,
+  .party-loop li:focus-within .party-at-cell:has(.party-now-btn) .party-at { opacity: 0; }
+}
+@media (hover: none) {
+  .party-at-cell { display: flex; gap: 8px; }
+  .party-at-cell > * { grid-area: auto; }
+  .party-now-btn { opacity: 1; pointer-events: auto; transform: none; width: 36px; padding: 0; justify-content: center; }
+  .party-now-label { display: none; }
+}
 .party-remove {
   display: grid; place-items: center; width: 36px; height: 36px; padding: 0;
   border: 0; border-radius: 50%; background: transparent; color: var(--ink-3);
@@ -1374,20 +1714,29 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .party-again:hover { background: color-mix(in srgb, var(--tint) 100%, var(--ink) 8%); }
 .party-again:active { transform: scale(0.96); }
 .party-earlier li { opacity: .9; }
-.party-loop .party-cover-empty { width: 96px; font-size: 20px; }
+.party-loop .party-cover-empty { width: var(--thumb); font-size: 20px; }
 /* A picture in the party's lists opens big; dragging a row of Coming up sorts it. */
-.party-thumb { display: block; padding: 0; border: 0; border-radius: 10px; background: none; cursor: zoom-in; }
+.party-thumb { display: block; padding: 0; border: 0; border-radius: 9px; background: none; line-height: 0; cursor: zoom-in; }
 .party-story .party-thumb { width: 100%; border-radius: 12px; }
 .party-loop li[data-sorts="true"] { cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+/* The grip sits in the row's top right corner, as on the Show's tiles: by it, a finger picks the row up at once. */
+.party-loop li { position: relative; }
+.party-loop li .grip { position: absolute; top: 6px; right: 6px; }
+/* Room for it, so the bin stays clear of it. */
+.party-loop li[data-sorts="true"] { padding-right: 32px; }
 .party-loop li.sort-ghost { padding: 0; background: var(--ghost); box-shadow: 0 0 0 1.5px var(--ghost-edge) inset, 0 0 18px 2px var(--ghost-glow); }
 .sort-float.party-loop > li { list-style: none; }
 .party-look img { image-rendering: pixelated; }
-.party-look img[data-ink="true"] { image-rendering: auto; }
+.party-look .is-ink img { image-rendering: auto; }
 .party-look small { display: flex; align-items: center; gap: 6px; font-size: 15px; }
 .party-look-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
 .party-look-actions .segmented { margin-right: auto; }
 .party-all { margin-top: 8px; }
-.party-loop li[data-on="true"] .party-at { color: var(--on-air); }
+/* Back to the parties, from a party's story: the page's link, a size down. */
+.party-back { justify-self: start; margin: 0 0 8px -8px; font-size: 20px; }
+.party-loop li[data-on="true"] .party-at {
+  padding: 4px 10px; border-radius: 999px; background: var(--ink); color: var(--wall-lit); font-size: 14px; letter-spacing: .04em;
+}
 .party-off { display: grid; justify-items: center; gap: 10px; padding: 48px 16px; text-align: center; }
 .party-off h1 { margin: 0; font-size: 30px; font-weight: 720; letter-spacing: -0.02em; }
 .party-off .pg-quiet { max-width: 46ch; margin: 0; }
@@ -1397,6 +1746,38 @@ a.live-link:hover .live-link-text { color: var(--ink); }
   background: var(--surface); color: var(--ink); text-decoration: none; box-shadow: 0 0 0 1px var(--line);
 }
 .party-past a:hover { box-shadow: 0 0 0 2px var(--ink-3); }
+/* Each past party wears the look it ended in: its colours, its type, its cover pinned up as a snapshot. */
+.party-past li { display: grid; }
+.party-past li a {
+  gap: 8px; padding: 18px 16px 16px; border-radius: var(--pt-r);
+  background: var(--pt-hero); color: var(--pt-ink); box-shadow: var(--pt-card-shadow);
+  transition: transform 200ms var(--ease-out);
+}
+.party-past li a:hover { box-shadow: var(--pt-card-shadow); transform: translateY(-3px); }
+.party-past-snap {
+  position: relative; display: block; padding: 7px 7px 20px; border-radius: 4px; background: var(--pt-polaroid);
+  box-shadow: var(--pt-polaroid-shadow); rotate: calc(var(--pt-tilt) * -1); transition: rotate 300ms var(--ease-out);
+}
+.party-past li:nth-child(even) .party-past-snap { rotate: var(--pt-tilt); }
+.party-past li a:hover .party-past-snap { rotate: 0deg; }
+.party-past-snap::before {
+  content: ""; position: absolute; z-index: 1; top: -9px; left: 50%; width: 64px; height: 18px; translate: -50% 0; rotate: -3deg;
+  background: var(--pt-tape);
+}
+.party-past .party-past-snap img, .party-past .party-past-snap .party-cover-empty { border-radius: 2px; }
+.party-past-look {
+  justify-self: start; margin-top: 4px; padding: 3px 10px; border-radius: 999px;
+  background: var(--pt-chip); color: var(--pt-chip-ink); box-shadow: 0 0 0 1px var(--pt-line);
+  font-family: var(--pt-label-font); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+}
+.party-past li strong {
+  font-family: var(--pt-display); font-weight: var(--pt-display-weight); font-style: var(--pt-display-style);
+  letter-spacing: var(--pt-display-spacing); text-transform: var(--pt-display-case); font-size: 22px; line-height: 1.1;
+}
+.party-past li small { color: var(--pt-ink-2); }
+@media (prefers-reduced-motion: reduce) {
+  .party-past li a, .party-past-snap { transition: none; }
+}
 .party-past img, .party-story img, .party-cover-empty {
   width: 100%; aspect-ratio: 5 / 3; border-radius: 12px; background: var(--paper); filter: var(--dim);
 }
@@ -1623,11 +2004,15 @@ a.live-link:hover .live-link-text { color: var(--ink); }
   .pg-time { font-size: 30px; }
   .pg-tiles, .pg-pick { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .pg-lengths { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .pg-party-lengths { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .party-hero { grid-template-columns: 1fr; }
-  .party-hero h1 { font-size: 26px; }
-  .party-loop li { grid-template-columns: 72px minmax(0, 1fr) auto auto; gap: 10px; }
-  .party-loop img { width: 72px; }
+  .pg-lengths.pg-party-lengths { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .party-hero { grid-template-columns: 1fr; gap: 20px; padding: 16px; }
+  .party-hero h1 { font-size: 30px; }
+  /* Stacked, the card floats over the top edge with room under it before the picture. */
+  .party-hero { padding-top: 40px; }
+  .party-hero-text { padding-top: 0; }
+  .party-status { right: 14px; }
+  .party-sticker { min-height: 68px; font-size: 19px; }
+  .party-loop li { --thumb: 88px; gap: 10px; }
   .party-past ul, .party-story { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .pg-party { grid-template-columns: auto minmax(0, 1fr); margin-bottom: 28px; }
   .pg-party-actions { grid-column: 1 / -1; justify-content: stretch; }
@@ -2550,3 +2935,11 @@ fieldset.plain:disabled > * { opacity: .55; }
   .draw-bar .nav a { padding: 6px 6px; }
   .bar.draw-bar { column-gap: 12px; }
 }
+
+/* A picture that crossfades to the next once it has loaded (FadeImage): no blank frame, no flash. */
+.fade-img { position: relative; display: block; overflow: hidden; border-radius: inherit; }
+.fade-img > img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.pg-frame .fade-img { height: 100%; }
+.fade-img > .fade-img-next { position: absolute; inset: 0; animation: fade-img-in 360ms ease-out forwards; }
+@keyframes fade-img-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .fade-img > .fade-img-next { animation-duration: 1ms; } }
