@@ -121,8 +121,29 @@ export type Hourly = { source: Source; durationS: number };
 /** The time check's turn on air. It has no clip or entry of its own. */
 export const HOURLY = "hourly";
 
+/**
+ * A party: its own loop, played in place of the program from `startedAt` until `until`. Then the program carries
+ * on as if it never stopped. The loop runs from `anchor`, which moves when something is slipped in to play next.
+ */
+export type Party = { id: string; startedAt: number; anchor: number; until: number };
+
+/** The party's turn on air: it plays as a block of its own, with no time check. */
+export const PARTY = "party";
+
 /** The week: weekday blocks, and weekend ones when the weekend is planned on its own (otherwise it plays the weekdays). */
-export type Program = { blocks: Block[]; weekendOwn: boolean; hourly: Hourly | null };
+export type Program = {
+  blocks: Block[];
+  weekendOwn: boolean;
+  hourly: Hourly | null;
+  /** A party going on, with its clips; null when there's none. */
+  party?: (Party & { slides: Slide[] }) | null;
+};
+
+/** While a party is on at `now`: it, until it ends. */
+export function partyAt(program: Program, now = Date.now()) {
+  const p = program.party;
+  return p && p.startedAt <= now && now < p.until ? p : null;
+}
 
 /** A block on a given day, in wall-clock time. */
 export type Airing = { block: Block; startedAt: number; endsAt: number };
@@ -155,6 +176,12 @@ const dayFrom = (now: number, n: number) => {
 
 /** The block on air at `now`: the last one to start, today or on an earlier day, until the next one starts. */
 export function blockAt(program: Program, now = Date.now()): Airing | null {
+  // A party is one block from when it started until it ends, whatever the program has then.
+  const party = partyAt(program, now);
+  if (party) {
+    const block: Block = { id: PARTY, days: "weekdays", start: "", slides: party.slides };
+    return { block, startedAt: party.anchor, endsAt: party.until };
+  }
   let cur: { block: Block; at: number } | undefined;
   for (let n = 0; n >= -7 && !cur; n--) cur = blocksOn(program, dayFrom(now, n)).filter((b) => b.at <= now).at(-1);
   if (!cur) return null;
@@ -171,13 +198,15 @@ export function showing(live: Live, program: Program, now = Date.now()): Showing
   if (!air) return null;
 
   // On the hour the time check cuts in. Whatever was on gives way until it's over, and hands back at the next hour.
+  // Not during a party: it plays only what was picked for it.
+  const hourly = air.block.id === PARTY ? null : program.hourly;
   const hour = new Date(now).setMinutes(0, 0, 0);
-  const checked = program.hourly ? hour + program.hourly.durationS * 1000 : hour;
-  if (program.hourly && now < checked) {
+  const checked = hourly ? hour + hourly.durationS * 1000 : -Infinity;
+  if (hourly && now < checked) {
     const clip = { startedAt: hour, endsAt: checked };
-    return { source: program.hourly.source, slideId: HOURLY, endsAt: checked, clip };
+    return { source: hourly.source, slideId: HOURLY, endsAt: checked, clip };
   }
-  const nextHour = program.hourly ? hour + 60 * 60_000 : Infinity;
+  const nextHour = hourly ? hour + 60 * 60_000 : Infinity;
   const around = (startedAt: number, endsAt: number) => ({ startedAt: Math.max(startedAt, checked), endsAt: Math.min(endsAt, nextHour) });
 
   // `slides` arrive in play order, so keep that order. Skipped clips sit out.

@@ -27,7 +27,13 @@ const hhmm = (t: number) => {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
 
-function InviteCard({ url, code, until, guest }: { url: string; code: string; until: number; guest: boolean }) {
+const JOIN_AS = {
+  member: "Scan this with your phone's camera to join the house.",
+  guest: "Scan this with your phone's camera to join as a guest.",
+  party: "Scan this with your phone's camera to join the party.",
+};
+
+function InviteCard({ url, code, until, role }: { url: string; code: string; until: number; role: keyof typeof JOIN_AS }) {
   const { d, size } = qrPath(url);
   // Whole pixels per module, so every square comes out crisp in 1 bit.
   const px = Math.floor(400 / size) * size;
@@ -39,7 +45,7 @@ function InviteCard({ url, code, until, guest }: { url: string; code: string; un
       <div style={{ display: "flex", flexDirection: "column" }}>
         <span style={{ fontSize: 64, fontWeight: 700, letterSpacing: -2 }}>Come in!</span>
         <span style={{ fontSize: 26, marginTop: 14, lineHeight: 1.3 }}>
-          {guest ? "Scan this with your phone's camera to join as a guest." : "Scan this with your phone's camera to join the house."}
+          {JOIN_AS[role]}
         </span>
         <span style={{ fontSize: 20, marginTop: 34 }}>Or type the code</span>
         <span style={{ fontSize: 52, fontWeight: 600, letterSpacing: 6, marginTop: 4 }}>{code}</span>
@@ -58,7 +64,7 @@ export function inviteFrame(invite: Invite): Promise<Frame> {
   if (cached?.key !== key)
     cached = {
       key,
-      frame: renderFrame(<InviteCard url={invite.url} code={invite.code} until={invite.expiresAt} guest={invite.role === "guest"} />),
+      frame: renderFrame(<InviteCard url={invite.url} code={invite.code} until={invite.expiresAt} role={invite.role === "admin" ? "member" : invite.role} />),
     };
   return cached.frame;
 }

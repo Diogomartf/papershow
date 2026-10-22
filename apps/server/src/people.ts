@@ -23,10 +23,14 @@ export const COLORS = ["#f4a259", "#f7d046", "#8cc084", "#5fb7c9", "#7d8fe0", "#
 /**
  * Admins run the house. Members are the household (stored as "member"; the app calls them Household): they
  * make things and run the show. Guests draw and make apps, but ask before anything goes on the panel, and
- * don't see the show or the log.
+ * don't see the show or the log. Party guests are guests who don't ask: what they add goes straight into the
+ * party's playlist, and nowhere else.
  */
-export type Role = "admin" | "member" | "guest";
-export const ROLES: Role[] = ["admin", "member", "guest"];
+export type Role = "admin" | "member" | "guest" | "party";
+export const ROLES: Role[] = ["admin", "member", "guest", "party"];
+/** Who may join with an invite. */
+export type InviteRole = Exclude<Role, "admin">;
+export const INVITE_ROLES: InviteRole[] = ["member", "guest", "party"];
 /** Knocking: asked to join, waiting for an admin. In: can use Papershow. Out: removed by an admin. */
 export type Status = "knocking" | "in" | "out";
 
@@ -186,6 +190,16 @@ export function updatePerson(id: string, patch: Partial<Profile & { role: Role; 
   if (patch.status === "out") db.prepare("delete from sessions where person_id = ?").run(id);
 }
 
+/**
+ * When a party's over, its guests go too: removed and signed out, as anyone removed is. They stay in People and in
+ * the party's story, and can be let back in for another one.
+ */
+export function seeOutPartyGuests() {
+  const going = listPeople().filter((p) => p.role === "party" && p.status === "in");
+  for (const p of going) updatePerson(p.id, { status: "out" });
+  return going;
+}
+
 /** Only for someone still knocking: they never got in, so nothing else refers to them. */
 export const deletePerson = (id: string) => db.prepare("delete from people where id = ? and status = 'knocking'").run(id);
 
@@ -283,7 +297,7 @@ export const INVITE_PANEL_MS = 2 * 60_000;
 /** No 0/O or 1/I/L: the code may be read off the panel and typed. */
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
-/** `role`: whoever uses it joins as household ("member") or as a guest. `onPanelUntil`: while it's on the panel, when it comes off. */
+/** `role`: whoever uses it joins as household ("member"), a guest or a party guest. `onPanelUntil`: while it's on the panel, when it comes off. */
 export type Invite = { code: string; madeBy: string | null; expiresAt: number; url: string; onPanelUntil: number | null; role: Role };
 
 type InviteRow = { code: string; made_by: string | null; expires_at: number; url: string; on_panel: number; used_by: string | null; role: Role };
@@ -297,7 +311,7 @@ const toInvite = (r: InviteRow, now = Date.now()): Invite => ({
 });
 
 /** A new invite. `origin` is the address the admin is using, so the link works where they are. */
-export function createInvite(madeBy: string, origin: string, role: "member" | "guest", now = Date.now()): Invite {
+export function createInvite(madeBy: string, origin: string, role: InviteRole, now = Date.now()): Invite {
   const code = Array.from(randomBytes(6), (b) => CODE_CHARS[b % CODE_CHARS.length]).join("");
   const url = `${origin.replace(/\/$/, "")}/join/${code}`;
   db.prepare("insert into invites (code, made_by, expires_at, url, role) values (?, ?, ?, ?, ?)").run(code, madeBy, now + INVITE_MS, url, role);
@@ -325,7 +339,7 @@ export function showInvite(code: string, now = Date.now()): Invite | undefined {
 }
 
 /** Change who a working invite lets in as. The code stays the same, so a QR already on a screen keeps working. */
-export function setInviteRole(code: string, role: "member" | "guest", now = Date.now()): Invite | undefined {
+export function setInviteRole(code: string, role: InviteRole, now = Date.now()): Invite | undefined {
   if (!getInvite(code, now)) return;
   db.prepare("update invites set role = ? where code = ?").run(role, code.toUpperCase());
   return getInvite(code, now);
@@ -357,11 +371,13 @@ export type Bucket = "live" | "make" | "photo" | "preview";
 
 /** Goes per hour, by role. Admins have no limit. */
 export const LIMITS: Record<Bucket, Record<Exclude<Role, "admin">, number>> = {
-  live: { member: 12, guest: 4 },
-  make: { member: 40, guest: 10 },
-  // Adding photos comes an album at a time, so it has its own, bigger allowance.
-  photo: { member: 300, guest: 60 },
-  preview: { member: 2000, guest: 600 },
+  live: { member: 12, guest: 4, party: 4 },
+  // Party guests add to the party as they go: more than a guest's asks, as many as a guest makes.
+  make: { member: 40, guest: 10, party: 20 },
+  // Adding photos comes an album at a time, so it has its own, bigger allowance. A party guest spends two a
+  // photo: adding it, and putting it in the party.
+  photo: { member: 300, guest: 60, party: 120 },
+  preview: { member: 2000, guest: 600, party: 600 },
 };
 
 const HOUR = 3_600_000;

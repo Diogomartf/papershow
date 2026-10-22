@@ -1,7 +1,7 @@
 // Your face in the top-right corner, and the menu behind it: who you are, everyone else in the house to
 // switch to (a shared tablet changes hands), the house, the log and signing out. The household also sees who's knocking.
 import { useEffect, useRef, useState } from "react";
-import { ROLE_NAMES, signOut, tint, useMe } from "./house";
+import { ROLE_NAMES, signOut, tint, useMe, visiting } from "./house";
 import { useLiveState } from "./live";
 import { navigate } from "./Nav";
 import { cue, setSound, setSoundVolume, useSound, useSoundVolume } from "./sound";
@@ -17,8 +17,8 @@ export function MeMenu() {
   const self = state?.me ?? me;
   const everyone = state?.people ?? [];
   // Knocks and guests' asks wait for anyone in the household; a guest's own ask shows on the Dashboard instead.
-  const knocking = self.role === "guest" ? [] : everyone.filter((p) => p.status === "knocking");
-  const asks = self.role === "guest" ? [] : (state?.asks ?? []);
+  const knocking = visiting(self) ? [] : everyone.filter((p) => p.status === "knocking");
+  const asks = visiting(self) ? [] : (state?.asks ?? []);
   const waiting = knocking.length + asks.length;
   const others = everyone.filter((p) => p.status === "in" && p.id !== self.id);
 
@@ -106,7 +106,7 @@ export function MeMenu() {
             </label>
           )}
           <button role="menuitem" className="me-item" onClick={() => go("/people")}>The house</button>
-          {self.role !== "guest" && <button role="menuitem" className="me-item" onClick={() => go("/log")}>Log</button>}
+          {!visiting(self) && <button role="menuitem" className="me-item" onClick={() => go("/log")}>Log</button>}
           <button
             role="menuitem"
             className="me-item"

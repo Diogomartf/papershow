@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import * as api from "./slides";
 import type { State } from "./slides";
+import { visiting } from "./house";
 import { cue, ON_AIR } from "./sound";
 
 // One long-poll per tab, shared by every component that wants live state. Browsers allow only
@@ -18,7 +19,7 @@ function hear(was: State | null, now: State | null) {
   const [a, b] = [pin(was), pin(now)];
   // Every Show now in the app comes back through here, so this is the one place it sounds.
   if (b?.by === now.me.id && (a?.source.kind !== b.source.kind || a.source.id !== b.source.id || a.until !== b.until)) cue(ON_AIR);
-  if (now.me.role === "guest") return;
+  if (visiting(now.me)) return;
   const waiting = (s: State) => [...s.people.filter((p) => p.status === "knocking").map((p) => p.id), ...s.asks.map((x) => x.id)];
   const before = new Set(waiting(was));
   if (waiting(now).some((id) => !before.has(id))) cue("attention");

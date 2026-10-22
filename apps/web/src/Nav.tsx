@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
-import { useMe } from "./house";
+import { useMe, visiting } from "./house";
+import { useLiveState } from "./live";
 
 /** Client-side navigation: swap the route without a reload. */
 export function navigate(to: string) {
@@ -22,16 +23,29 @@ const SECTIONS = [
   { id: "draw", href: "/draw", label: "Draw" },
 ] as const;
 
-export type Section = (typeof SECTIONS)[number]["id"] | "people" | "log";
+export type Section = (typeof SECTIONS)[number]["id"] | "party" | "people" | "log";
 
 export function Nav({ current }: { current: Section }) {
-  // Guests don't run the show, so they don't get its page.
-  const guest = useMe().me.role === "guest";
+  // Guests don't run the show, so they don't get its page. A party guest only gets the party.
+  const { me } = useMe();
+  const guest = visiting(me);
+  const party = !!useLiveState().state?.party;
+  const sections: { id: Section; href: string; label: string }[] =
+    me.role === "party"
+      ? [{ id: "party", href: "/party", label: "🎉 Party" }]
+      : SECTIONS.filter((s) => !(guest && s.id === "show")).flatMap((s): { id: Section; href: string; label: string }[] =>
+          // While a party's on, it sits next to the Dashboard.
+          s.id === "dashboard" && party ? [s, { id: "party", href: "/party", label: "🎉 Party" }] : [s],
+        );
+  const home = me.role === "party" ? "/party" : "/";
   return (
     <nav className="nav">
-      <img className="mark" src="/icon-nav.png" alt="" />
-      <span className="wordmark" role="img" aria-label="Papershow" />
-      {SECTIONS.filter((s) => !(guest && s.id === "show")).map((s) => (
+      {/* The logo goes home: the Dashboard, or the party for a party guest, whose home it is. */}
+      <a className="nav-home" href={home} onClick={go(home)} aria-label="Papershow, home">
+        <img className="mark" src="/icon-nav.png" alt="" />
+        <span className="wordmark" aria-hidden />
+      </a>
+      {sections.map((s) => (
         <a key={s.id} href={s.href} aria-current={current === s.id ? "page" : undefined} onClick={go(s.href)}>
           {s.label}
         </a>

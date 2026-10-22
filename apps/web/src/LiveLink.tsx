@@ -9,10 +9,10 @@ export function LiveLink() {
   const shown = etag && failed !== etag;
   return (
     <a className="ghost live-link" href="/live" target="_blank" rel="noreferrer">
+      <span className="live-link-text">Open /live ↗</span>
       <span className="live-thumb" data-on={!!shown}>
         {shown && <img src={`/live.png?e=${encodeURIComponent(etag)}`} alt="" onError={() => setFailed(etag)} />}
       </span>
-      <span className="live-link-text">Open /live ↗</span>
     </a>
   );
 }

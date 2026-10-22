@@ -15,7 +15,7 @@ import * as store from "./db.ts";
 import { inviteFrame, qrSvg } from "./invite.tsx";
 import * as people from "./people.ts";
 import { panelFiles } from "./render.ts";
-import { awayUntil, blockAt, justAired, sequence, showing, sleepUntil, upcoming, type Days, type Live, type Showing, type Source } from "./schedule.ts";
+import { awayUntil, blockAt, justAired, sameSource, sequence, showing, sleepUntil, upcoming, type Days, type Live, type Showing, type Source } from "./schedule.ts";
 import { sleepFrame } from "./sleep.tsx";
 
 // Secrets such as GROQ_API_KEY and MASSIVE_API_KEY live in .env at the repo root (not committed).
@@ -115,8 +115,9 @@ async function liveNow(now = Date.now()): Promise<LiveNow | null> {
     };
   }
 
-  // Then night: the playlist and any pin wait until morning.
-  const until = sleepUntil(sleep, now);
+  // Then night: the playlist and any pin wait until morning. A party keeps the panel up until it's over.
+  wrapUp(now);
+  const until = store.currentParty(now) ? null : sleepUntil(sleep, now);
   if (until) {
     const frame = await sleepFrame(sleep, until);
     return {
@@ -135,6 +136,9 @@ async function liveNow(now = Date.now()): Promise<LiveNow | null> {
 
   const s = showing(store.getLive(), store.program(), now);
   if (!s) return null;
+  // A turn of the party's own (not a Show now over it) goes in its story as it airs.
+  const party = s.slideId && s.clip ? store.currentParty(now) : undefined;
+  if (party && s.clip) store.recordPlay(party.id, s.slideId!, s.source, s.clip.startedAt);
   const f = await sourceFrame(s.source, now).catch((err) => {
     console.error("render failed", s.source, err);
     return null;
@@ -249,7 +253,7 @@ app.use("/api/*", async (c, next) => {
 const tooBig = (c: Context) => c.json({ error: "That's too big to send" }, 413);
 const drawingBody = bodyLimit({ maxSize: 40 * 1024 * 1024, onError: tooBig });
 const smallBody = bodyLimit({ maxSize: 1024 * 1024, onError: tooBig });
-app.use("/api/*", (c, next) => (c.req.method === "PUT" && /^\/api\/images\/[\w-]+$/.test(c.req.path) ? drawingBody : smallBody)(c, next));
+app.use("/api/*", (c, next) => (c.req.method === "PUT" && /^\/api\/(party\/)?images\/[\w-]+$/.test(c.req.path) ? drawingBody : smallBody)(c, next));
 
 /**
  * Who's asking, for the limits on the routes that need no one signed in. Tailscale serve and the dev proxy reach
@@ -266,6 +270,8 @@ app.use("/api/*", async (c, next) => {
   const me = people.personFor(getCookie(c, COOKIE));
   if (!me) return c.json({ error: "Sign in first" }, 401);
   if (me.status !== "in") return c.json({ error: "Still waiting to be let in" }, 403);
+  // A party that ran out while no one was looking ends now, and its guests with it.
+  if (me.role === "party" && (wrapUp(), people.getPerson(me.id)?.status !== "in")) return c.json({ error: "The party's over" }, 401);
   c.set("me", me);
   return next();
 });
@@ -283,16 +289,26 @@ const GUEST_MAY: [string, RegExp][] = [
   ["DELETE", /^\/api\/asks\/[\w-]+$/],
 ];
 
+// Party guests are at the party and nowhere else: they draw and add photos into it, and take back what's theirs.
+const PARTY_MAY: [string, RegExp][] = [
+  ["PATCH", /^\/api\/me$/],
+  ["PUT", /^\/api\/party\/images\/[\w-]+$/],
+  ["DELETE", /^\/api\/party\/clips\/[\w-]+$/],
+  ["POST", /^\/api\/party\/clips\/[\w-]+\/next$/],
+];
+
 app.use("/api/*", async (c, next) => {
-  if (c.get("me")?.role !== "guest") return next();
+  const role = c.get("me")?.role;
+  if (role !== "guest" && role !== "party") return next();
   const { method, path } = c.req;
   const reading = method === "GET" && path !== "/api/log";
-  if (reading || GUEST_MAY.some(([m, re]) => m === method && re.test(path))) return next();
-  return c.json({ error: "Guests can't change this. Ask someone in the house?" }, 403);
+  if (reading || (role === "guest" ? GUEST_MAY : PARTY_MAY).some(([m, re]) => m === method && re.test(path))) return next();
+  return c.json({ error: role === "guest" ? "Guests can't change this. Ask someone in the house?" : "At the party, you can add to the party. The rest is for the house" }, 403);
 });
 
 const isAdmin = (c: C) => c.get("me").role === "admin";
-const isGuest = (c: C) => c.get("me").role === "guest";
+/** Guests and party guests: they see what the household sees, less the log and other people's asks. */
+const isGuest = (c: C) => ["guest", "party"].includes(c.get("me").role);
 /** Anyone can use anything; only its maker or an admin changes or deletes it. */
 const mayChange = (c: C, madeBy: string | null | undefined) => isAdmin(c) || !madeBy || madeBy === c.get("me").id;
 const notYours = (c: C) => c.json({ error: "Only its maker or an admin can change this" }, 403);
@@ -311,7 +327,8 @@ function tooMany(c: C, bucket: people.Bucket) {
  * or the show, the household said yes to how it looked before: it comes off, and they ask again.
  */
 function guestChanged(c: C, src: Source) {
-  if (!isGuest(c)) return;
+  // A party guest's things went in without a yes, so there's none to take back.
+  if (c.get("me").role !== "guest") return;
   asks.dropAsksFor(src);
   // Its places in playlists and the show were said yes to as well.
   store.unschedule(src);
@@ -449,14 +466,15 @@ app.patch("/api/people/:id", async (c) => {
   const answeringDoor = p.status === "knocking" && status === "in" && role !== "admin";
   if (!isAdmin(c) && !answeringDoor) return adminsOnly(c);
   if (status && !["in", "out"].includes(status)) return c.json({ error: "Let them in or out" }, 400);
-  if (role && !people.ROLES.includes(role)) return c.json({ error: "Admin, household or guest" }, 400);
+  if (role && !people.ROLES.includes(role)) return c.json({ error: "Admin, household, guest or party" }, 400);
   const losesAdmin = p.role === "admin" && (status === "out" || (!!role && role !== "admin"));
   if (losesAdmin && !people.otherAdmins(p.id)) return c.json({ error: "Someone has to stay an admin" }, 400);
   people.updatePerson(p.id, { status, role });
   const who = { person: namedPerson(p) };
   // Letting someone in as a guest is one thing done, not two.
   const lettingIn = p.status === "knocking" && status === "in";
-  if (status && status !== p.status) note(c, status === "out" ? "removed" : lettingIn ? "let-in" : "let-back-in", lettingIn && role === "guest" ? { ...who, guest: true } : who);
+  const as = lettingIn && role === "guest" ? { guest: true } : lettingIn && role === "party" ? { party: true } : {};
+  if (status && status !== p.status) note(c, status === "out" ? "removed" : lettingIn ? "let-in" : "let-back-in", { ...who, ...as });
   if (role && role !== p.role && !lettingIn) note(c, `made-${role}`, who);
   changed();
   return c.json(await state(c));
@@ -481,6 +499,7 @@ app.delete("/api/people/:id/everything", async (c) => {
     forgetApp(a.id);
   }
   for (const pl of playlists) store.deletePlaylist(pl.id);
+  store.deletePartyImagesBy(p.id);
   // Whatever they put on the panel comes off too.
   const live = store.getLive();
   if (live.mode === "pin" && live.by === p.id) store.setLive({ mode: "rotate" });
@@ -506,9 +525,9 @@ app.post("/api/invites", async (c) => {
   if (!isAdmin(c)) return adminsOnly(c);
   const { origin, role } = await c.req.json<{ origin?: string; role?: string }>();
   if (!origin || !/^https?:\/\/[^/\s]+$/.test(origin)) return c.json({ error: "Which address should the invite open?" }, 400);
-  const guest = role === "guest";
-  const invite = people.createInvite(c.get("me").id, origin, guest ? "guest" : "member");
-  note(c, "invited", { guest });
+  const as = people.INVITE_ROLES.find((r) => r === role) ?? "member";
+  const invite = people.createInvite(c.get("me").id, origin, as);
+  note(c, "invited", { guest: as === "guest", party: as === "party" });
   return c.json(invite);
 });
 
@@ -516,8 +535,9 @@ app.post("/api/invites", async (c) => {
 app.patch("/api/invites/:code", async (c) => {
   if (!isAdmin(c)) return adminsOnly(c);
   const { role } = await c.req.json<{ role?: string }>();
-  if (role !== "member" && role !== "guest") return c.json({ error: "Household or guest" }, 400);
-  const invite = people.setInviteRole(c.req.param("code"), role);
+  const as = people.INVITE_ROLES.find((r) => r === role);
+  if (!as) return c.json({ error: "Household, guest or party" }, 400);
+  const invite = people.setInviteRole(c.req.param("code"), as);
   if (!invite) return c.json({ error: "This invite has run out" }, 410);
   if (invite.onPanelUntil) changed();
   return c.json(invite);
@@ -528,7 +548,7 @@ app.put("/api/invites/:code/panel", async (c) => {
   if (!isAdmin(c)) return adminsOnly(c);
   const invite = people.showInvite(c.req.param("code"));
   if (!invite) return c.json({ error: "This invite has run out" }, 410);
-  note(c, "invite-on-panel", { guest: invite.role === "guest" });
+  note(c, "invite-on-panel", { guest: invite.role === "guest", party: invite.role === "party" });
   changed();
   // When its time is up, the panel goes back to the show by itself; open pages hear it then.
   setTimeout(changed, invite.onPanelUntil! - Date.now() + 50).unref();
@@ -767,6 +787,8 @@ async function state(c: C) {
       invite: live.invite,
     },
     sleep: store.getSleep(),
+    /** A party going on: one playlist in place of the program, until it ends. */
+    party: partyNow(now),
     slides,
     playlists: store.listPlaylists(),
     show: store.listShow(),
@@ -892,7 +914,8 @@ app.delete("/api/playlists/:id", async (c) => {
 
 /** The block on air now, for things added without saying where. There's always one to add to. */
 function blockNow() {
-  const air = blockAt(store.program());
+  // Not the party's: things added go in the week's program, which carries on after it.
+  const air = blockAt({ ...store.program(), party: null });
   return air?.block.id ?? store.listBlocks()[0]?.id ?? store.addBlock("weekdays", "06:00")!.id;
 }
 
@@ -1013,6 +1036,373 @@ app.put("/api/live", async (c) => {
   }
   changed();
   return c.json(await state(c));
+});
+
+// ── A party: its own loop in place of the program, then back to it ─────────
+// What's made at a party stays with it: out of the house's library, and kept as the party's story once it's over.
+
+/** How long something added at the party stays on each time round: short, so everyone's comes round soon. */
+const PARTY_CLIP_S = 2 * 60;
+
+/**
+ * The morning after `from`: when the panel wakes from the night, or 8:00. A party ends by then at the latest, so
+ * it belongs to one evening. One that starts just before the morning (3:00) still gets until then.
+ */
+function morningAfter(from: number) {
+  const sleep = store.getSleep();
+  const [h, m] = (sleep.enabled ? sleep.end : "08:00").split(":").map(Number);
+  const d = new Date(from);
+  d.setHours(h, m, 0, 0);
+  if (d.getTime() <= from) d.setDate(d.getDate() + 1);
+  return d.getTime();
+}
+
+/** The party going on, for the app: its loop with names, who added what, and when it ends. */
+function partyNow(now = Date.now()) {
+  const p = store.currentParty(now);
+  if (!p) return null;
+  const clips = store.partyClips(p.id);
+  return {
+    ...p,
+    clips: clips.map((x) => ({ ...x, name: named(x.source).name, own: store.getImageMeta(x.source.id)?.kind === "party" })),
+    played: playedAt(p.id, now),
+  };
+}
+
+/**
+ * What's been on at a party, newest first: each turn with what it showed, who added it, and when. Up to `now`, the
+ * turn on air included; its name and maker come from the clip, or from what it showed if it's since been taken out.
+ */
+function playedAt(partyId: string, now = Date.now()) {
+  const clips = new Map(store.partyClips(partyId).map((x) => [x.id, x]));
+  return store
+    .partyPlays(partyId)
+    .filter((x) => x.at <= now)
+    .map((x) => ({ ...x, name: named(x.source).name, addedBy: clips.get(x.clipId)?.addedBy ?? null, gone: !exists(x.source) }))
+    .reverse();
+}
+
+/** What a party came to: how many things, from how many people, and a picture to remember it by. */
+function partySummary(p: store.PartyRow) {
+  const clips = store.partyClips(p.id);
+  const added = clips.filter((x) => x.addedBy);
+  const made = store.partyImages(p.id);
+  return {
+    ...p,
+    things: added.length,
+    made: made.length,
+    people: [...new Set(added.map((x) => x.addedBy!))],
+    // The first thing made there; else the first thing that played.
+    cover: made.at(-1)?.id ?? (clips[0]?.source.kind === "image" ? clips[0].source.id : null),
+  };
+}
+
+/** A party's over: what played goes in its story to the end, it goes in the log, and its guests go home. */
+function noteWrap(p: store.PartyRow) {
+  catchUp(p, p.endedAt ?? p.endsAt);
+  const sum = partySummary(store.getPartyRow(p.id)!);
+  people.note(p.startedBy, "party-wrapped", {
+    item: { kind: "party", id: p.id, name: "the party", cover: sum.cover },
+    things: sum.things,
+    people: sum.people.length,
+    from: sum.startedAt,
+    to: sum.endedAt ?? sum.endsAt,
+  });
+  const out = people.seeOutPartyGuests();
+  if (out.length) people.note(p.startedBy, "party-guests-left", { count: out.length });
+}
+
+/**
+ * Note each turn of the party's loop that went on air since the last one noted, up to `upTo`. /live notes a turn
+ * only while something is looking, so this fills the gaps: before the loop changes (it plays the same way until
+ * then) and when the party ends.
+ */
+function catchUp(p: store.PartyRow, upTo: number) {
+  const program = { ...store.program(), party: store.partyLoop(p) };
+  const end = Math.min(upTo, p.endedAt ?? p.endsAt);
+  for (let t = store.partyPlays(p.id).at(-1)?.at ?? p.startedAt; t < end; ) {
+    const s = showing({ mode: "rotate" }, program, t);
+    if (!s?.slideId || !s.clip) break;
+    store.recordPlay(p.id, s.slideId, s.source, s.clip.startedAt);
+    t = s.clip.endsAt;
+  }
+}
+
+/** After the loop changes, the turn on air now is the one its story picks up from. */
+function noteOnAir(partyId: string, now: number) {
+  const { s } = partyOnAir(now);
+  if (s?.slideId && s.clip) store.recordPlay(partyId, s.slideId, s.source, s.clip.startedAt);
+}
+
+/** Parties whose time ran out end here, the first time anyone looks: the panel or a page. */
+function wrapUp(now = Date.now()) {
+  for (const p of store.unwrappedParties(now)) {
+    store.endPartyAt(p.id, p.endsAt);
+    noteWrap(p);
+  }
+}
+
+/** Open pages hear the party end when it does. */
+const wakeAtEnd = (endsAt: number) => setTimeout(changed, Math.max(0, endsAt - Date.now()) + 50).unref();
+
+/**
+ * After the party's loop changes, keep what's on playing where it is: the loop's anchor moves so the clip on air
+ * sits at the same point. When that clip is gone, the one now in its place starts.
+ */
+function keepPlace(partyId: string, before: ReturnType<typeof showing>, beforeIndex: number, now: number) {
+  const slides = store.program().party?.slides ?? [];
+  if (!slides.length) return store.setPartyAnchor(partyId, now);
+  const i = slides.findIndex((x) => x.id === before?.slideId);
+  const at = i >= 0 ? i : Math.max(0, beforeIndex) % slides.length;
+  const into = i >= 0 && before?.clip ? now - before.clip.startedAt : 0;
+  const offset = slides.slice(0, at).reduce((sum, x) => sum + x.durationS * 1000, 0) + into;
+  store.setPartyAnchor(partyId, now - offset);
+}
+
+/** The clip on air in the party's loop, and its place. */
+function partyOnAir(now: number) {
+  const s = showing({ mode: "rotate" }, store.program(), now);
+  const slides = store.program().party?.slides ?? [];
+  return { s, index: slides.findIndex((x) => x.id === s?.slideId) };
+}
+
+/**
+ * Where something goes to play next: after what's on, and after anything else queued while it's been on. Counted
+ * without `leaving`, a clip that's moving there.
+ */
+function nextSlot(partyId: string, s: ReturnType<typeof showing>, now: number, leaving?: string) {
+  const clips = store.partyClips(partyId).filter((x) => x.id !== leaving);
+  const cur = clips.findIndex((x) => x.id === s?.slideId);
+  let at = cur < 0 ? clips.length : cur + 1;
+  const since = s?.clip?.startedAt ?? now;
+  // What the party started with was queued as it began, with the first turn: only what's been queued since counts.
+  while (cur >= 0 && at < clips.length && clips[at].queuedAt > since) at++;
+  return at;
+}
+
+/**
+ * Put `source` at the back of the party's queue: after everything coming up, just before what's on comes round
+ * again. Again is what jumps the queue, not adding.
+ */
+function addToParty(party: store.PartyRow, source: Source, by: string, now: number) {
+  catchUp(party, now);
+  const { s } = partyOnAir(now);
+  const clips = store.partyClips(party.id);
+  const cur = clips.findIndex((x) => x.id === s?.slideId);
+  store.addPartyClip(party.id, cur < 0 ? clips.length : cur, source, PARTY_CLIP_S, by, now);
+  keepPlace(party.id, s, -1, now);
+  noteOnAir(party.id, now);
+}
+
+/**
+ * Start a party (`{ playlistId, until }`: the playlist it starts from, or null for none, and when it ends), or,
+ * while one is on, change when it ends. It ends by the next morning at the latest.
+ */
+app.put("/api/party", async (c) => {
+  const { playlistId, until, theme } = await c.req.json<{ playlistId?: string | null; until?: number; theme?: string }>();
+  if (theme !== undefined && !store.isPartyTheme(theme)) return c.json({ error: `A party looks ${store.PARTY_THEMES.join(", ")}` }, 400);
+  const now = Date.now();
+  const cur = store.currentParty(now);
+  // While one's on, its look changes on its own, without touching when it ends.
+  if (cur && theme && until === undefined) {
+    store.setPartyTheme(cur.id, theme);
+    note(c, "changed-party-look", { theme });
+    changed();
+    return c.json(await state(c));
+  }
+  const latest = morningAfter(cur?.startedAt ?? now);
+  const end = Math.min(Number(until), latest);
+  if (!(end > now)) return c.json({ error: "that end time has already passed" }, 400);
+  if (cur) {
+    store.setPartyEnd(cur.id, end);
+    if (theme) store.setPartyTheme(cur.id, theme);
+    note(c, "changed-party", { until: end });
+  } else {
+    const playlist = playlistId ? store.getPlaylist(playlistId) : undefined;
+    if (playlistId && !playlist) return c.json({ error: "no such playlist" }, 404);
+    const wait = tooMany(c, "live");
+    if (wait) return wait;
+    store.startParty(playlist?.id ?? null, now, end, c.get("me").id, theme && store.isPartyTheme(theme) ? theme : "fun");
+    // A Show now would hide the party's start; the party is what was asked for.
+    if (store.getLive().mode === "pin") store.setLive({ mode: "rotate" });
+    note(c, "started-party", { ...(playlist && { playlist: namedPlaylist(playlist.id) }), until: end });
+  }
+  wakeAtEnd(end);
+  changed();
+  return c.json(await state(c));
+});
+
+/** End the party now: it's wrapped up into the log, and the program picks up where it would be. */
+app.delete("/api/party", async (c) => {
+  const party = store.currentParty();
+  if (party) {
+    store.endPartyAt(party.id, Date.now());
+    note(c, "ended-party");
+    noteWrap(store.getPartyRow(party.id)!);
+  }
+  changed();
+  return c.json(await state(c));
+});
+
+/** The household adds something of the house's (a drawing, photo or app) to the party, at the back of the queue. */
+app.post("/api/party/clips", async (c) => {
+  const { source } = await c.req.json<{ source?: Source }>();
+  if (!source || !["image", "app"].includes(source.kind) || !exists(source)) return c.json({ error: "no such image or app" }, 404);
+  const now = Date.now();
+  const party = store.currentParty(now);
+  if (!party) return c.json({ error: "There's no party on right now" }, 409);
+  const wait = tooMany(c, "make");
+  if (wait) return wait;
+  const src: Source = { kind: source.kind, id: source.id };
+  addToParty(party, src, c.get("me").id, now);
+  note(c, "added-to-party", { item: named(src) });
+  changed();
+  return c.json(await state(c));
+});
+
+/**
+ * A drawing or photo made at the party (multipart, as `PUT /api/images/:id`): saved with the party, not in the
+ * house's library, and, the first time, slipped into the loop to play next. Saving it again redraws it there.
+ */
+app.put("/api/party/images/:id", async (c) => {
+  const now = Date.now();
+  const party = store.currentParty(now);
+  if (!party) return c.json({ error: "There's no party on right now" }, 409);
+  const form = await c.req.formData();
+  const scene = JSON.parse(String(form.get("scene"))) as Scene;
+  if (scene.id !== c.req.param("id")) return c.json({ error: "id mismatch" }, 400);
+  const was = store.getImageMeta(scene.id);
+  if (was && was.kind !== "party") return c.json({ error: "That one's the house's, not the party's" }, 400);
+  if (was && !mayChange(c, was.madeBy)) return notYours(c);
+  const photo = form.get("photo") === "1";
+  if (!was) {
+    // Photos come an album at a time, so they spend the photo allowance.
+    const wait = tooMany(c, photo ? "photo" : "make");
+    if (wait) return wait;
+  }
+  const bytes = async (k: string) => new Uint8Array(await (form.get(k) as File).arrayBuffer());
+  const panel = panelFiles(await bytes("mono"));
+  if (!panel) return c.json({ error: "That didn't come through. Try again?" }, 400);
+  store.putImage(scene, { png: await bytes("png"), ...panel }, c.get("me").id, "party");
+  const src: Source = { kind: "image", id: scene.id };
+  const inLoop = store.partyClips(party.id).some((x) => sameSource(x.source, src));
+  if (!inLoop) {
+    addToParty(party, src, c.get("me").id, now);
+    note(c, "added-to-party", { item: named(src), made: photo ? "photo" : "drawing" });
+  }
+  changed();
+  return c.json(await state(c));
+});
+
+/** Play something from the party again, next: anyone at the party can. It moves up, so it doesn't play twice a round. */
+app.post("/api/party/clips/:id/next", async (c) => {
+  const clip = store.getPartyClip(c.req.param("id"));
+  const now = Date.now();
+  const party = store.currentParty(now);
+  if (!clip || party?.id !== clip.partyId) return c.json({ error: "That's not in the party any more" }, 404);
+  const { s } = partyOnAir(now);
+  if (s?.slideId === clip.id) return c.json(await state(c));
+  const wait = tooMany(c, "make");
+  if (wait) return wait;
+  catchUp(party, now);
+  store.movePartyClip(party.id, clip.id, nextSlot(party.id, s, now, clip.id), now);
+  keepPlace(party.id, s, -1, now);
+  noteOnAir(party.id, now);
+  note(c, "replayed-at-party", { item: named(clip.source) });
+  changed();
+  return c.json(await state(c));
+});
+
+/**
+ * The household sorts what's coming up (`{ ids }`: the party's clips after the one on air, in the order they're to
+ * play). What's on stays on; anything not in `ids` (it may have been added meanwhile) comes after, as it was.
+ */
+app.put("/api/party/order", async (c) => {
+  const { ids } = await c.req.json<{ ids?: string[] }>();
+  if (!Array.isArray(ids)) return c.json({ error: "ids, in order" }, 400);
+  const now = Date.now();
+  const party = store.currentParty(now);
+  if (!party) return c.json({ error: "There's no party on right now" }, 409);
+  catchUp(party, now);
+  const { s } = partyOnAir(now);
+  const clips = store.partyClips(party.id);
+  const cur = clips.findIndex((x) => x.id === s?.slideId);
+  // The loop as it plays from what's on: then the sorted ones, then the rest in their places.
+  const fromNow = [...clips.slice(cur + 1), ...clips.slice(0, Math.max(0, cur))].map((x) => x.id);
+  const sorted = ids.filter((id, i) => fromNow.includes(id) && ids.indexOf(id) === i);
+  store.orderPartyClips([...(cur >= 0 ? [clips[cur].id] : []), ...sorted, ...fromNow.filter((id) => !sorted.includes(id))]);
+  keepPlace(party.id, s, -1, now);
+  noteOnAir(party.id, now);
+  note(c, "reordered-party");
+  changed();
+  return c.json(await state(c));
+});
+
+/**
+ * The household puts something from the party on the panel now: it takes the place of what's on, which plays
+ * right after it, and the loop carries on from there.
+ */
+app.post("/api/party/clips/:id/now", async (c) => {
+  const clip = store.getPartyClip(c.req.param("id"));
+  const now = Date.now();
+  const party = store.currentParty(now);
+  if (!clip || party?.id !== clip.partyId) return c.json({ error: "That's not in the party any more" }, 404);
+  const { s } = partyOnAir(now);
+  if (s?.slideId === clip.id) return c.json(await state(c));
+  const wait = tooMany(c, "live");
+  if (wait) return wait;
+  catchUp(party, now);
+  const rest = store.partyClips(party.id).filter((x) => x.id !== clip.id);
+  const cur = rest.findIndex((x) => x.id === s?.slideId);
+  store.movePartyClip(party.id, clip.id, cur < 0 ? rest.length : cur, now);
+  // It starts now, from its beginning.
+  keepPlace(party.id, s && { ...s, slideId: clip.id, source: clip.source, clip: { startedAt: now, endsAt: now } }, -1, now);
+  noteOnAir(party.id, now);
+  note(c, "showed-now-at-party", { item: named(clip.source) });
+  changed();
+  return c.json(await state(c));
+});
+
+/** Take something out of the party: whoever added it, or the household. What was made there goes with it. */
+app.delete("/api/party/clips/:id", async (c) => {
+  const clip = store.getPartyClip(c.req.param("id"));
+  if (!clip) return c.body(null, 204);
+  const me = c.get("me");
+  if (me.role === "party" && clip.addedBy !== me.id) return c.json({ error: "Only what you added" }, 403);
+  const now = Date.now();
+  const party = store.currentParty(now);
+  // Once it's over, its story stays as it was.
+  if (party?.id !== clip.partyId) return c.json({ error: "That party's over" }, 409);
+  catchUp(party, now);
+  const { s, index } = partyOnAir(now);
+  store.removePartyClip(clip.id);
+  if (clip.source.kind === "image" && store.getImageMeta(clip.source.id)?.kind === "party") store.deleteImage(clip.source.id);
+  keepPlace(party.id, s, index, now);
+  noteOnAir(party.id, now);
+  changed();
+  return c.json(await state(c));
+});
+
+/** Parties that are over, newest first: when, how many things from how many people, and a cover. */
+app.get("/api/parties", (c) => {
+  wrapUp();
+  return c.json(store.pastParties().map(partySummary));
+});
+
+/** One party's story: everything that played, in order, who added what and when. */
+app.get("/api/parties/:id", (c) => {
+  wrapUp();
+  const p = store.getPartyRow(c.req.param("id"));
+  if (!p) return c.notFound();
+  const clips = store.partyClips(p.id).map((x) => ({
+    ...x,
+    name: named(x.source).name,
+    own: store.getImageMeta(x.source.id)?.kind === "party",
+    gone: !exists(x.source),
+  }));
+  // How it went, in the order it played.
+  const played = playedAt(p.id).reverse();
+  return c.json({ ...partySummary(p), playlist: p.playlistId ? (store.getPlaylist(p.playlistId)?.name ?? null) : null, clips, played });
 });
 
 // ── Asks: a guest's Show now, waiting for the household ─────────────────────

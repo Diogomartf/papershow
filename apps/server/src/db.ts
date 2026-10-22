@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Scene } from "@papershow/scene";
-import { awayUntil, DEFAULT_SLEEP, sameSource, type Days, type Hourly, type Live, type Program, type Sleep, type Slide, type Source } from "./schedule.ts";
+import { awayUntil, DEFAULT_SLEEP, sameSource, type Days, type Hourly, type Live, type Party, type Program, type Sleep, type Slide, type Source } from "./schedule.ts";
 
 const path = process.env.DB ?? new URL("../data/imagegen.db", import.meta.url).pathname;
 mkdirSync(dirname(path), { recursive: true });
@@ -157,15 +157,16 @@ export function claimAll(personId: string) {
   for (const table of ["images", "apps", "playlists"]) db.prepare(`update ${table} set made_by = ? where made_by is null`).run(personId);
 }
 
-/** What a saved image is: a drawing, or a photo in the Photos library. */
-export type ImageType = "drawing" | "photo";
+/** What a saved image is: a drawing, a photo in the Photos library, or a drawing or photo made at a party, which stays with it. */
+export type ImageType = "drawing" | "photo" | "party";
 export type ImageMeta = { id: string; name: string; updatedAt: number; madeBy: string | null; kind: ImageType; takenAt: number | null };
 export type ImageKind = "png" | "mono" | "bin";
 
 const META = "select id, name, updated_at as updatedAt, made_by as madeBy, kind, taken_at as takenAt from images";
 
+/** The house's drawings and photos. What was made at a party isn't among them: it's in that party's story. */
 export function listImages(): ImageMeta[] {
-  return db.prepare(`${META} order by updated_at desc`).all() as ImageMeta[];
+  return db.prepare(`${META} where kind != 'party' order by updated_at desc`).all() as ImageMeta[];
 }
 
 export function getImageMeta(id: string): ImageMeta | undefined {
@@ -306,7 +307,7 @@ export function program(): Program {
   const clips = listSlides();
   const show = listShow();
   const blocks = listBlocks().map((b) => ({ ...b, slides: blockSlides(show.filter((e) => e.blockId === b.id), clips) }));
-  return { blocks, weekendOwn: weekendOwn(), hourly: hourly() };
+  return { blocks, weekendOwn: weekendOwn(), hourly: hourly(), party: partyProgram() };
 }
 
 /**
@@ -669,4 +670,241 @@ export function setSleep(patch: Partial<Sleep>) {
     JSON.stringify(next),
   );
   return next;
+}
+
+// ── Parties ────────────────────────────────────────────────────────────────
+// A party plays its own loop in place of the program: a copy of the playlist it started from, and whatever people
+// add while it's on. Drawings and photos made there stay with it (images of kind 'party'), out of the house's
+// library, and the party keeps them as its story once it's over.
+
+db.exec(`
+  create table if not exists parties (
+    id          text primary key,
+    playlist_id text,
+    started_at  integer not null,
+    anchor      integer not null,
+    ends_at     integer not null,
+    ended_at    integer,
+    started_by  text
+  );
+  create table if not exists party_clips (
+    id          text primary key,
+    party_id    text not null references parties(id) on delete cascade,
+    position    integer not null,
+    image_id    text,
+    app_id      text,
+    duration_s  integer not null,
+    added_by    text,
+    added_at    integer not null
+  );
+`);
+
+// How a party looks on its page: its theme. Parties from before themes are the fun one.
+if (!(db.prepare("pragma table_info(parties)").all() as { name: string }[]).some((c) => c.name === "theme"))
+  db.exec("alter table parties add column theme text not null default 'fun'");
+
+/** The looks a party's page can have. */
+export const PARTY_THEMES = ["fun", "classy", "cave", "severance", "girls"] as const;
+export type PartyTheme = (typeof PARTY_THEMES)[number];
+export const isPartyTheme = (t: unknown): t is PartyTheme => PARTY_THEMES.includes(t as PartyTheme);
+
+export function setPartyTheme(id: string, theme: PartyTheme) {
+  db.prepare("update parties set theme = ? where id = ?").run(theme, id);
+}
+
+// When a clip was last put up to play next (added, or picked to play again): what's queued after the clip on air
+// goes in that order. Parties from before this have it as when they were added.
+if (!(db.prepare("pragma table_info(party_clips)").all() as { name: string }[]).some((c) => c.name === "queued_at")) {
+  db.exec("alter table party_clips add column queued_at integer");
+  db.exec("update party_clips set queued_at = added_at");
+}
+
+// What actually went on air at each party, as it happened: the loop moves as things are slipped in, so it can't
+// be worked out afterwards.
+db.exec(`
+  create table if not exists party_plays (
+    party_id text not null references parties(id) on delete cascade,
+    at       integer not null,
+    clip_id  text not null,
+    image_id text,
+    app_id   text,
+    primary key (party_id, at)
+  );
+`);
+
+/** One turn on air at a party: which clip, what it showed, and when it went on. */
+export type PartyPlay = { clipId: string; source: Source; at: number };
+
+/** Note a turn going on air. The same turn noted again (every look at /live) is one turn. */
+export function recordPlay(partyId: string, clipId: string, source: Source, at: number) {
+  db.prepare("insert or ignore into party_plays (party_id, at, clip_id, image_id, app_id) values (?, ?, ?, ?, ?)").run(
+    partyId,
+    at,
+    clipId,
+    source.kind === "image" ? source.id : null,
+    source.kind === "app" ? source.id : null,
+  );
+}
+
+/** What went on air at a party, in order. */
+export function partyPlays(partyId: string): PartyPlay[] {
+  return (
+    db.prepare("select clip_id, image_id, app_id, at from party_plays where party_id = ? order by at").all(partyId) as {
+      clip_id: string;
+      image_id: string | null;
+      app_id: string | null;
+      at: number;
+    }[]
+  ).map((r) => ({ clipId: r.clip_id, at: r.at, source: r.app_id ? { kind: "app", id: r.app_id } : { kind: "image", id: r.image_id! } }));
+}
+
+/** A party, as kept: `endedAt` once it's over (ended early, or at `endsAt`). */
+export type PartyRow = { id: string; playlistId: string | null; startedAt: number; anchor: number; endsAt: number; endedAt: number | null; startedBy: string | null; theme: PartyTheme };
+
+/**
+ * One thing in a party's loop. `addedBy` is null for what came from the playlist it started with. `queuedAt`: when
+ * it was last put up to play next.
+ */
+export type PartyClip = { id: string; partyId: string; position: number; source: Source; durationS: number; addedBy: string | null; addedAt: number; queuedAt: number };
+
+const PARTY_ROW = "select id, playlist_id as playlistId, started_at as startedAt, anchor, ends_at as endsAt, ended_at as endedAt, started_by as startedBy, theme from parties";
+
+/** The party going on at `now`, if there is one. */
+export function currentParty(now = Date.now()): PartyRow | undefined {
+  return db.prepare(`${PARTY_ROW} where ended_at is null and started_at <= ? and ends_at > ? order by started_at desc limit 1`).get(now, now) as PartyRow | undefined;
+}
+
+export const getPartyRow = (id: string) => db.prepare(`${PARTY_ROW} where id = ?`).get(id) as PartyRow | undefined;
+
+/** Every party, newest first, once it's over. */
+export const pastParties = (now = Date.now()) =>
+  db.prepare(`${PARTY_ROW} where ended_at is not null or ends_at <= ? order by started_at desc`).all(now) as PartyRow[];
+
+/** Parties whose time ran out and haven't been wrapped up yet. */
+export const unwrappedParties = (now = Date.now()) =>
+  db.prepare(`${PARTY_ROW} where ended_at is null and ends_at <= ?`).all(now) as PartyRow[];
+
+type PartyClipRow = { id: string; party_id: string; position: number; image_id: string | null; app_id: string | null; duration_s: number; added_by: string | null; added_at: number; queued_at: number };
+
+export function partyClips(partyId: string): PartyClip[] {
+  return (db.prepare("select * from party_clips where party_id = ? order by position").all(partyId) as PartyClipRow[]).map((r) => ({
+    id: r.id,
+    partyId: r.party_id,
+    position: r.position,
+    source: r.app_id ? { kind: "app", id: r.app_id } : { kind: "image", id: r.image_id! },
+    durationS: r.duration_s,
+    addedBy: r.added_by,
+    addedAt: r.added_at,
+    queuedAt: r.queued_at,
+  }));
+}
+
+/** Start a party at `now`, with a copy of what plays in `playlistId` (when there's one) to begin with. */
+export function startParty(playlistId: string | null, now: number, endsAt: number, by: string, theme: PartyTheme = "fun"): PartyRow {
+  const id = crypto.randomUUID().slice(0, 8);
+  db.exec("begin");
+  db.prepare("insert into parties (id, playlist_id, started_at, anchor, ends_at, started_by, theme) values (?, ?, ?, ?, ?, ?, ?)").run(id, playlistId, now, now, endsAt, by, theme);
+  const seed = playlistId ? listSlides().filter((s) => s.playlistId === playlistId && s.enabled) : [];
+  seed.forEach((s, i) => insertPartyClip(id, i, s.source, s.durationS, null, now));
+  db.exec("commit");
+  return getPartyRow(id)!;
+}
+
+function insertPartyClip(partyId: string, position: number, source: Source, durationS: number, by: string | null, at: number) {
+  const id = crypto.randomUUID().slice(0, 8);
+  db.prepare(
+    "insert into party_clips (id, party_id, position, image_id, app_id, duration_s, added_by, added_at, queued_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  ).run(id, partyId, position, source.kind === "image" ? source.id : null, source.kind === "app" ? source.id : null, durationS, by, at, at);
+  return id;
+}
+
+/** Put `source` in the party's loop at `at`, moving the rest along. */
+export function addPartyClip(partyId: string, at: number, source: Source, durationS: number, by: string, now: number) {
+  db.prepare("update party_clips set position = position + 1 where party_id = ? and position >= ?").run(partyId, at);
+  return insertPartyClip(partyId, at, source, durationS, by, now);
+}
+
+/** Move one of the party's clips to `at` in its loop (counted without it), the rest closing up around it, at `now`. */
+export function movePartyClip(partyId: string, clipId: string, at: number, now: number) {
+  const ids = partyClips(partyId)
+    .map((c) => c.id)
+    .filter((id) => id !== clipId);
+  ids.splice(at, 0, clipId);
+  const stmt = db.prepare("update party_clips set position = ? where id = ?");
+  db.exec("begin");
+  ids.forEach((id, i) => stmt.run(i, id));
+  db.prepare("update party_clips set queued_at = ? where id = ?").run(now, clipId);
+  db.exec("commit");
+}
+
+/** Put the party's loop in the order of `ids`, from its start. */
+export function orderPartyClips(ids: string[]) {
+  const stmt = db.prepare("update party_clips set position = ? where id = ?");
+  db.exec("begin");
+  ids.forEach((id, i) => stmt.run(i, id));
+  db.exec("commit");
+}
+
+export function removePartyClip(id: string) {
+  db.prepare("delete from party_clips where id = ?").run(id);
+}
+
+export const getPartyClip = (id: string) => {
+  const r = db.prepare("select party_id from party_clips where id = ?").get(id) as { party_id: string } | undefined;
+  return r && partyClips(r.party_id).find((c) => c.id === id);
+};
+
+export function setPartyAnchor(id: string, anchor: number) {
+  db.prepare("update parties set anchor = ? where id = ?").run(anchor, id);
+}
+
+export function setPartyEnd(id: string, endsAt: number) {
+  db.prepare("update parties set ends_at = ? where id = ?").run(endsAt, id);
+}
+
+/** The party's over at `at`: early, or when its time ran out. */
+export function endPartyAt(id: string, at: number) {
+  db.prepare("update parties set ended_at = ?, ends_at = min(ends_at, ?) where id = ?").run(at, at, id);
+}
+
+/** Things that are gone (a drawing or app the house deleted since) leave the loop. */
+const stillThere = (src: Source) => (src.kind === "image" ? !!getImageMeta(src.id) : !!getApp(src.id));
+
+/** The party going on, as the schedule plays it. */
+const partyProgram = (now = Date.now()) => partyLoop(currentParty(now));
+
+/** A party's loop as the schedule plays it, whether or not it's on now. */
+export function partyLoop(p: PartyRow | undefined): Program["party"] {
+  if (!p) return null;
+  const slides: Slide[] = partyClips(p.id)
+    .filter((c) => stillThere(c.source))
+    .map((c) => ({
+      id: c.id,
+      playlistId: null,
+      clipId: c.id,
+      source: c.source,
+      position: c.position,
+      durationS: c.durationS,
+      enabled: true,
+      days: [0, 1, 2, 3, 4, 5, 6],
+      start: null,
+      end: null,
+    }));
+  return { id: p.id, startedAt: p.startedAt, anchor: p.anchor, until: p.endsAt, slides };
+}
+
+/** A party's drawings and photos, made there and kept with it. */
+export function partyImages(partyId: string): ImageMeta[] {
+  const ids = new Set(partyClips(partyId).flatMap((c) => (c.source.kind === "image" ? [c.source.id] : [])));
+  return (db.prepare(`${META} where kind = 'party'`).all() as ImageMeta[]).filter((m) => ids.has(m.id));
+}
+
+/** What someone made at parties, for Delete everything: it leaves their stories too. */
+export function deletePartyImagesBy(personId: string) {
+  const ids = (db.prepare("select id from images where kind = 'party' and made_by = ?").all(personId) as { id: string }[]).map((r) => r.id);
+  for (const id of ids) {
+    db.prepare("delete from party_clips where image_id = ?").run(id);
+    deleteImage(id);
+  }
+  return ids.length;
 }

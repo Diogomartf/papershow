@@ -1,12 +1,20 @@
 // People in the house: signing in, joining, and the log of who did what.
 import { createContext, useContext, type CSSProperties } from "react";
 
-/** Members are the household. Guests draw and make apps, and ask before anything goes on the panel. */
-export type Role = "admin" | "member" | "guest";
+/**
+ * Members are the household. Guests draw and make apps, and ask before anything goes on the panel. Party guests
+ * are guests who don't ask: what they add goes straight into the party's playlist, and nowhere else.
+ */
+export type Role = "admin" | "member" | "guest" | "party";
+/** Who an invite lets in as. */
+export type InviteRole = Exclude<Role, "admin">;
 
 /** What the app calls each role. */
-export const ROLE_NAMES: Record<Role, string> = { admin: "Admin", member: "Household", guest: "Guest" };
+export const ROLE_NAMES: Record<Role, string> = { admin: "Admin", member: "Household", guest: "Guest", party: "Party" };
 export const ROLES = Object.keys(ROLE_NAMES) as Role[];
+
+/** Guests and party guests: no show, playlists or log, and nothing on the panel without the house. */
+export const visiting = (p: { role: Role }) => p.role === "guest" || p.role === "party";
 /** Knocking: waiting for an admin to let them in. Out: removed. */
 export type Status = "knocking" | "in" | "out";
 
@@ -83,8 +91,8 @@ export const inviteInfo = (code: string) => call<{ code: string; expiresAt: numb
 export const updateMe = (patch: Partial<Profile> & { secret?: string[] }) => call<unknown>("/api/me", "PATCH", patch);
 export const updatePerson = (id: string, patch: { status?: "in" | "out"; role?: Role }) => call<unknown>(`/api/people/${id}`, "PATCH", patch);
 export const notNow = (id: string) => call<unknown>(`/api/people/${id}`, "DELETE");
-export const createInvite = (role: "member" | "guest") => call<Invite>("/api/invites", "POST", { origin: location.origin, role });
-export const setInviteRole = (code: string, role: "member" | "guest") => call<Invite>(`/api/invites/${code}`, "PATCH", { role });
+export const createInvite = (role: InviteRole) => call<Invite>("/api/invites", "POST", { origin: location.origin, role });
+export const setInviteRole = (code: string, role: InviteRole) => call<Invite>(`/api/invites/${code}`, "PATCH", { role });
 /** Someone removed, and everything they did. Can't be undone. */
 export const deleteEverything = (id: string) =>
   call<{ deleted: { drawings: number; apps: number; playlists: number } }>(`/api/people/${id}/everything`, "DELETE");
@@ -94,7 +102,7 @@ export const hideInvite = (code: string) => call<unknown>(`/api/invites/${code}/
 export const inviteQr = (code: string) => `/api/invites/${code}/qr.svg`;
 /** The log's topics, each the verbs it covers. */
 export const LOG_TOPICS = [
-  { key: "panel", label: "On the panel", icon: "📺", verbs: ["showed-now", "resumed", "asked-to-show", "said-yes", "said-not-now"] },
+  { key: "panel", label: "On the panel", icon: "📺", verbs: ["showed-now", "resumed", "asked-to-show", "said-yes", "said-not-now", "started-party", "changed-party", "changed-party-look", "ended-party", "added-to-party", "replayed-at-party", "showed-now-at-party", "reordered-party", "party-wrapped"] },
   {
     key: "program",
     label: "Program",
@@ -115,7 +123,7 @@ export const LOG_TOPICS = [
     key: "people",
     label: "People and invites",
     icon: "🎟️",
-    verbs: ["set-up", "knocked", "joined", "invited", "invite-on-panel", "let-in", "let-back-in", "not-now", "removed", "made-admin", "made-member", "made-guest", "new-look", "cleared-out"],
+    verbs: ["set-up", "knocked", "joined", "invited", "invite-on-panel", "let-in", "let-back-in", "not-now", "removed", "made-admin", "made-member", "made-guest", "made-party", "party-guests-left", "new-look", "cleared-out"],
   },
 ] as const;
 
@@ -163,18 +171,20 @@ export function says(e: LogEntry): string {
     case "set-up": return "set up the house 🏠";
     case "knocked": return "knocked on the door 🚪";
     case "joined": return s.by ? `came in with an invite from ${personOf(s.by)} 🎟️` : "came in with an invite 🎟️";
-    case "let-in": return s.guest ? `let ${personOf(s.person)} in as a guest 🎉` : `let ${personOf(s.person)} in 🎉`;
+    case "let-in": return s.guest ? `let ${personOf(s.person)} in as a guest 🎉` : s.party ? `let ${personOf(s.person)} in to the party 🎉` : `let ${personOf(s.person)} in 🎉`;
     case "let-back-in": return `let ${personOf(s.person)} back in`;
     case "not-now": return `said "not now" to ${personOf(s.person)}`;
     case "removed": return `removed ${personOf(s.person)}`;
+    case "party-guests-left": return `said goodbye to ${Number(s.count)} party ${s.count === 1 ? "guest" : "guests"} 👋`;
     case "made-admin": return `made ${personOf(s.person)} an admin 👑`;
     case "made-member": return `made ${personOf(s.person)} household`;
     case "made-guest": return `made ${personOf(s.person)} a guest`;
+    case "made-party": return `made ${personOf(s.person)} a party guest 🎉`;
     case "new-look": return "got a new look ✨";
     case "cleared-out": return "deleted someone who was removed, and everything they did 🧹";
     // Older entries say `panel` when the invite was made straight onto the panel.
-    case "invited": return `${s.panel ? "put an invite on the panel" : "made an invite"}${s.guest ? " for a guest" : ""} 🎟️`;
-    case "invite-on-panel": return `put an invite${s.guest ? " for a guest" : ""} on the panel 🎟️`;
+    case "invited": return `${s.panel ? "put an invite on the panel" : "made an invite"}${s.guest ? " for a guest" : s.party ? " to the party" : ""} 🎟️`;
+    case "invite-on-panel": return `put an invite${s.guest ? " for a guest" : s.party ? " to the party" : ""} on the panel 🎟️`;
     case "drew": return `drew ${item} ✏️`;
     case "redrew": return `touched up ${item}`;
     case "erased": return `deleted the drawing ${item}`;
@@ -197,6 +207,16 @@ export function says(e: LogEntry): string {
     case "changed-program": return "changed the week's program 📅";
     case "showed-now": return `put ${item} on the panel 📺`;
     case "resumed": return "let the show carry on";
+    case "started-party": return s.playlist ? `started a party, from ${playlist} 🎉` : "started a party 🎉";
+    case "changed-party": return s.until ? `kept the party going until ${clock(Number(s.until))}` : "changed the party";
+    case "changed-party-look": return `gave the party a new look: ${({ fun: "Fun", classy: "Classy", cave: "Man cave", severance: "Severance", girls: "Girls' night" } as Record<string, string>)[String(s.theme)] ?? String(s.theme)}`;
+    case "ended-party": return "ended the party, back to the program";
+    case "added-to-party": return s.made === "photo" ? `added a photo to the party 📷` : s.made ? `drew ${item} at the party ✏️` : `put ${item} on at the party 🎉`;
+    case "replayed-at-party": return `played ${item} again at the party 🔁`;
+    case "showed-now-at-party": return `put ${item} on the panel at the party 📺`;
+    case "reordered-party": return "changed what plays next at the party";
+    case "party-wrapped":
+      return `threw a party, ${clock(Number(s.from))}–${clock(Number(s.to))}: ${Number(s.things)} ${s.things === 1 ? "thing" : "things"} added${Number(s.people) ? ` by ${Number(s.people)} ${s.people === 1 ? "person" : "people"}` : ""} 🎉`;
     case "asked-to-show": return `asked to put ${item} on the panel 🙋`;
     case "said-yes": return `said yes to ${s.person ? `${personOf(s.person)}'s ` : ""}${item} 📺`;
     case "said-not-now": return `said "not now" to ${s.person ? `${personOf(s.person)}'s ` : ""}${item}`;
@@ -206,6 +226,9 @@ export function says(e: LogEntry): string {
     default: return e.verb.replace(/-/g, " ");
   }
 }
+
+/** A time of day, for log lines about times. */
+const clock = (t: number) => new Date(t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 
 const RELATIVE = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
 

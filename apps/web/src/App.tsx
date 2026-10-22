@@ -7,9 +7,9 @@ import { cantOpen, paintMono, photoFor, renderScene } from "./render";
 import { getDraft, getImage, getSaved, imageUrl, listImages, putDraft, putImage, putSaved, type ImageMeta } from "./store";
 import { Oops, reason, useMe } from "./house";
 import { Gallery } from "./Gallery";
-import { ask, setLive } from "./slides";
+import { ask, putPartyImage, setLive } from "./slides";
 import { useLiveState, useNow } from "./live";
-import { Nav } from "./Nav";
+import { Nav, navigate } from "./Nav";
 import { useNarrow } from "./media";
 import { LightSwitch } from "./LightSwitch";
 import { MeMenu } from "./MeMenu";
@@ -99,7 +99,11 @@ const looksKey = (s: Scene) => JSON.stringify([s.strokes, s.texts ?? [], s.photo
 export default function App() {
   const draw = useRef<DrawHandle>(null);
   const preview = useRef<HTMLCanvasElement>(null);
-  const [scene, setScene] = useState<Scene | null>(null);
+  const role = useMe().me.role;
+  // At a party (party guests always; anyone from the Party page), what's drawn goes into the party, not the house's
+  // library: a fresh canvas, no gallery, no house photos, and the house's draft is left as it was.
+  const [partyMode] = useState(() => role === "party" || new URLSearchParams(location.search).has("party"));
+  const [scene, setScene] = useState<Scene | null>(() => (partyMode ? newScene() : null));
   const [view, setView] = useState<View>("ink");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -118,7 +122,7 @@ export default function App() {
   const [savedLooks, setSavedLooks] = useState<string | null>(null);
   const { state: live, accept, skew } = useLiveState();
   // A guest's Show now asks the household first.
-  const guest = useMe().me.role === "guest";
+  const guest = role === "guest";
   const now = useNow(skew, 5000);
   const photoInput = useRef<HTMLInputElement>(null);
   // The house's photos, for Photo: picked from the library, or from this device when there are none.
@@ -137,6 +141,7 @@ export default function App() {
 
   useEffect(() => {
     document.title = "Draw · Papershow";
+    if (partyMode) return history.replaceState(null, "", "/draw?party");
     listImages().then((xs) => setLibrary(xs.filter((x) => x.kind === "photo")), () => {});
     // /draw?open=<id> (from a picture's own page) opens that drawing, as saved. A photo isn't drawn over in place:
     // it starts a new drawing on it, as /draw?photo=<id> (from Photos) does.
@@ -160,14 +165,14 @@ export default function App() {
       if (saved) setSavedLooks(looksKey(JSON.parse(saved) as Scene));
       setScene(adopt(d && JSON.stringify(d) !== saved ? d : newScene()));
     });
-  }, []);
+  }, [partyMode]);
 
   // Keep the draft and the e-ink preview in step with the drawing.
   useEffect(() => {
     if (!scene) return;
-    putDraft(scene);
+    if (!partyMode) putDraft(scene);
     if (view === "eink" && preview.current) paintMono(scene, preview.current);
-  }, [scene, view]);
+  }, [scene, view, partyMode]);
 
   const onStrokes = useCallback((strokes: Stroke[]) => {
     setScene((s) => (s ? { ...s, strokes, updatedAt: Date.now() } : s));
@@ -223,6 +228,14 @@ export default function App() {
     try {
       let current = { ...scene, strokes: draw.current?.getStrokes() ?? scene.strokes, updatedAt: Date.now() };
       const files = await renderScene(current);
+      if (partyMode) {
+        const first = savedLooks === null;
+        accept(await putPartyImage(current, files));
+        setSavedLooks(looksKey(current));
+        setScene(current);
+        flash(first ? "In the party 🎉 It's on next" : "Updated in the party");
+        return;
+      }
       let copied = false;
       try {
         await putImage(current, files);
@@ -259,7 +272,7 @@ export default function App() {
     } finally {
       setSaving(false);
     }
-  }, [scene, saving, showFor, accept, guest]);
+  }, [scene, saving, showFor, accept, guest, partyMode, savedLooks]);
 
   const pickFor = (s: number) => {
     setShowFor(s);
@@ -310,6 +323,7 @@ export default function App() {
 
   const startNew = () => {
     nameEdited.current = false;
+    if (partyMode) setSavedLooks(null);
     const s = newScene();
     setScene(s);
     setTyping(false);
@@ -421,8 +435,8 @@ export default function App() {
           ) : (
             <button
               className="ghost"
-              data-cuelume-open={library.length ? true : undefined}
-              onClick={() => (library.length ? setPickerOpen(true) : photoInput.current?.click())}
+              data-cuelume-open={library.length && !partyMode ? true : undefined}
+              onClick={() => (library.length && !partyMode ? setPickerOpen(true) : photoInput.current?.click())}
               title="Put a photo on the panel, and draw on it if you like"
             >
               Photo
@@ -438,6 +452,17 @@ export default function App() {
               e.target.value = "";
             }}
           />
+          {partyMode ? (
+            <>
+              <button className="primary" onClick={() => save()} disabled={saving || looksKey(scene) === savedLooks}>
+                {saving ? "Adding…" : savedLooks === null ? "🎉 Add to the party" : looksKey(scene) === savedLooks ? "In the party" : "Update in the party"}
+                <kbd>⌘S</kbd>
+              </button>
+              <button className="ghost" onClick={() => navigate("/party")}>Back to the party</button>
+              <MeMenu />
+            </>
+          ) : (
+          <>
           <button className="ghost" data-cuelume-open onClick={() => setGalleryOpen(true)}>Gallery</button>
           <button className="ghost" onClick={() => save("open")} disabled={saving} title="Save, then open the picture in a new tab">
             Open
@@ -482,6 +507,8 @@ export default function App() {
             <kbd>⌘S</kbd>
           </button>
           <MeMenu />
+          </>
+          )}
         </div>
       </header>
 
