@@ -349,7 +349,7 @@ What's on the panel now: the frame, its name, which playlist it's from, and a pr
 - **Can I show this?**: a guest's ask, with **Show it** and **Not now**, for the household. A guest sees their own, with **Take it back**. Guests don't get the Lately card or the sequence's Remove.
 - **Up next**: the next clip and how it will look when it airs. It's rendered ahead, so a clock shows the right time.
 - **Device**: a power button that turns the panel off for a holiday or a weekend out. Off takes a press and hold; the card goes dark, the panel preview plays the deep clean, and the rest of the Dashboard dims. It stays off until you press it again, or until an optional **Back on** date (at the night's wake-up time). Also the night hours and what the panel shows while asleep, and when a display last fetched `/live`.
-- **Sequence**: the next hour or so of the loop, with what plays when.
+- **Sequence**: the next hour or so of the loop, with what plays when. The big round arrow folds it away to the bare desk (the browser remembers); tap the desk to open it again.
 
 ### Show (`/show`)
 

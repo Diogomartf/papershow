@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { EinkImage } from "./EinkImage";
 import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
@@ -37,6 +38,15 @@ const mins = (ms: number) => {
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60}` : ""}`;
 };
 
+/** A big, round chevron for folding the sequence away and back. */
+function Chevron({ up }: { up?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden style={up ? { rotate: "180deg" } : undefined}>
+      <path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function Dashboard() {
   const { state, accept, skew } = useLiveState();
   const now = useNow(skew, 1000);
@@ -45,6 +55,17 @@ export function Dashboard() {
   const admin = me.role === "admin";
   const guest = me.role === "guest";
   const [menu, setMenu] = useState<{ key: string; el: HTMLElement } | null>(null);
+  // The sequence folds away to the bare desk; each browser remembers which way it was left.
+  const [seqShut, setSeqShut] = useState(() => localStorage.getItem("dash-seq") === "shut");
+  useEffect(() => localStorage.setItem("dash-seq", seqShut ? "shut" : "open"), [seqShut]);
+  // Folding moves the panel, the side column and the desk at once: a view transition glides each to its new place.
+  const fold = (shut: boolean) => {
+    const set = () => flushSync(() => setSeqShut(shut));
+    if (!document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) return set();
+    const root = document.documentElement;
+    root.dataset.folding = "";
+    document.startViewTransition(set).finished.finally(() => delete root.dataset.folding);
+  };
   const toast = useUndoToast();
   const closeMenu = useRef(() => setMenu(null)).current;
 
@@ -267,51 +288,63 @@ export function Dashboard() {
         </section>
 
         {/* The whole loop ahead, every frame as it will look */}
-        <section className="desk">
-          <div className="timeline seq">
-            <div className="timeline-head">
-              <h2>Sequence</h2>
-              <span className="muted">
-                {seq.length
-                  ? `${seq.length} coming up · until ${hhmm(seq[seq.length - 1].endsAt)}`
-                  : "Empty"}
+        <section className="desk" data-shut={seqShut}>
+          {seqShut ? (
+            <button className="desk-handle" aria-expanded="false" onClick={() => fold(false)}>
+              Sequence{seq.length ? ` · ${seq.length} coming up` : ""}
+              <span className="seq-fold">
+                <Chevron up />
               </span>
-              {!guest && (
-                <a className="ghost" href="/show" onClick={(e) => (e.preventDefault(), navigate("/show"))}>
-                  Edit show
-                </a>
-              )}
+            </button>
+          ) : (
+            <div className="timeline seq">
+              <div className="timeline-head">
+                <h2>Sequence</h2>
+                <span className="muted">
+                  {seq.length
+                    ? `${seq.length} coming up · until ${hhmm(seq[seq.length - 1].endsAt)}`
+                    : "Empty"}
+                </span>
+                {!guest && (
+                  <a className="ghost" href="/show" onClick={(e) => (e.preventDefault(), navigate("/show"))}>
+                    Edit show
+                  </a>
+                )}
+                <button className="seq-fold" aria-label="Hide the sequence" aria-expanded="true" title="Hide" onClick={() => fold(true)}>
+                  <Chevron />
+                </button>
+              </div>
+              <ol className="seq-strip">
+                {seq.map((t, i) => {
+                  const item = itemOf(t.source);
+                  const live = t.key === currentTurn?.key && i === 0;
+                  const newList = i === 0 || seq[i - 1].entryId !== t.entryId;
+                  const key = `${t.key}-${t.at}`;
+                  return (
+                    <li key={key} data-live={live} data-new-list={newList && (state!.show.length > 1)} data-open={menu?.key === key}>
+                      {newList && t.playlistId && state!.show.length > 1 && <span className="seq-list">{playlistName(t.playlistId)}</span>}
+                      <button
+                        className="seq-frame"
+                        aria-haspopup="menu"
+                        aria-label={`${item?.name ?? "Item"} at ${hhmm(t.at)}`}
+                        onClick={(e) => setMenu(menu?.key === key ? null : { key, el: e.currentTarget })}
+                      >
+                        <img
+                          src={live && showing ? `/live.png?e=${encodeURIComponent(showing.etag)}` : frameAt(t.source, t.at)}
+                          alt=""
+                          loading="lazy"
+                        />
+                        {live && <div className="progress" style={{ ["--p" as string]: progress }} aria-hidden />}
+                      </button>
+                      <span className="seq-time tabular">{live ? "Now" : hhmm(t.at)}</span>
+                      <strong>{item?.name ?? "…"}</strong>
+                      <small className="muted">{mins(t.endsAt - t.at)}</small>
+                    </li>
+                  );
+                })}
+              </ol>
             </div>
-            <ol className="seq-strip">
-              {seq.map((t, i) => {
-                const item = itemOf(t.source);
-                const live = t.key === currentTurn?.key && i === 0;
-                const newList = i === 0 || seq[i - 1].entryId !== t.entryId;
-                const key = `${t.key}-${t.at}`;
-                return (
-                  <li key={key} data-live={live} data-new-list={newList && (state!.show.length > 1)} data-open={menu?.key === key}>
-                    {newList && t.playlistId && state!.show.length > 1 && <span className="seq-list">{playlistName(t.playlistId)}</span>}
-                    <button
-                      className="seq-frame"
-                      aria-haspopup="menu"
-                      aria-label={`${item?.name ?? "Item"} at ${hhmm(t.at)}`}
-                      onClick={(e) => setMenu(menu?.key === key ? null : { key, el: e.currentTarget })}
-                    >
-                      <img
-                        src={live && showing ? `/live.png?e=${encodeURIComponent(showing.etag)}` : frameAt(t.source, t.at)}
-                        alt=""
-                        loading="lazy"
-                      />
-                      {live && <div className="progress" style={{ ["--p" as string]: progress }} aria-hidden />}
-                    </button>
-                    <span className="seq-time tabular">{live ? "Now" : hhmm(t.at)}</span>
-                    <strong>{item?.name ?? "…"}</strong>
-                    <small className="muted">{mins(t.endsAt - t.at)}</small>
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
+          )}
         </section>
       </main>
 

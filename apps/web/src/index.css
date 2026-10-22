@@ -153,6 +153,18 @@
 
 /* Flipping the switch: the whole room cross-fades. */
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 420ms; animation-timing-function: ease-out; }
+/* Folding the sequence: the panel, the side column and the desk each glide to where they go; the desk is cut to its
+   size as it moves rather than stretched, so the frames in it don't squash. */
+[data-folding] .dash-onair { view-transition-name: dash-panel; }
+[data-folding] .dash-side { view-transition-name: dash-side; }
+[data-folding] .desk { view-transition-name: dash-desk; }
+::view-transition-group(dash-panel), ::view-transition-group(dash-side), ::view-transition-group(dash-desk) {
+  animation-duration: 460ms; animation-timing-function: cubic-bezier(.32, .72, 0, 1);
+}
+::view-transition-image-pair(dash-desk) { overflow: hidden; }
+::view-transition-old(dash-desk), ::view-transition-new(dash-desk) { height: 100%; object-fit: none; object-position: top; }
+::view-transition-old(dash-desk) { animation-duration: 200ms; }
+::view-transition-new(dash-desk) { animation-duration: 300ms; animation-delay: 120ms; animation-fill-mode: both; }
 
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; }
@@ -497,10 +509,14 @@ a.ghost { display: inline-block; }
 /* Takes the light switch's height in the bar, top-aligned with it; the rest hangs below so the bar keeps its spacing. */
 a.live-link {
   position: relative; z-index: 2;
-  display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px;
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-start;
   height: 34px; white-space: nowrap; text-decoration: none;
 }
-.live-link-text { font-size: 9px; line-height: 1; letter-spacing: .02em; color: var(--ink-3); }
+/* The label floats just above the picture and takes no room in the bar. */
+.live-link-text {
+  position: absolute; bottom: calc(100% + 3px); left: 50%; translate: -50% 0;
+  font-size: 9px; line-height: 1; letter-spacing: .02em; color: var(--ink-3);
+}
 a.live-link:hover .live-link-text { color: var(--ink); }
 /* What the panel shows, at about 1/10 scale. */
 .live-thumb {
@@ -983,6 +999,31 @@ a.live-link:hover .live-link-text { color: var(--ink); }
 .dot[data-on="true"] { background: #3d9a5b; }
 
 .seq .timeline-head > a { margin-left: auto; }
+/* Fold: a big round button with a fat chevron, easy to find and to hit. */
+.seq-fold {
+  display: inline-grid; place-items: center; flex: none; width: 35px; height: 35px; padding: 0; border: 0; border-radius: 50%;
+  background: var(--tint); color: var(--ink); cursor: pointer;
+  transition: transform 160ms var(--ease-out), background 160ms var(--ease-out);
+}
+.seq-fold svg { width: 19px; height: 19px; transition: translate 200ms var(--ease-out); }
+@media (hover: hover) {
+  .seq-fold:hover, .desk-handle:hover .seq-fold { background: var(--line); }
+  button.seq-fold:hover svg { translate: 0 2px; }
+  .desk-handle:hover .seq-fold svg { translate: 0 -2px; }
+}
+.seq-fold:active, .desk-handle:active .seq-fold { transform: scale(.92); }
+.seq .timeline-head > .seq-fold { margin: -8px -4px -8px 4px; align-self: center; }
+.seq .timeline-head:not(:has(> a)) > .seq-fold { margin-left: auto; }
+/* Folded away: only the desk's edge, with the sequence's name on it to open it again. */
+.desk[data-shut="true"] { padding: 0; }
+.desk-handle {
+  display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; height: 64px; padding: 10px 0 0;
+  border: 0; background: none; cursor: pointer;
+  font: 600 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2);
+  text-shadow: 0 1px 0 var(--oak-sheen, rgba(255,255,255,.2)); transition: color 160ms var(--ease-out);
+}
+.desk-handle:hover { color: var(--ink); }
+.desk-handle .seq-fold { background: var(--surface); box-shadow: 0 2px 6px -2px var(--drop); }
 .seq-strip {
   list-style: none; margin: 0; padding: 4px 18px 18px;
   display: flex; gap: 14px;
@@ -2759,6 +2800,10 @@ fieldset.plain:disabled > * { opacity: .55; }
   /* min-height: 0 lets the column shrink to the room above the desk and scroll, instead of running under it. */
   /* The cards' borders and drop shadows are box-shadows outside the box: pad the column so the scroll doesn't clip them,
      and pull it back by the same amount so it lines up as before. */
+  /* With the sequence folded away there's no desk to stand on: the panel and the side column hang from the top
+     together, the panel level with Up next. */
+  .dash-main:has(.desk[data-shut="true"]) .dash-top { align-items: flex-start; padding-top: 64px; }
+  .dash-main:has(.desk[data-shut="true"]) .dash-side { align-content: start; }
   .dash-side {
     box-sizing: content-box; max-height: calc(100% - 24px); min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none;
     padding: 6px 12px 18px; margin: -6px -12px 0; align-content: safe end;
