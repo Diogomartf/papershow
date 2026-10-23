@@ -151,6 +151,10 @@ if (!(db.prepare("pragma table_info(images)").all() as { name: string }[]).some(
 // When a photo was taken, for "on this day": kept beside the scene so a list doesn't have to open every photo.
 if (!(db.prepare("pragma table_info(images)").all() as { name: string }[]).some((c) => c.name === "taken_at"))
   db.exec("alter table images add column taken_at integer");
+// Where a photo was taken, from its GPS, and the place's name for it once it's been looked up (see places.ts).
+for (const [col, type] of [["taken_lat", "real"], ["taken_lon", "real"], ["place", "text"]])
+  if (!(db.prepare("pragma table_info(images)").all() as { name: string }[]).some((c) => c.name === col))
+    db.exec(`alter table images add column ${col} ${type}`);
 
 /** The first person in the house becomes the maker of everything made before there were people. */
 export function claimAll(personId: string) {
@@ -159,10 +163,19 @@ export function claimAll(personId: string) {
 
 /** What a saved image is: a drawing, a photo in the Photos library, or a drawing or photo made at a party, which stays with it. */
 export type ImageType = "drawing" | "photo" | "party";
-export type ImageMeta = { id: string; name: string; updatedAt: number; madeBy: string | null; kind: ImageType; takenAt: number | null };
+export type ImageMeta = {
+  id: string;
+  name: string;
+  updatedAt: number;
+  madeBy: string | null;
+  kind: ImageType;
+  takenAt: number | null;
+  /** The town or city it was taken in, when the photo said where and the name has been found. */
+  place: string | null;
+};
 export type ImageKind = "png" | "mono" | "bin";
 
-const META = "select id, name, updated_at as updatedAt, made_by as madeBy, kind, taken_at as takenAt from images";
+const META = "select id, name, updated_at as updatedAt, made_by as madeBy, kind, taken_at as takenAt, place from images";
 
 /** The house's drawings and photos. What was made at a party isn't among them: it's in that party's story. */
 export function listImages(): ImageMeta[] {
@@ -187,6 +200,13 @@ export function getImageFile(id: string, kind: ImageKind) {
 
 /** A scene's `takenAt` if it's a sensible time (it comes from the browser), else null. */
 const takenOf = (s: Scene) => (Number.isFinite(s.takenAt) && s.takenAt! > 0 ? Math.round(s.takenAt!) : null);
+/** A scene's `takenWhere`, if it's a point on Earth, else nulls. */
+const whereOf = (s: Scene) => {
+  const w = s.takenWhere;
+  return w && Number.isFinite(w.lat) && Number.isFinite(w.lon) && Math.abs(w.lat) <= 90 && Math.abs(w.lon) <= 180
+    ? { lat: w.lat, lon: w.lon }
+    : { lat: null, lon: null };
+};
 
 /**
  * Save a drawing or a photo. `madeBy` and `kind` are kept from the first save: redrawing someone's drawing doesn't
@@ -194,10 +214,26 @@ const takenOf = (s: Scene) => (Number.isFinite(s.takenAt) && s.takenAt! > 0 ? Ma
  */
 export function putImage(scene: Scene, files: Record<ImageKind, Uint8Array>, madeBy: string, kind: ImageType = "drawing") {
   db.prepare(
-    `insert into images (id, name, scene, png, mono, bin, updated_at, made_by, kind, taken_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `insert into images (id, name, scene, png, mono, bin, updated_at, made_by, kind, taken_at, taken_lat, taken_lon) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      on conflict(id) do update set name = excluded.name, scene = excluded.scene, png = excluded.png,
-       mono = excluded.mono, bin = excluded.bin, updated_at = excluded.updated_at, taken_at = excluded.taken_at`,
-  ).run(scene.id, scene.name, JSON.stringify(scene), files.png, files.mono, files.bin, scene.updatedAt, madeBy, kind, takenOf(scene));
+       mono = excluded.mono, bin = excluded.bin, updated_at = excluded.updated_at, taken_at = excluded.taken_at,
+       place = case when taken_lat is excluded.taken_lat and taken_lon is excluded.taken_lon then place end,
+       taken_lat = excluded.taken_lat, taken_lon = excluded.taken_lon`,
+  ).run(scene.id, scene.name, JSON.stringify(scene), files.png, files.mono, files.bin, scene.updatedAt, madeBy, kind, takenOf(scene), whereOf(scene).lat, whereOf(scene).lon);
+}
+
+/** Photos that say where they were taken but whose place hasn't been named yet. */
+export function unnamedPlaces() {
+  return db.prepare("select id, taken_lat as lat, taken_lon as lon from images where taken_lat is not null and place is null").all() as {
+    id: string;
+    lat: number;
+    lon: number;
+  }[];
+}
+
+/** Name the place of every photo taken at this point. */
+export function namePlace(lat: number, lon: number, place: string) {
+  db.prepare("update images set place = ? where taken_lat = ? and taken_lon = ? and place is null").run(place, lat, lon);
 }
 
 export function deleteImage(id: string) {

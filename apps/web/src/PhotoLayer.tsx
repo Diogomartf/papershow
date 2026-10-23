@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { PANEL, photoFit, photoSize, type PhotoAt } from "@papershow/scene";
 
 /** How small or big the photo can go: 1 fills the panel. */
@@ -53,6 +54,9 @@ export function PhotoLayer({
   hidden: boolean;
 }) {
   const layer = useRef<HTMLDivElement>(null);
+  // The buttons hang above the device, off the photo they frame; the panel itself may clip what's outside it.
+  const [device, setDevice] = useState<Element | null>(null);
+  useLayoutEffect(() => setDevice(layer.current?.closest(".device") ?? null), []);
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   // The latest placement for handlers that outlive a render.
   const latest = useRef(at);
@@ -245,7 +249,9 @@ export function PhotoLayer({
             </div>
           ))}
         {active && turningNow && <div className="photo-angle">{`${Math.round(at.angle)}°`}</div>}
-        {active && (
+        {active &&
+          device &&
+          createPortal(
           <div className="photo-tools" onPointerDown={(e) => e.stopPropagation()}>
             <button onClick={() => place({ ...at, scale: at.scale / STEP })} disabled={at.scale <= MIN_SCALE} aria-label="Smaller">
               <span aria-hidden>−</span>
@@ -271,7 +277,8 @@ export function PhotoLayer({
               <span aria-hidden>↻</span>
             </button>
             {onDone && <button className="photo-done" onClick={onDone}>Done</button>}
-          </div>
+          </div>,
+          device,
         )}
       </div>
     </>

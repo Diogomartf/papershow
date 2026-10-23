@@ -1,6 +1,6 @@
 import { toSvg } from "drawesome";
 import { shortId } from "./id";
-import { takenAt } from "./exif";
+import { readExif } from "./exif";
 import { dither, enhance, pack1bpp, PANEL, PHOTO_FILL, photoSize, TEXT_FONT, TEXT_LINE, type Scene, type TextItem } from "@papershow/scene";
 
 const fontOf = (t: TextItem) => `${t.bold ? 700 : 450} ${t.size}px ${TEXT_FONT}`;
@@ -164,6 +164,7 @@ const KEEP = 2 * PANEL.w;
 /** A photo is a scene with nothing drawn on it, so it's framed and rendered like the photo under a drawing. */
 export async function photoScene(file: File): Promise<Scene> {
   const now = Date.now();
+  const exif = await readExif(file);
   return {
     id: shortId(),
     name: file.name.replace(/\.[^.]+$/, "").trim() || "Photo",
@@ -175,7 +176,9 @@ export async function photoScene(file: File): Promise<Scene> {
     photo: await photoFor(file, KEEP),
     photoAt: PHOTO_FILL,
     // A camera's date if it wrote one; otherwise the file's, which is close for a screenshot or a saved picture.
-    takenAt: (await takenAt(file)) ?? (file.lastModified || undefined),
+    takenAt: exif.at ?? (file.lastModified || undefined),
+    // Where, when the camera knew: the server names the place.
+    takenWhere: exif.where ?? undefined,
     createdAt: now,
     updatedAt: now,
   };

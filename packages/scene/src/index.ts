@@ -37,6 +37,8 @@ export type Scene = {
   photoAt?: PhotoAt;
   /** When the photo was taken (ms since epoch), from its EXIF or else the file's date. Photos only; not always known. */
   takenAt?: number;
+  /** Where the photo was taken, from its EXIF GPS. Photos only, and only when the camera wrote it. */
+  takenWhere?: { lat: number; lon: number };
   createdAt: number;
   updatedAt: number;
 };

@@ -5,14 +5,15 @@ import { LiveLink } from "./LiveLink";
 import { MeMenu } from "./MeMenu";
 import { Nav, navigate } from "./Nav";
 import { PhotoLayer } from "./PhotoLayer";
-import { cantOpen, paintMono, photoScene, renderScene } from "./render";
+import { paintMono, renderScene } from "./render";
 import { addToShow, ask, setLive } from "./slides";
 import { loadItems } from "./sources";
 import { deleteImage, fileUrl, getImage, listImages, putImage, type ImageMeta } from "./store";
-import { mine, Oops, reason, tint, useMe } from "./house";
+import { mine, reason, tint, useMe } from "./house";
 import { useLiveState } from "./live";
 import { shortId } from "./id";
 import { cue, DONE, type Cue } from "./sound";
+import { useUploads } from "./Uploads";
 
 /** What a save would change: the name and the framing. */
 const savedKey = (s: Scene) => JSON.stringify([s.name, s.photoAt ?? PHOTO_FILL]);
@@ -26,7 +27,6 @@ export function Photos({ id }: { id: string | null }) {
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [view, setView] = useState<"photo" | "eink">("photo");
   const [saved, setSaved] = useState(true);
-  const [adding, setAdding] = useState<{ done: number; total: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   // Delete takes a second press: the photo also leaves every playlist and the show.
@@ -122,34 +122,20 @@ export function Photos({ id }: { id: string | null }) {
   /** Run `fn`; if the server says no (a limit, say), show why. */
   const tried = (fn: () => Promise<unknown>) => () => fn().catch((e) => flash(reason(e, "That didn't work"), "error"));
 
-  /** Add pictures to the library one after another, each filling the panel to start with. */
-  const add = async (files: File[]) => {
-    const pics = files.filter((f) => f.type.startsWith("image/"));
-    if (!pics.length || adding) return;
-    setAdding({ done: 0, total: pics.length });
-    let first: string | null = null;
-    let added = 0;
-    for (const file of pics) {
-      try {
-        const s = await photoScene(file);
-        const m = await putImage(s, await renderScene(s), "photo");
-        setPhotos((xs) => [m, ...(xs ?? [])]);
-        first ??= m.id;
-        added++;
-      } catch (err) {
-        // Past the hour's allowance the rest would fail the same way: say why and stop.
-        flash(reason(err, cantOpen(file)), "error");
-        console.error(err);
-        if (err instanceof Oops && err.status === 429) break;
-      }
-      setAdding((a) => a && { ...a, done: a.done + 1 });
-    }
-    setAdding(null);
-    if (!added) return;
-    void loadItems().catch(() => {});
-    if (first) navigate(`/photos/${first}`);
-    flash(added === 1 ? "Added a photo" : `Added ${added} photos`);
-  };
+  /** Add pictures to the library, each filling the panel to start with. The first one opens as soon as it's in. */
+  const uploads = useUploads({
+    send: (s, files, onSent) => putImage(s, files, "photo", onSent),
+    added: (m, n) => {
+      setPhotos((xs) => [m, ...(xs ?? [])]);
+      if (n === 1) navigate(`/photos/${m.id}`);
+    },
+    finished: (added, failed) => {
+      if (added) void loadItems().catch(() => {});
+      if (failed) flash(`${added ? `Added ${added}, but` : "Sorry:"} ${failed === 1 ? "one didn't" : `${failed} didn't`} go in`, "error");
+      else if (added) flash(added === 1 ? "Added a photo" : `Added ${added} photos`);
+    },
+  });
+  const add = uploads.add;
 
   /**
    * The same picture as a photo of its own, framed as it is now, to frame another way: a close crop and the whole
@@ -206,8 +192,8 @@ export function Photos({ id }: { id: string | null }) {
   };
 
   const addButton = (
-    <button className="primary" onClick={() => input.current?.click()} disabled={!!adding}>
-      {adding ? `Adding ${Math.min(adding.done + 1, adding.total)} of ${adding.total}…` : "Add photos"}
+    <button className="primary" onClick={() => input.current?.click()}>
+      {uploads.busy ? "Add more" : "Add photos"}
     </button>
   );
 
@@ -240,6 +226,7 @@ export function Photos({ id }: { id: string | null }) {
       <main className="apps-main">
         <aside className="rail">
           <div className="photos-add">{addButton}</div>
+          {uploads.node}
           <h2>Photos</h2>
           {photos?.length === 0 ? (
             <p className="muted rail-empty">None yet. Add some, or drop them anywhere on this page.</p>
@@ -305,9 +292,11 @@ export function Photos({ id }: { id: string | null }) {
                 />
                 <span className="saved" data-on={saved}>{!canChange ? "" : saved ? "Saved" : "Saving…"}</span>
               </div>
-              {meta.takenAt && (
+              {(meta.takenAt || meta.place) && (
                 <p className="muted kind-line">
-                  Taken {new Date(meta.takenAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}
+                  Taken
+                  {meta.takenAt && ` ${new Date(meta.takenAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}`}
+                  {meta.place && ` in ${meta.place}`}
                 </p>
               )}
 

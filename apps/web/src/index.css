@@ -2206,9 +2206,9 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
   /* Draw's six buttons don't fit beside the name: their own row, wrapping if they must; Text is just its T */
   .bar-right.draw-actions { flex: 1 1 100%; flex-wrap: wrap; row-gap: 6px; }
   .draw-actions .text-label { display: none; }
-  /* The photo's buttons still fit a phone-sized panel, still big enough for a thumb */
-  .photo-tools { bottom: 8px; gap: 4px; padding: 4px; }
-  .photo-tools button { min-width: 44px; height: 44px; padding: 0 12px; font-size: 15px; }
+  /* The device sits at the top here: its photo's buttons go just under it, still big enough for a thumb */
+  .photo-tools { bottom: auto; top: calc(100% + 8px); }
+  .photo-tools button { min-width: 44px; height: 44px; padding: 0 12px; }
   .stage { padding-top: 12px; grid-template-rows: auto auto; align-content: start; }
   /* Drawesome sizes its bar to its widest panel; scale it to the phone (zoom keeps taps aligned) */
   .panel [class*="Draw_toolbar"] { zoom: .76; }
@@ -2301,26 +2301,26 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
   pointer-events: none;
 }
 
-/* Big, thumb-sized buttons along the bottom of the panel */
+/* The photo's buttons, just above the device, so they never cover the photo being framed. */
 .photo-tools {
-  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
-  display: flex; gap: 6px; padding: 6px;
+  position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%);
+  display: flex; gap: 4px; padding: 4px;
   /* A pill, and round buttons in it: the gaps between them and its edge stay even all the way round. */
   border-radius: 999px; background: var(--surface);
-  z-index: 3; /* over the centre guides */
-  box-shadow: 0 0 0 1px var(--line), 0 10px 24px -10px var(--drop);
+  z-index: 3;
+  box-shadow: 0 0 0 1px var(--line), 0 8px 20px -10px var(--drop);
   white-space: nowrap; cursor: default;
 }
 .photo-tools button {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  min-width: 56px; height: 56px; padding: 0 18px;
+  min-width: 40px; height: 40px; padding: 0 14px;
   border: 0; border-radius: 999px;
   background: var(--tint); color: var(--ink);
-  font: inherit; font-size: 18px; font-weight: 680;
+  font: inherit; font-size: 15px; font-weight: 640;
   transition: transform 160ms var(--ease-out), background-color 120ms ease-out;
   -webkit-tap-highlight-color: transparent;
 }
-.photo-tools button span[aria-hidden] { font-size: 26px; line-height: 1; }
+.photo-tools button span[aria-hidden] { font-size: 20px; line-height: 1; }
 .photo-tools button:hover:not(:disabled) { background: color-mix(in srgb, var(--tint) 100%, var(--ink) 8%); }
 .photo-tools button:active:not(:disabled) { transform: scale(0.94); }
 .photo-tools button:disabled { opacity: .35; }
@@ -2945,7 +2945,58 @@ fieldset.plain:disabled > * { opacity: .55; }
 }
 .photos[data-dragging="true"] .photos-drop { opacity: 1; }
 
+/* Photos on their way: a bar for the whole lot, then a tile each, filling in with its frame as it's read. */
+.uploads {
+  display: grid; gap: 8px; margin: 10px 0 4px; padding: 10px 12px 12px;
+  border-radius: 10px; background: var(--surface); box-shadow: 0 0 0 1px var(--line);
+}
+.uploads-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+.uploads-head strong { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.uploads-head button { padding: 3px 10px; font-size: 13px; }
+.uploads-bar { height: 4px; border-radius: 999px; background: var(--tint); overflow: hidden; }
+.uploads-bar::after {
+  content: ""; display: block; height: 100%; border-radius: inherit; background: var(--ink);
+  transform-origin: left; transform: scaleX(var(--p)); transition: transform 240ms var(--ease-out);
+}
+.uploads-strip {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 4px;
+  max-height: 132px; overflow-y: auto; scrollbar-width: thin;
+}
+.uploads-strip li {
+  position: relative; aspect-ratio: 5 / 3; border-radius: 3px; overflow: hidden;
+  background: var(--tint);
+}
+.uploads-strip img { display: block; width: 100%; height: 100%; object-fit: cover; filter: var(--dim); }
+.uploads-strip li[data-state="preparing"] { animation: uploads-pulse 1s ease-in-out infinite alternate; }
+.uploads-strip li[data-state="sending"] img { opacity: .55; }
+.uploads-strip li i {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--ink);
+  transform-origin: left; transform: scaleX(var(--p)); transition: transform 160ms linear;
+}
+.uploads-strip li:is([data-state="failed"], [data-state="skipped"]) { box-shadow: inset 0 0 0 1.5px var(--on-air); }
+.uploads-strip li[data-state="skipped"] { opacity: .5; }
+@keyframes uploads-pulse { to { background: color-mix(in srgb, var(--tint) 100%, var(--ink) 10%); } }
+@media (prefers-reduced-motion: reduce) {
+  .uploads-strip li[data-state="preparing"] { animation: none; }
+}
+.uploads-missed { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; line-height: 1.4; color: var(--ink-2); }
+.uploads-missed strong { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+/* At a party: one of its cards, across the row of stickers. */
+.party-add .uploads {
+  grid-column: 1 / -1; margin: 0; padding: 14px 16px 16px;
+  border-radius: var(--pt-sticker-r); background: var(--pt-card); color: var(--pt-ink); box-shadow: var(--pt-card-shadow);
+}
+.party-add .uploads-head strong { font-size: 17px; }
+.party-add .uploads-bar { height: 8px; background: var(--pt-tint); }
+.party-add .uploads-bar::after { background: var(--pt-s2); }
+.party-add .uploads-strip { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); max-height: 200px; }
+
 /* A Photos app's picks: thumbnails to tap, numbered in the order they show. */
+/* Above them: how many are picked, and all or none in one tap. */
+.picks-all { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; width: 100%; font-size: 13px; }
+.picks-all .link { font: inherit; font-weight: 560; color: var(--ink-2); }
+.picks-all .link:hover { color: var(--ink); }
 .picks[data-thumbs] { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; width: 100%; }
 .picks[data-thumbs] button { position: relative; height: auto; padding: 0; border-radius: 6px; overflow: hidden; background: var(--paper); }
 .picks[data-thumbs] button img { display: block; width: 100%; aspect-ratio: 5 / 3; object-fit: cover; filter: var(--dim); }
