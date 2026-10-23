@@ -4,16 +4,16 @@ import { LightSwitch } from "./LightSwitch";
 import { LiveLink } from "./LiveLink";
 import { MeMenu } from "./MeMenu";
 import { Nav, navigate } from "./Nav";
-import { cantOpen, photoScene, renderScene } from "./render";
 import { Deck, Sheet } from "./Sheet";
 import { Grip } from "./Grip";
 import { useSortable } from "./sortable";
 import * as api from "./slides";
 import { type PartyClip, type PartyStory as Story, type PartySummary, type PartyTheme, type Turn } from "./slides";
 import { useItems, type Source } from "./sources";
-import { Oops, reason, tint, useMe, visiting, type Person } from "./house";
+import { reason, tint, useMe, visiting, type Person } from "./house";
 import { useLiveState, useNow } from "./live";
 import { useUndoToast } from "./Undo";
+import { useUploads } from "./Uploads";
 
 const hhmm = (t: number) => {
   const d = new Date(t);
@@ -318,7 +318,6 @@ export function Party() {
   const [settings, setSettings] = useState(false);
   // Where the end slider is while it's held; it's saved on letting go.
   const [endDraft, setEndDraft] = useState<number | null>(null);
-  const [adding, setAdding] = useState<{ done: number; total: number } | null>(null);
   const photos = useRef<HTMLInputElement>(null);
   const [past, setPast] = useState<PartySummary[] | null>(null);
   const [looking, setLooking] = useState<(Looking & { clip?: PartyClip; againId?: string; nowId?: string }) | null>(null);
@@ -340,30 +339,16 @@ export function Party() {
   const failed = (e: unknown) => toast.show(reason(e, "That didn't work"), undefined, "error");
   const playlistName = party?.playlistId ? state?.playlists.find((p) => p.id === party.playlistId)?.name : undefined;
 
-  /** Photos from this device, straight into the party, one after another. */
-  const addPhotos = async (files: File[]) => {
-    const pics = files.filter((f) => f.type.startsWith("image/"));
-    if (!pics.length || adding) return;
-    setAdding({ done: 0, total: pics.length });
-    let added = 0;
-    for (const file of pics) {
-      try {
-        const s = await photoScene(file);
-        accept(await api.putPartyImage(s, await renderScene(s), true));
-        added++;
-      } catch (err) {
-        toast.show(reason(err, cantOpen(file)), undefined, "error");
-        // Past the hour's allowance the rest would fail the same way.
-        if (err instanceof Oops && err.status === 429) break;
-      }
-      setAdding((a) => a && { ...a, done: a.done + 1 });
-    }
-    setAdding(null);
-    if (added) {
-      pop();
-      toast.show(`${added === 1 ? "Your photo is" : `${added} photos are`} in the party 🎉`);
-    }
-  };
+  /** Photos from this device, straight into the party, in the order picked. */
+  const uploads = useUploads({
+    send: (s, files, onSent) => api.putPartyImage(s, files, true, onSent),
+    added: (st) => accept(st),
+    finished: (added, failed) => {
+      if (added) pop();
+      if (failed) toast.show(`${added ? `${added} in, but` : "Sorry:"} ${failed === 1 ? "one didn't" : `${failed} didn't`} go in`, undefined, "error");
+      else if (added) toast.show(`${added === 1 ? "Your photo is" : `${added} photos are`} in the party 🎉`);
+    },
+  });
 
   const fromHouse = (source: Source, name: string) =>
     api.addToParty(source).then((s) => {
@@ -557,8 +542,8 @@ export function Party() {
               <button className="party-sticker" data-c="pink" onClick={() => navigate("/draw?party")}>
                 <span aria-hidden>✏️</span> Draw something
               </button>
-              <button className="party-sticker" data-c="yellow" onClick={() => photos.current?.click()} disabled={!!adding}>
-                <span aria-hidden>📷</span> {adding ? `Adding ${adding.done + 1} of ${adding.total}…` : "Add photos"}
+              <button className="party-sticker" data-c="yellow" onClick={() => photos.current?.click()}>
+                <span aria-hidden>📷</span> {uploads.busy ? "Add more" : "Add photos"}
               </button>
               {household && (
                 <button className="party-sticker" data-c="lilac" data-cuelume-open onClick={() => setPicking(true)}>
@@ -572,10 +557,11 @@ export function Party() {
                 multiple
                 hidden
                 onChange={(e) => {
-                  addPhotos([...(e.target.files ?? [])]);
+                  uploads.add([...(e.target.files ?? [])]);
                   e.target.value = "";
                 }}
               />
+              {uploads.node}
             </section>
 
             {/* What's on, on a line of its own; then what's coming, to sort; then what's been. */}

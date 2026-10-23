@@ -444,7 +444,10 @@ function Picks({
   const full = field.max !== undefined && value.length >= field.max;
   // Pictures are told apart by looking at them: a grid of thumbnails instead of names.
   const thumbs = field.options.some((o) => o.thumb);
-  return (
+  // All at once, when there's no cap to stop it: the ones already picked keep their places, the rest follow.
+  const allFit = field.options.length > 1 && (field.max === undefined || field.max >= field.options.length);
+  const all = field.options.every((o) => value.includes(o.value));
+  const picks = (
     <div className="picks" data-thumbs={thumbs || undefined} id={id} role="group">
       {field.options.map((o) => {
         const on = value.includes(o.value);
@@ -464,5 +467,20 @@ function Picks({
         );
       })}
     </div>
+  );
+  if (!allFit) return picks;
+  return (
+    <>
+      <div className="picks-all">
+        <span className="muted">{value.length ? `${value.length} of ${field.options.length} picked` : "None picked"}</span>
+        <button
+          className="link"
+          onClick={() => onChange(all ? [] : [...value, ...field.options.map((o) => o.value).filter((v) => !value.includes(v))])}
+        >
+          {all ? "Select none" : "Select all"}
+        </button>
+      </div>
+      {picks}
+    </>
   );
 }

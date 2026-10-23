@@ -14,6 +14,7 @@ import * as asks from "./asks.ts";
 import * as store from "./db.ts";
 import { inviteFrame, qrSvg } from "./invite.tsx";
 import * as people from "./people.ts";
+import { namePlaces } from "./places.ts";
 import { panelFiles } from "./render.ts";
 import { awayUntil, blockAt, justAired, sameSource, sequence, showing, sleepUntil, upcoming, type Days, type Live, type Showing, type Source } from "./schedule.ts";
 import { sleepFrame } from "./sleep.tsx";
@@ -606,6 +607,17 @@ app.get("/api/images/:id/:kind", (c) => {
   return c.body(file.data);
 });
 
+const forgetPhotoApps = () => {
+  for (const a of store.listApps()) if (a.kind === "photos") forgetApp(a.id);
+};
+/** A photo's place has a name now: Photos apps showing places draw it in. */
+const placed = () => {
+  forgetPhotoApps();
+  changed();
+};
+// Photos added before the server last stopped may still be waiting for their place's name.
+namePlaces(placed);
+
 app.put("/api/images/:id", async (c) => {
   const form = await c.req.formData();
   const scene = JSON.parse(String(form.get("scene"))) as Scene;
@@ -626,7 +638,10 @@ app.put("/api/images/:id", async (c) => {
   const verb = kind === "photo" ? (was ? "reframed-photo" : "added-photo") : was ? "redrew" : "drew";
   note(c, verb, { item: named({ kind: "image", id: scene.id }) });
   // Photos apps show the photo as framed: a new framing shouldn't wait for their next turn.
-  if (kind === "photo") for (const a of store.listApps()) if (a.kind === "photos") forgetApp(a.id);
+  if (kind === "photo") {
+    forgetPhotoApps();
+    namePlaces(placed);
+  }
   changed();
   return c.json(store.getImageMeta(scene.id));
 });

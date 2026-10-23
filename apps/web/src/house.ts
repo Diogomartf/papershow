@@ -69,6 +69,24 @@ export const reason = (err: unknown, fallback: string) =>
 export const SIGNED_OUT = "papershow:signed-out";
 export const signedOut = () => dispatchEvent(new Event(SIGNED_OUT));
 
+/** Send a form, saying how much of it has gone up (0 to 1) as it goes: fetch can't tell. */
+export function sendForm<T>(method: string, path: string, form: FormData, onSent?: (f: number) => void): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, path);
+    xhr.responseType = "json";
+    if (onSent) xhr.upload.onprogress = (e) => e.lengthComputable && onSent(e.loaded / e.total);
+    xhr.onload = () => {
+      const json = xhr.response ?? {};
+      if (xhr.status === 401) signedOut();
+      if (xhr.status >= 200 && xhr.status < 300) resolve(json as T);
+      else reject(new Oops(json.error ?? `${method} ${path} → ${xhr.status}`, xhr.status, json));
+    };
+    xhr.onerror = () => reject(new Error(`${method} ${path} didn't go through`));
+    xhr.send(form);
+  });
+}
+
 async function call<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   const res = await fetch(path, {
     method,

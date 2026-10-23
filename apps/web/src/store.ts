@@ -1,6 +1,6 @@
 // Saved images live on the server (SlideGen), so every device sees the same set.
 // Only the draft being edited stays in this browser's IndexedDB.
-import { Oops, signedOut } from "./house";
+import { Oops, sendForm, signedOut } from "./house";
 import type { Scene } from "@papershow/scene";
 
 /** A drawing from Draw, or a photo in the Photos library. */
@@ -12,6 +12,8 @@ export type ImageMeta = {
   kind: "drawing" | "photo";
   /** When a photo was taken, when it's known. */
   takenAt: number | null;
+  /** The town it was taken in, when the photo said where and the server has named it. */
+  place: string | null;
 };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -28,15 +30,20 @@ export const listImages = () => api<ImageMeta[]>("/api/images");
 export const getImage = (id: string) => api<ImageMeta & { scene: Scene }>(`/api/images/${id}`);
 export const deleteImage = (id: string) => api<void>(`/api/images/${id}`, { method: "DELETE" });
 
-/** Save a drawing, or with `kind: "photo"`, a photo in the library. */
-export function putImage(scene: Scene, files: { png: Blob; mono: Blob; bin: Blob }, kind: ImageMeta["kind"] = "drawing") {
+/** Save a drawing, or with `kind: "photo"`, a photo in the library. `onSent` follows the upload. */
+export function putImage(
+  scene: Scene,
+  files: { png: Blob; mono: Blob; bin: Blob },
+  kind: ImageMeta["kind"] = "drawing",
+  onSent?: (f: number) => void,
+) {
   const form = new FormData();
   form.set("kind", kind);
   form.set("scene", JSON.stringify(scene));
   form.set("png", files.png);
   form.set("mono", files.mono);
   form.set("bin", files.bin);
-  return api<ImageMeta>(`/api/images/${scene.id}`, { method: "PUT", body: form });
+  return sendForm<ImageMeta>("PUT", `/api/images/${scene.id}`, form, onSent);
 }
 
 /** The image file itself. `v` busts the cache when the image is re-saved. */

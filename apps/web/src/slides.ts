@@ -1,7 +1,7 @@
 // Playlist client: the sequence, what's live, and edits to both.
 // Every mutation answers with the whole new state, so the UI never drifts.
 
-import { Oops, signedOut, type LogEntry, type Person } from "./house";
+import { Oops, sendForm, signedOut, type LogEntry, type Person } from "./house";
 import type { Scene } from "@papershow/scene";
 import type { Source } from "./sources";
 
@@ -212,19 +212,14 @@ export const orderParty = (ids: string[]) => call("/api/party/order", "PUT", { i
 export const removeFromParty = (clipId: string) => call(`/api/party/clips/${clipId}`, "DELETE");
 
 /** A drawing or photo made at the party: kept with it, out of the house's library, and played next the first time. */
-export function putPartyImage(scene: Scene, files: { png: Blob; mono: Blob; bin: Blob }, photo = false) {
+export function putPartyImage(scene: Scene, files: { png: Blob; mono: Blob; bin: Blob }, photo = false, onSent?: (f: number) => void) {
   const form = new FormData();
   form.set("scene", JSON.stringify(scene));
   form.set("png", files.png);
   form.set("mono", files.mono);
   form.set("bin", files.bin);
   if (photo) form.set("photo", "1");
-  return fetch(`/api/party/images/${scene.id}`, { method: "PUT", body: form }).then(async (res) => {
-    if (res.status === 401) signedOut();
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Oops(json.error ?? `PUT party image → ${res.status}`, res.status, json);
-    return json as State;
-  });
+  return sendForm<State>("PUT", `/api/party/images/${scene.id}`, form, onSent);
 }
 
 async function get<T>(path: string): Promise<T> {

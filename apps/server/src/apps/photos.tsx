@@ -30,12 +30,17 @@ const sameDay = (a: number, b: Date) => {
 /** "21 October 2019". */
 const dateOf = (t: number) => new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 
-/** The label's words: the photo's name, when it was taken, or both. Empty when it has none to give. */
-function labelFor(label: string, name: string, taken: number | null) {
+/** "Jan 2025": en-US, because en-GB writes September as "Sept". */
+const monthOf = (t: number) => new Date(t).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+
+/** The label's words: the photo's name, when or where it was taken, or two of them. Empty when it has none to give. */
+function labelFor(label: string, name: string, taken: number | null, place: string | null) {
   const date = taken ? dateOf(taken) : "";
   if (label === "name") return name;
   if (label === "date") return date;
   if (label === "both") return [name, date].filter(Boolean).join(" · ");
+  if (label === "place") return place ?? "";
+  if (label === "place-month") return [place, taken ? monthOf(taken) : ""].filter(Boolean).join(" – ");
   return "";
 }
 
@@ -61,6 +66,7 @@ export default defineApp({
   defaults: { photos: [] as string[], order: "shuffle", every: "15m" as Every, label: "none" },
   // A getter: the photos to pick from are the library's, which come and go.
   get fields() {
+    const placed = allPhotos().some((p) => p.place);
     return [
       {
         key: "photos",
@@ -101,9 +107,18 @@ export default defineApp({
           { value: "none", label: "Nothing" },
           { value: "name", label: "Name" },
           { value: "date", label: "Date taken" },
-          { value: "both", label: "Both" },
+          { value: "both", label: "Name and date" },
+          // Only once a photo says where it was taken: until then there's no place to show.
+          ...(placed
+            ? [
+                { value: "place", label: "Place" },
+                { value: "place-month", label: "Place and month" },
+              ]
+            : []),
         ],
-        hint: "Small, on white, so it reads over any photo. The date is the camera's, when the photo has one.",
+        hint: placed
+          ? "Small, on white, so it reads over any photo. The date and place are the camera's, when the photo has them: Place and month reads like Braga – Jan 2025."
+          : "Small, on white, so it reads over any photo. The date is the camera's, when the photo has one.",
       },
     ] satisfies Field[];
   },
@@ -125,7 +140,7 @@ export default defineApp({
     }
     const turn = Math.floor(now.getTime() / (EVERY[config.every] ?? EVERY["15m"]));
     const id = pick(ids, turn, config.order === "order" ? "order" : "shuffle");
-    const label = labelFor(config.label, meta.get(id)?.name ?? "", meta.get(id)?.takenAt ?? null);
+    const label = labelFor(config.label, meta.get(id)?.name ?? "", meta.get(id)?.takenAt ?? null, meta.get(id)?.place ?? null);
     // Photos are framed and dithered when they're saved: the frame is the photo's own, as the panel shows it.
     const file = store.getImageFile(id, isOriginal() ? "png" : "mono");
     if (!file) return { src: null, label: "" };
