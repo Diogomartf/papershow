@@ -246,7 +246,7 @@ Environment=PANEL_PARTIAL=0
 
 ### How the panel client works
 
-- It long-polls `/live.bin`, so it redraws as soon as the show changes and never in between. When the same app changes (a clock ticking), it uses a quick partial refresh. A new picture, or every `PANEL_PARTIAL`-th tick, gets a full refresh to clear ghosting. Between frames the panel sleeps.
+- It long-polls `/live.bin`, so it redraws as soon as the show changes and never in between. When the same app changes a little (a clock ticking), it uses a quick partial refresh. A new picture (something else on air, or a quarter or more of the frame changing, like a Photos app's next photo) flashes black, then gets a full refresh, so no trace of the old one stays. Every `PANEL_PARTIAL`-th tick gets a full refresh too, to clear ghosting. Between frames the panel sleeps.
 - Once a day, as night begins, it deep-cleans the panel against ghosting: white, black, white, then the picture again. While asleep or away it skips the daily clean: the panel was cleaned as it went to sleep.
 - On every start, and whenever it wakes from Off or the night, it shows the logo and then the frame. That's `apps/panel/splash.png`, drawn by `apps/server/src/splash.tsx` (run `npx tsx src/splash.tsx` in `apps/server` after changing the logo).
 - If the server can't be reached, it keeps the current picture and retries every 30 s.
@@ -453,9 +453,9 @@ Response headers:
 - `ETag`: changes only when the pixels do.
 - `X-Next-Change`: seconds until the frame changes by itself, if it will.
 - `X-Sleep-Until`: while asleep or away, when the panel wakes (ms since epoch); `0` while away with no date set.
-- `X-Source`: what's on air, as `app:<id>`, `image:<id>`, or `invite` while an invite is up (not its code: `/live` is open to the whole network); a new one gets a full refresh.
+- `X-Source`: what's on air, as `app:<id>`, `image:<id>`, or `invite` while an invite is up (not its code: `/live` is open to the whole network); a new one is a new picture. The client also treats a frame as a new picture when a quarter or more of its pixels change (a Photos app's next photo), and flashes black before drawing a new picture with a full refresh, so nothing of the old one stays; smaller changes, like a clock's minute, get partial refreshes.
 - `X-Source-Name`: its name, URI-encoded (names can have accents), for logs.
-- `X-Show-Now`: while a Show now or an invite holds `/live`, when it ends (ms since epoch). A new value means someone just sent this picture: the panel client flashes black, then draws it with a full refresh.
+- `X-Show-Now`: while a Show now or an invite holds `/live`, when it ends (ms since epoch). A new value means someone just sent this picture: the panel client flashes black, then draws it with a full refresh, even when it's already up.
 
 Long-poll: send `?wait=1` with `If-None-Match: <etag>`. The server holds the request for up to 55 s and answers as soon as the frame changes, or with `304` if it didn't. A `204` means keep the last picture (asleep with "keep last picture"). Requests without `?e=` count as a display checking in, which the dashboard shows. The web app's own previews add `?e=`.
 
