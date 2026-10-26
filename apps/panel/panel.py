@@ -3,8 +3,9 @@
 
 It long-polls /live.bin and redraws only when the ETag changes, so the server decides when
 the picture changes and the panel never flashes for nothing. Waking from Off or the night
-shows the logo first, then the picture. A picture sent with Show now (X-Show-Now) gets a
-black flash first, to wipe the old one off clean. See "The panel's contract" in the README.
+shows the logo first, then the picture. A new picture (a new source, Show now, or most of the
+frame changing, like a Photos app moving to its next photo) gets a black flash first, to wipe
+the old one off clean. See "The panel's contract" in the README.
 
   PAPERSHOW_URL   server to follow (http://localhost:5194)
   PANEL_PARTIAL   quick partial refreshes in a row before a full one (10; 0 = always full)
@@ -22,7 +23,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 W, H = 800, 480
 URL = os.environ.get("PAPERSHOW_URL", "http://localhost:5194").rstrip("/") + "/live.bin?wait=1"
@@ -31,6 +32,9 @@ ROTATE = int(os.environ.get("PANEL_ROTATE", "0"))
 CLEAN_HOUR = int(os.environ.get("PANEL_CLEAN_HOUR", "3"))
 CLEAN_EVERY = 20 * 3600  # at most one deep clean per night, even if night starts before midnight
 OUT = os.environ.get("PANEL_OUT")
+# Share of pixels that must change for a frame to count as a new picture rather than a tick.
+# A clock's minute changes up to a tenth (its digits shift as they change); one photo to the next, about half.
+NEW_PICTURE = 0.25
 
 log = logging.getLogger("panel")
 
@@ -97,6 +101,11 @@ class FilePanel:
         pass
 
 
+def changed(a, b):
+    """The share of pixels that differ between two frames."""
+    return ImageChops.logical_xor(a, b).histogram()[255] / (W * H)
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     panel = FilePanel(OUT) if OUT else Panel()
@@ -132,29 +141,35 @@ def main():
 
         if status == 200 and len(body) == W * H // 8:
             # /live.bin is 1 bit per pixel, MSB first, 1 = white: exactly PIL's raw "1" layout.
+            was = logo if woke else img
             img = Image.frombytes("1", (W, H), body).rotate(ROTATE)
             if clean:
                 panel.clean()
                 log.info("cleaned the panel")
             new_source = headers.get("X-Source")
-            # Show now: a new value means someone just sent this picture. Flash first, once per send.
-            # Not after the logo: that frame is the intro, and a black flash would replace it.
+            # Show now: a new value means someone just sent this picture.
             show_now = headers.get("X-Show-Now")
-            flash = show_now is not None and show_now != shown_now and not clean and not woke
+            sent = show_now is not None and show_now != shown_now
             shown_now = show_now
+            # A clock ticking over changes a few digits and suits a partial refresh. A new source, or
+            # the same app with a whole new frame (a Photos app's next photo), is a new picture: a
+            # plain full refresh leaves traces of the old one, so flash black first, once per picture.
+            # Not after a clean, which already drove every pixel, nor after the logo (on start or
+            # waking): that frame is the intro, and a black flash would replace it.
+            new_picture = sent or new_source is None or new_source != source or was is None or changed(was, img) > NEW_PICTURE
+            flash = new_picture and not clean and not woke and was is not None
             if woke:
                 panel.show(logo, True)
                 log.info("drew the logo")
-            # A clock ticking over is the same source and suits a partial refresh. A new picture
-            # gets a full one, and so does every PARTIAL-th tick, to clear the ghosting.
-            full = clean or flash or new_source is None or new_source != source or partials >= PARTIAL
+            # Every PARTIAL-th tick also gets a full refresh, to clear the ghosting partials leave.
+            full = clean or new_picture or partials >= PARTIAL
             panel.show(img, full, flash)
             partials = 0 if full else partials + 1
             etag, source = headers.get("ETag"), new_source
             # The name, when the server sends one, so the log says what's up and not just its id.
             name = urllib.parse.unquote(headers.get("X-Source-Name") or "")
             what = f"{name} ({new_source})" if name and new_source else new_source or "frame"
-            log.info("drew %s (%s refresh%s)", what, "full" if full else "partial", ", flashed for Show now" if flash else "")
+            log.info("drew %s (%s refresh%s)", what, "full" if full else "partial", ", flashed" if flash else "")
             continue
 
         # No new frame: if it's time, clean and put the same picture back.
