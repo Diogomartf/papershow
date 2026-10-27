@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Draw, type DrawHandle, type Stroke } from "drawesome";
+import { Draw, PENS, type DrawHandle, type Stroke } from "drawesome";
 import "drawesome/styles.css";
 import "@fontsource-variable/inter";
 import { PANEL, PHOTO_FILL, type PhotoAt, type Scene, type TextItem } from "@papershow/scene";
@@ -15,6 +15,7 @@ import { LightSwitch } from "./LightSwitch";
 import { MeMenu } from "./MeMenu";
 import { TextLayer } from "./TextLayer";
 import { PhotoLayer } from "./PhotoLayer";
+import { SelectLayer, type Arrangement } from "./SelectLayer";
 import { PhotoPicker } from "./PhotoPicker";
 import { shortId } from "./id";
 import { cue, DONE, type Cue } from "./sound";
@@ -26,6 +27,9 @@ const SWATCHES = ["#111111", "#555555", "#999999", "#d4d4d4", "#ffffff", "#e5484
 const SWATCHES_EINK = ["#000000", "#ffffff"];
 
 const UNTITLED = "Untitled";
+
+/** The pens' and the eraser's own keys: pressing one goes back to drawing. */
+const PEN_KEYS = [...PENS.map((p) => p.key), "e"];
 
 /** How long Show now holds the panel, in seconds. A quick doodle is up for five minutes unless you pick otherwise. */
 const SHOW_FOR = [
@@ -113,6 +117,8 @@ export default function App() {
   const [typing, setTyping] = useState(false);
   // Photo mode: dragging on the panel moves and resizes the photo instead of drawing.
   const [placing, setPlacing] = useState(false);
+  // Select mode: dragging on the panel picks strokes and texts up, to move and scale them.
+  const [selecting, setSelecting] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   const narrow = useNarrow();
   const [showFor, setShowFor] = useState(savedShowFor);
@@ -182,6 +188,12 @@ export default function App() {
     setScene((s) => (s ? { ...s, photoAt, updatedAt: Date.now() } : s));
   }, []);
 
+  // Moved and scaled in Select: the pens and the scene change together, in one render, so nothing jumps.
+  const onArrange = useCallback(({ strokes, texts }: Arrangement) => {
+    draw.current?.setStrokes(strokes);
+    setScene((s) => (s ? { ...s, strokes, texts, name: nameEdited.current ? s.name : nameFromText(texts), updatedAt: Date.now() } : s));
+  }, []);
+
   const onTexts = useCallback((texts: TextItem[]) => {
     setScene((s) => (s ? { ...s, texts, name: nameEdited.current ? s.name : nameFromText(texts), updatedAt: Date.now() } : s));
   }, []);
@@ -195,6 +207,7 @@ export default function App() {
       if ((e.target as HTMLElement).closest('[class*="Draw_toolbar"]')) {
         setTyping(false);
         setPlacing(false);
+        setSelecting(false);
       }
     };
     el.addEventListener("pointerdown", onDown, true);
@@ -318,6 +331,7 @@ export default function App() {
     setScene(adopt(s));
     draw.current?.setStrokes(s.strokes);
     setPlacing(false);
+    setSelecting(false);
     setGalleryOpen(false);
   };
 
@@ -328,6 +342,7 @@ export default function App() {
     setScene(s);
     setTyping(false);
     setPlacing(false);
+    setSelecting(false);
     draw.current?.setStrokes([]);
   };
 
@@ -346,10 +361,21 @@ export default function App() {
         cue("toggle");
         setTyping((t) => !t);
         setPlacing(false);
+        setSelecting(false);
       }
+      // V for select, as in Figma.
+      if (e.key.toLowerCase() === "v") {
+        cue("toggle");
+        setSelecting((v) => !v);
+        setTyping(false);
+        setPlacing(false);
+      }
+      // A pen's own key picks the pen up, so it draws again.
+      if (PEN_KEYS.includes(e.key.toLowerCase())) setSelecting(false);
       if (e.key === "Escape") {
         setTyping(false);
         setPlacing(false);
+        setSelecting(false);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -396,10 +422,26 @@ export default function App() {
           <LightSwitch />
           <button
             className="ghost text-toggle"
+            aria-pressed={selecting}
+            onClick={() => {
+              setSelecting((v) => !v);
+              setTyping(false);
+              setPlacing(false);
+            }}
+            title={selecting ? "Back to drawing (Esc)" : "Select, move and scale what's drawn (V)"}
+          >
+            <svg className="select-glyph" viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+              <path d="M3 2l9.5 5.2-4.2 1.1 2.6 4.6-1.7 1-2.6-4.6L3.5 12.5z" fill="currentColor" />
+            </svg>{" "}
+            <span className="text-label">Select</span>
+          </button>
+          <button
+            className="ghost text-toggle"
             aria-pressed={typing}
             onClick={() => {
               setTyping((t) => !t);
               setPlacing(false);
+              setSelecting(false);
             }}
             title={typing ? "Back to drawing (Esc)" : "Type on the panel (T)"}
           >
@@ -416,6 +458,7 @@ export default function App() {
                 onClick={() => {
                   setPlacing((p) => !p);
                   setTyping(false);
+                  setSelecting(false);
                 }}
                 title={placing ? "Back to drawing (Esc)" : "Move, resize or turn the photo"}
               >
@@ -544,13 +587,22 @@ export default function App() {
               inset={narrow ? -88 : -102}
             />
             <TextLayer texts={scene.texts ?? []} onChange={onTexts} active={typing} />
+            <SelectLayer
+              strokes={scene.strokes}
+              texts={scene.texts ?? []}
+              onChange={onArrange}
+              active={selecting}
+              onDone={() => setSelecting(false)}
+            />
             <canvas ref={preview} className="eink" data-on={view === "eink"} aria-hidden />
           </div>
           <span className="ribbon" aria-hidden />
         </div>
         <div className="shelf" aria-hidden>
           <span className="engraving">
-            {placing
+            {selecting
+              ? "Drag a box to select · drag a corner to scale · ⌘Z to undo · Esc to draw"
+              : placing
               ? "Drag to move · pinch or scroll to resize · Esc to draw"
               : typing ? "Click to type · drag to move · Esc to draw" : `Waveshare 7.5″ · ${scene.width}×${scene.height} · 1-bit`}
           </span>
