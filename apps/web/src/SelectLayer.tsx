@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { eraseLayers, type Stroke } from "drawesome";
+import { eraseLayers, type DrawHandle, type Stroke } from "drawesome";
 import { PANEL, TEXT_FONT, TEXT_LINE, type TextItem } from "@papershow/scene";
 import { cue } from "./sound";
 
@@ -51,6 +51,9 @@ const union = (boxes: Box[]): Box | null =>
     ? boxes.reduce((a, b) => ({ x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) }))
     : null;
 
+/** The same things in the same order, even if not the same list. */
+const same = <T,>(a: T[], b: T[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+
 const overlaps = (a: Box, b: Box) => a.x0 <= b.x1 && b.x0 <= a.x1 && a.y0 <= b.y1 && b.y0 <= a.y1;
 const inside = (b: Box, x: number, y: number) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
 
@@ -86,19 +89,22 @@ function distance(s: Stroke, x: number, y: number): number {
 /**
  * Picking things on the drawing up, as in Figma. While `active`, a drag on the panel draws a box and selects every
  * stroke and text it touches, a click selects the one under it (Shift adds), and the selection can be dragged to
- * move it or by a corner to scale it. Each change is one step for ⌘Z or the Undo button, and goes to `onChange` once,
+ * move it or by a corner to scale it. Each change is one step for ⌘Z or the pens' Undo button, and goes to `onChange` once,
  * when the pointer lets go: while it moves, the strokes and texts on the page are only transformed in place.
  */
 export function SelectLayer({
   strokes,
   texts,
   onChange,
+  pens,
   active,
   onDone,
 }: {
   strokes: Stroke[];
   texts: TextItem[];
   onChange: (next: Arrangement) => void;
+  /** The pens' drawing. Strokes change through it, so its own undo stays one step per change made here. */
+  pens: React.RefObject<DrawHandle | null>;
   active: boolean;
   onDone: () => void;
 }) {
@@ -139,7 +145,7 @@ export function SelectLayer({
     // The drawing caught up with the drag: the page draws it there itself now, so the stand-in transforms go.
     unmove();
     // Something else changed the drawing (a pen, the text tool, the toolbar's undo): this layer's steps no longer apply.
-    if (mine.current && (mine.current.strokes !== strokes || mine.current.texts !== texts)) {
+    if (mine.current && (!same(mine.current.strokes, strokes) || mine.current.texts !== texts)) {
       setPast([]);
       setFuture([]);
     }
@@ -229,11 +235,12 @@ export function SelectLayer({
     }
   };
 
-  /** Changes the drawing, as one step back. */
+  /** Changes the drawing, as one step back. The pens hear of it only when their strokes changed. */
   const commit = (next: Arrangement) => {
     setPast((h) => [...h, now]);
     setFuture([]);
     mine.current = next;
+    if (!same(next.strokes, now.strokes)) pens.current?.setStrokes(next.strokes);
     onChange(next);
   };
 
@@ -275,22 +282,26 @@ export function SelectLayer({
     setPicked(nothing());
   };
 
-  const undo = () => {
+  /** One step back. `quiet` when the button pressed already made its sound. */
+  const undo = (quiet = false) => {
     const prev = past.at(-1);
     if (!prev) return;
-    cue(["navigate", { emphasis: "subtle", direction: "back" }]);
+    if (!quiet) cue(["navigate", { emphasis: "subtle", direction: "back" }]);
     setPast(past.slice(0, -1));
     setFuture([now, ...future]);
     mine.current = prev;
+    // The strokes go back through the pens' own undo, which took this change as one step.
+    if (!same(prev.strokes, now.strokes)) pens.current?.undo();
     onChange(prev);
   };
-  const redo = () => {
+  const redo = (quiet = false) => {
     const next = future[0];
     if (!next) return;
-    cue(["navigate", { emphasis: "subtle", direction: "forward" }]);
+    if (!quiet) cue(["navigate", { emphasis: "subtle", direction: "forward" }]);
     setFuture(future.slice(1));
     setPast([...past, now]);
     mine.current = next;
+    if (!same(next.strokes, now.strokes)) pens.current?.redo();
     onChange(next);
   };
 
@@ -332,6 +343,25 @@ export function SelectLayer({
     };
     addEventListener("keydown", onKey, true);
     return () => removeEventListener("keydown", onKey, true);
+  });
+
+  // The pens' Undo and Redo buttons step through what was moved and scaled here too, texts and all, while there's
+  // any of it; otherwise they do their own.
+  useEffect(() => {
+    const panel = layer.current?.closest(".panel");
+    if (!active || !panel) return;
+    const onClick = (e: Event) => {
+      const button = (e.target as HTMLElement).closest('[class*="Draw_toolbar"] button[aria-label="Undo"], [class*="Draw_toolbar"] button[aria-label="Redo"]');
+      if (!button) return;
+      const back = button.getAttribute("aria-label") === "Undo";
+      if (!(back ? past.length : future.length)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (back) undo(true);
+      else redo(true);
+    };
+    panel.addEventListener("click", onClick, true);
+    return () => panel.removeEventListener("click", onClick, true);
   });
 
   const onDown = (e: React.PointerEvent) => {
@@ -461,12 +491,6 @@ export function SelectLayer({
         device &&
         createPortal(
           <div className="photo-tools select-tools" onPointerDown={(e) => e.stopPropagation()}>
-            <button data-quiet onClick={undo} disabled={!past.length} aria-label="Undo" title="Undo (⌘Z)">
-              <span aria-hidden>↶</span>
-            </button>
-            <button data-quiet onClick={redo} disabled={!future.length} aria-label="Redo" title="Redo (⇧⌘Z)">
-              <span aria-hidden>↷</span>
-            </button>
             <button onClick={() => scaleBy(1 / STEP)} disabled={empty(picked)} aria-label="Smaller" title="Smaller">
               <span aria-hidden>−</span>
             </button>

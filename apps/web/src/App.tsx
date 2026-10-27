@@ -188,9 +188,8 @@ export default function App() {
     setScene((s) => (s ? { ...s, photoAt, updatedAt: Date.now() } : s));
   }, []);
 
-  // Moved and scaled in Select: the pens and the scene change together, in one render, so nothing jumps.
+  // Moved and scaled in Select, which has already told the pens: the scene changes in the same render, so nothing jumps.
   const onArrange = useCallback(({ strokes, texts }: Arrangement) => {
-    draw.current?.setStrokes(strokes);
     setScene((s) => (s ? { ...s, strokes, texts, name: nameEdited.current ? s.name : nameFromText(texts), updatedAt: Date.now() } : s));
   }, []);
 
@@ -204,7 +203,9 @@ export default function App() {
     const el = panel.current;
     if (!el) return;
     const onDown = (e: PointerEvent) => {
-      if ((e.target as HTMLElement).closest('[class*="Draw_toolbar"]')) {
+      const target = e.target as HTMLElement;
+      // Undo and Redo leave Select on: they step back through what was moved there.
+      if (target.closest('[class*="Draw_toolbar"]') && !target.closest('button[aria-label="Undo"], button[aria-label="Redo"]')) {
         setTyping(false);
         setPlacing(false);
         setSelecting(false);
@@ -591,6 +592,7 @@ export default function App() {
               strokes={scene.strokes}
               texts={scene.texts ?? []}
               onChange={onArrange}
+              pens={draw}
               active={selecting}
               onDone={() => setSelecting(false)}
             />
