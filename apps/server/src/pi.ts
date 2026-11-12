@@ -23,6 +23,9 @@ export type Sample = {
   warn: boolean;
 };
 
+/** A day's temperature in short, for the month chart. */
+export type DayTemp = { day: string; at: number; avg: number; min: number; max: number; checks: number; hot: number };
+
 export type Service = "server" | "panel" | "update" | "name";
 /** How a line reads at a glance, as paper:logs colours it (deploy/pi/logs.py). */
 export type Tone = "bad" | "warn" | "good" | "plain";
@@ -70,6 +73,8 @@ export type PiReport = {
   keepsLogs: boolean;
   now: Now;
   health: Sample[];
+  /** With `span: "month"`: the 30 days up to `day`, one summary each, oldest first. Days with no checks are left out. */
+  days: DayTemp[] | null;
   lines: Line[];
   /** The chosen days may hold older lines than these: ask again with `before: cursor`. */
   more: boolean;
@@ -149,11 +154,35 @@ export function parseHealth(message: string, at: number, priority: number): Samp
   };
 }
 
-async function healthFor(day: string): Promise<Sample[]> {
+/** The days a month chart shows: 30, up to and including `day`. */
+export const MONTH = 30;
+
+/** Each day's checks in short: the average, the low and high, and how many were hot or throttled. */
+export function summarize(samples: Sample[]): DayTemp[] {
+  const byDay = new Map<string, Sample[]>();
+  for (const s of samples) {
+    const d = dayOf(s.at);
+    byDay.set(d, [...(byDay.get(d) ?? []), s]);
+  }
+  return [...byDay].sort(([a], [b]) => (a < b ? -1 : 1)).map(([day, xs]) => {
+    const temps = xs.map((s) => s.tempC);
+    return {
+      day,
+      at: startOf(day),
+      avg: Math.round((temps.reduce((a, b) => a + b, 0) / temps.length) * 10) / 10,
+      min: Math.min(...temps),
+      max: Math.max(...temps),
+      checks: xs.length,
+      hot: xs.filter((s) => s.warn).length,
+    };
+  });
+}
+
+async function healthFor(day: string, last = day): Promise<Sample[]> {
   const out = await run("journalctl", [
     "_SYSTEMD_UNIT=papershow-health.service",
     "--since", `${day} 00:00:00`,
-    "--until", `${nextDay(day)} 00:00:00`,
+    "--until", `${nextDay(last)} 00:00:00`,
     "-o", "json", "--output-fields=MESSAGE,PRIORITY", "--no-pager",
   ]);
   return entries(out).flatMap((e) => {
@@ -282,7 +311,16 @@ async function unitProps(unit: string, props: string[]) {
   if (!out) return null;
   return Object.fromEntries(out.split("\n").filter(Boolean).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]));
 }
-const when = (s: string | undefined) => (s && s !== "n/a" && !Number.isNaN(Date.parse(s)) ? Date.parse(s) : null);
+/**
+ * A systemctl time, such as "Wed 2026-11-12 18:00:00 WET", in ms. JavaScript can't read that form, so the date and
+ * time are taken out and read as this machine's local time, which is the zone systemctl wrote them in.
+ */
+function when(s: string | undefined) {
+  const m = s?.match(/(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d)/);
+  if (!m) return null;
+  const t = new Date(`${m[1]}T${m[2]}`).getTime();
+  return Number.isNaN(t) ? null : t;
+}
 
 async function readNow(): Promise<Now> {
   const [temp, throttled, wireless, loadavg, meminfo, uptime, disk, panel, update, v] = await Promise.all([
@@ -350,6 +388,8 @@ let hasJournal: boolean | null = null;
 /** The Pi page's report for `day` (today by default). `before` pages back through that day's lines. */
 export async function piReport(opts: {
   day?: string;
+  /** "month" also sends the 30 days up to `day`, a summary each. */
+  span?: "day" | "month";
   from?: string;
   to?: string;
   before?: number;
@@ -374,14 +414,18 @@ export async function piReport(opts: {
     limit: Math.min(Math.max(opts.limit ?? 150, 1), 500),
   };
   hasJournal ??= (await run("journalctl", ["--version"])) !== null;
-  if (!hasJournal) return standIn(day, today, lineOpts);
+  const month = opts.span === "month" && !opts.before;
+  if (!hasJournal) return standIn(day, today, lineOpts, month);
   const [now, health, page, first] = await Promise.all([
     readNow(),
-    opts.before ? Promise.resolve([]) : healthFor(day),
+    opts.before ? Promise.resolve([]) : healthFor(month ? shiftDays(day, 1 - MONTH) : day, day),
     linesFor(lineOpts),
     journalStart(),
   ]);
-  return { sample: false, day, today, firstDay: first, keepsLogs: existsSync("/var/log/journal"), now, health, ...page, ...dayBounds(day) };
+  // The month's checks, summed up a day each; the chart's own day keeps every check.
+  const days = month ? summarize(health) : null;
+  const dayHealth = month ? health.filter((s) => dayOf(s.at) === day) : health;
+  return { sample: false, day, today, firstDay: first, keepsLogs: existsSync("/var/log/journal"), now, health: dayHealth, days, ...page, ...dayBounds(day) };
 }
 
 // ── Stand-in, off the Pi ───────────────────────────────────────────────────
@@ -438,8 +482,11 @@ function sampleLines(day: string): Line[] {
 }
 
 /** Readings for working on the page off the Pi, marked as a sample. */
-function standIn(day: string, today: string, opts: LineOpts): PiReport {
+function standIn(day: string, today: string, opts: LineOpts, month: boolean): PiReport {
   const health = healthSamples(day);
+  const monthDays = month
+    ? summarize(Array.from({ length: MONTH }, (_, i) => healthSamples(shiftDays(day, i + 1 - MONTH))).flat())
+    : null;
   const firstDay = dayOf(Date.now() - 6 * 86_400_000);
   const days: string[] = [];
   for (let d = opts.to; d >= opts.from && d >= firstDay; d = shiftDays(d, -1)) days.push(d);
@@ -475,9 +522,32 @@ function standIn(day: string, today: string, opts: LineOpts): PiReport {
       version: "v0.4.0 (sample)",
     },
     health: opts.before ? [] : health,
+    days: monthDays,
     lines: lines.slice(0, opts.limit),
     more: lines.length > opts.limit,
     cursor: lines.length > opts.limit ? lines[opts.limit - 1].at : null,
     ...dayBounds(day),
   };
 }
+
+// ── Restarts ───────────────────────────────────────────────────────────────
+
+export type Restart = "panel" | "pi";
+
+/**
+ * Restarts the panel client, or the whole Pi. The server runs as the install's user, so these go through sudo, which
+ * install.sh allows for exactly these two commands (deploy/pi/sudoers). A reboot waits a moment, so the answer gets
+ * back to the page first. Returns why it can't, or null once it's under way.
+ */
+export async function restart(what: Restart): Promise<string | null> {
+  if (!existsSync("/etc/systemd/system/papershow.service")) return "This server isn't on a Pi";
+  const args = what === "pi" ? ["/usr/bin/systemctl", "reboot"] : ["/usr/bin/systemctl", "restart", "papershow-panel"];
+  // -l asks whether it's allowed without doing it: a Pi installed before the rule says so instead of half-working.
+  if ((await run("sudo", ["-n", "-l", ...args])) === null) return "This Pi doesn't let Papershow restart it yet. Run paper:update on it";
+  if (what === "pi") {
+    setTimeout(() => execFile("sudo", ["-n", ...args], () => {}), 1500);
+    return null;
+  }
+  return (await run("sudo", ["-n", ...args], 30_000)) === null ? "The panel didn't restart. paper:logs panel says why" : null;
+}
+

@@ -32,6 +32,11 @@ if [ -d /etc/papershow ]; then
   echo "Removed the release keys."
 fi
 
+if [ -f /etc/sudoers.d/papershow ]; then
+  sudo rm -f /etc/sudoers.d/papershow
+  echo "Removed the sudo rule for the Pi page's Restart buttons."
+fi
+
 if [ -f /etc/NetworkManager/conf.d/papershow-wifi.conf ]; then
   sudo rm -f /etc/NetworkManager/conf.d/papershow-wifi.conf
   sudo systemctl reload NetworkManager

@@ -6,7 +6,8 @@ import { LiveLink } from "./LiveLink";
 import { MeMenu } from "./MeMenu";
 import { Nav } from "./Nav";
 import { useNow } from "./live";
-import { getPi, type PiLine, type PiReport, type PiSample, type PiService } from "./house";
+import { getPi, reason, restartPi, useMe, type PiLine, type PiReport, type PiSample, type PiService } from "./house";
+import { cue } from "./sound";
 
 /** The Pi 5 slows itself down here; health.sh warns from 75°C. */
 const THROTTLE_C = 80;
@@ -50,6 +51,8 @@ const signal = (dbm: number) => (dbm >= -55 ? "excellent" : dbm >= -67 ? "good" 
 export function Pi() {
   const params = new URLSearchParams(location.search);
   const [day, setDay] = useState<string | null>(() => params.get("day"));
+  // The chart: one day's checks, or the 30 days up to it, a day each.
+  const [span, setSpan] = useState<"day" | "month">(() => (params.get("span") === "month" ? "month" : "day"));
   // The logs' own days, first and last; null follows the chart's day.
   const [range, setRange] = useState<{ from: string; to: string } | null>(() => {
     const from = params.get("from");
@@ -74,6 +77,9 @@ export function Pi() {
   const olderPending = useRef(false);
   const [paged, setPaged] = useState(false);
   const [failed, setFailed] = useState(false);
+  const isAdmin = useMe().me.role === "admin";
+  // After Restart the Pi: waiting for it to come back, then back for a moment.
+  const [back, setBack] = useState<"waiting" | "back" | null>(null);
 
   useEffect(() => {
     document.title = "Pi · Papershow";
@@ -84,6 +90,7 @@ export function Pi() {
     if (!report) return;
     const p = new URLSearchParams();
     if (report.day !== report.today) p.set("day", report.day);
+    if (span === "month") p.set("span", "month");
     if (range) {
       p.set("from", range.from);
       p.set("to", range.to);
@@ -91,7 +98,7 @@ export function Pi() {
     if (q) p.set("q", q);
     const url = p.size ? `/pi?${p}` : "/pi";
     if (location.pathname + location.search !== url) history.replaceState(history.state, "", url);
-  }, [report, range, q]);
+  }, [report, range, q, span]);
 
   const filters = useMemo(
     () => ({ service: service ?? undefined, problems: problems ? (1 as const) : undefined, q: q || undefined, from: range?.from, to: range?.to }),
@@ -102,7 +109,7 @@ export function Pi() {
   const asked = useRef(0);
   const load = useCallback(() => {
     const n = ++asked.current;
-    return getPi({ day: day ?? undefined, ...filters, limit: PAGE }).then(
+    return getPi({ day: day ?? undefined, span: span === "month" ? "month" : undefined, ...filters, limit: PAGE }).then(
         (r) => {
           if (n !== asked.current) return;
           setReport(r);
@@ -114,11 +121,31 @@ export function Pi() {
         },
         () => n === asked.current && setFailed(true),
       );
-  }, [day, filters]);
+  }, [day, span, filters]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // While the Pi restarts, ask every 5 s. The first answer after it went away means it's back.
+  const wentAway = useRef(false);
+  useEffect(() => {
+    if (back !== "waiting") return;
+    wentAway.current = false;
+    const t = setInterval(() => {
+      getPi({ limit: 1 }).then(
+        () => {
+          if (!wentAway.current) return;
+          setBack("back");
+          cue("success");
+          load();
+          setTimeout(() => setBack((b) => (b === "back" ? null : b)), 6000);
+        },
+        () => (wentAway.current = true),
+      );
+    }, 5000);
+    return () => clearInterval(t);
+  }, [back, load]);
 
   // Today's keeps coming, unless older lines are open: they'd be pulled out from under you.
   const live = !!report && report.day === report.today && (!range || range.to === report.today) && !paged;
@@ -197,11 +224,25 @@ export function Pi() {
         )}
 
         {report && <NowTiles report={report} />}
+        {report && isAdmin && !report.sample && <Restarts onPi={() => setBack("waiting")} />}
+        {back && (
+          <p className="pi-note" data-back={back} role="status">
+            {back === "waiting" ? "The Pi is restarting. This page picks up again when it's back, in about a minute." : "The Pi is back. ✓"}
+          </p>
+        )}
 
         <section className="people-section">
           <div className="section-head">
             <h2>Temperature</h2>
             <div className="pi-day">
+              <div className="log-filter pi-span" role="radiogroup" aria-label="How long">
+                <button role="radio" aria-checked={span === "day"} onClick={() => setSpan("day")}>
+                  Day
+                </button>
+                <button role="radio" aria-checked={span === "month"} onClick={() => setSpan("month")}>
+                  30 days
+                </button>
+              </div>
               <button className="ghost" onClick={() => go(shiftDay(shown, -1))} disabled={!shown || (!!first && shown <= first)} aria-label="The day before">
                 ‹
               </button>
@@ -231,13 +272,27 @@ export function Pi() {
               )}
             </div>
           </div>
-          {report && <TempChart report={report} samples={report.day === shown ? report.health : []} />}
+          {report &&
+            (span === "month" ? (
+              report.days ? (
+                <MonthChart report={report} onDay={(d) => (setSpan("day"), go(d))} />
+              ) : (
+                <div className="pi-chart pi-chart-empty" />
+              )
+            ) : (
+              <TempChart report={report} samples={report.day === shown ? report.health : []} />
+            ))}
         </section>
 
         <section className="people-section">
           <h2>Logs</h2>
           <div className="pi-search-row">
-            <input
+            <label className="pi-search-box">
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden>
+                <circle cx="7" cy="7" r="4.75" fill="none" stroke="currentColor" strokeWidth="1.75" />
+                <path d="M10.5 10.5 14 14" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+              </svg>
+              <input
               className="pi-search"
               type="search"
               placeholder="Search the logs"
@@ -246,6 +301,7 @@ export function Pi() {
               aria-label="Search the logs"
               spellCheck={false}
             />
+            </label>
             <div className="pi-range">
               <div role="radiogroup" aria-label="Which days" className="log-filter">
                 {RANGES.map((r, i) => (
@@ -271,7 +327,8 @@ export function Pi() {
           <div className="log-filter pi-filter">
             <div role="radiogroup" aria-label="Which service" className="log-filter">
               {SERVICES.map((s) => (
-                <button key={s.label} role="radio" aria-checked={service === s.key} onClick={() => setService(s.key)}>
+                <button key={s.label} role="radio" aria-checked={service === s.key} data-service={s.key ?? undefined} onClick={() => setService(s.key)}>
+                  {s.key && <span className="pi-dot" aria-hidden />}
                   {s.label}
                 </button>
               ))}
@@ -302,7 +359,7 @@ export function Pi() {
                   )}
                   {hms(l.at / 1000, report?.tz ?? "UTC")}
                 </time>
-                <span className="pi-service">{l.service}</span>
+                <span className="pi-service" data-service={l.service}>{l.service}</span>
                 <span className="pi-message">{q ? <Marked text={l.message} q={q} /> : l.message}</span>
               </li>
             ))}
@@ -336,34 +393,109 @@ function Marked({ text, q }: { text: string; q: string }) {
   return <>{parts}</>;
 }
 
+type Level = "bad" | "warn";
+type Tile = { label: string; value: string; note?: string; level?: Level };
+
+/** The worse of two levels, or none. */
+const worse = (...ls: (Level | false | undefined)[]) => (ls.includes("bad") ? "bad" : ls.includes("warn") ? "warn" : undefined);
+
+/**
+ * The Pi now, a card a reading. A card that needs a look is amber; one where something's wrong is red, and says why.
+ * The thresholds follow health.sh (75°C is a warning, 80°C the Pi slows down) and what keeps the panel up.
+ */
+/** Admins: restart the panel client, or the whole Pi. Each asks once more before it goes. */
+function Restarts({ onPi }: { onPi: () => void }) {
+  const [sure, setSure] = useState<"panel" | "pi" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState<string | null>(null);
+  const go = async (what: "panel" | "pi") => {
+    setBusy(true);
+    setSaid(null);
+    try {
+      await restartPi(what);
+      if (what === "pi") onPi();
+      else {
+        setSaid("The panel restarted. It redraws in a moment.");
+        cue("success");
+      }
+    } catch (err) {
+      setSaid(reason(err, "That didn't work"));
+      cue("error");
+    } finally {
+      setBusy(false);
+      setSure(null);
+    }
+  };
+  const ask = (what: "panel" | "pi", label: string, question: string, yes: string) =>
+    sure === what ? (
+      <span className="pi-confirm">
+        <span>{question}</span>
+        <button className="danger" onClick={() => go(what)} disabled={busy}>
+          {busy ? "…" : yes}
+        </button>
+        <button className="ghost" onClick={() => setSure(null)} disabled={busy}>
+          Cancel
+        </button>
+      </span>
+    ) : (
+      <button className="ghost" onClick={() => setSure(what)} disabled={busy || sure !== null}>
+        {label}
+      </button>
+    );
+  return (
+    <div className="pi-restarts">
+      {ask("panel", "Restart the panel", "Restart the panel? It redraws.", "Restart")}
+      {ask("pi", "Restart the Pi", "Restart the Pi? Papershow is gone for about a minute.", "Restart the Pi")}
+      {said && <span className="muted">{said}</span>}
+    </div>
+  );
+}
+
 function NowTiles({ report }: { report: PiReport }) {
   const { now, health } = report;
   const today = report.day === report.today;
   const temps = health.map((s) => s.tempC);
   const avg = temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : null;
-  const tiles: { label: string; value: string; note?: string; bad?: boolean }[] = [
+  const hot = health.filter((s) => s.warn).length;
+  const throttledNow = now.throttle.some((n) => n.endsWith("now"));
+  const diskShare = now.diskFreeGb !== null && now.diskTotalGb ? now.diskFreeGb / now.diskTotalGb : null;
+  const tiles: Tile[] = [
     {
       label: "Now",
       value: now.tempC !== null ? `${now.tempC.toFixed(1)}°C` : "–",
       note: now.throttle.length ? now.throttle.join(", ") : now.tempC !== null ? `slows down at ${THROTTLE_C}°C` : undefined,
-      bad: now.throttle.length > 0 || (now.tempC ?? 0) >= 75,
+      level: worse(
+        (throttledNow || (now.tempC ?? 0) >= 75) && "bad",
+        (now.throttle.length > 0 || (now.tempC ?? 0) >= 70) && "warn",
+      ),
     },
     {
       label: today ? "Average today" : "Average that day",
       value: avg !== null ? `${avg.toFixed(1)}°C` : "–",
-      note: temps.length ? `${Math.min(...temps).toFixed(1)}–${Math.max(...temps).toFixed(1)}°C, ${temps.length} checks` : "no checks",
+      note: hot
+        ? `${hot} hot or throttled ${hot === 1 ? "check" : "checks"}`
+        : temps.length
+          ? `${Math.min(...temps).toFixed(1)}–${Math.max(...temps).toFixed(1)}°C, ${temps.length} checks`
+          : "no checks",
+      level: worse((avg ?? 0) >= 75 && "bad", ((avg ?? 0) >= 70 || hot > 0) && "warn"),
     },
-    { label: "Wi-Fi", value: now.wifiDbm !== null ? `${now.wifiDbm} dBm` : "off", note: now.wifiDbm !== null ? signal(now.wifiDbm) : "on a cable?", bad: (now.wifiDbm ?? 0) < -75 },
+    {
+      label: "Wi-Fi",
+      value: now.wifiDbm !== null ? `${now.wifiDbm} dBm` : "off",
+      note: now.wifiDbm !== null ? signal(now.wifiDbm) : "on a cable?",
+      level: now.wifiDbm === null ? undefined : worse(now.wifiDbm < -75 && "bad", now.wifiDbm < -67 && "warn"),
+    },
     {
       label: "Memory free",
       value: now.memFreeGb !== null ? `${now.memFreeGb} GB` : "–",
       note: now.memTotalGb !== null ? `of ${now.memTotalGb} GB · load ${now.load ?? "–"}` : undefined,
+      level: now.memFreeGb === null ? undefined : worse(now.memFreeGb < 0.5 && "bad", (now.memFreeGb < 1 || (now.load ?? 0) >= 4) && "warn"),
     },
     {
       label: "Disk free",
       value: now.diskFreeGb !== null ? `${now.diskFreeGb} GB` : "–",
       note: now.diskTotalGb !== null ? `of ${now.diskTotalGb} GB` : undefined,
-      bad: now.diskFreeGb !== null && now.diskFreeGb < 1,
+      level: now.diskFreeGb === null ? undefined : worse((now.diskFreeGb < 1 || (diskShare ?? 1) < 0.05) && "bad", (diskShare ?? 1) < 0.1 && "warn"),
     },
     {
       label: "Up for",
@@ -372,26 +504,47 @@ function NowTiles({ report }: { report: PiReport }) {
     },
     {
       label: "Panel",
-      value: now.panel?.state === "active" ? "Running" : (now.panel?.state ?? "–"),
+      value: !now.panel ? "–" : now.panel.state === "active" ? "Running" : now.panel.state === "failed" ? "Stopped" : now.panel.state,
       note: now.panel?.since
         ? `since ${new Date(now.panel.since).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: report.tz })}`
-        : undefined,
-      bad: !!now.panel && now.panel.state !== "active",
+        : now.panel && now.panel.state !== "active"
+          ? "paper:logs panel says why"
+          : undefined,
+      level: now.panel && now.panel.state !== "active" ? (now.panel.state === "activating" ? "warn" : "bad") : undefined,
     },
     {
       label: "Version",
       value: now.version?.split(" ")[0] ?? "–",
-      note: now.update ? (now.update.ok ? `checked ${now.update.at ? hm(now.update.at, report.tz) : "–"}` : "last update failed") : undefined,
-      bad: !!now.update && !now.update.ok,
+      note: now.update
+        ? now.update.ok
+          ? now.update.at
+            ? `checked ${new Date(now.update.at).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: report.tz })}`
+            : "not checked yet"
+          : "last update failed"
+        : undefined,
+      level: now.update && !now.update.ok ? "bad" : undefined,
     },
   ];
+  const flagged = tiles.filter((t) => t.level);
+  const level = worse(...flagged.map((t) => t.level));
   return (
     <section className="people-section">
-      <h2>The Pi now</h2>
+      <div className="section-head">
+        <h2>The Pi now</h2>
+        <span className="pi-verdict" data-level={level} role="status">
+          <span aria-hidden>{level ? "!" : "✓"}</span>
+          {level
+            ? `${flagged.length === 1 ? "1 thing needs" : `${flagged.length} things need`} a look: ${flagged.map((t) => t.label).join(", ")}`
+            : "All good"}
+        </span>
+      </div>
       <ul className="pi-tiles">
         {tiles.map((t) => (
-          <li key={t.label} data-bad={t.bad || undefined}>
-            <span className="pi-tile-label">{t.label}</span>
+          <li key={t.label} data-level={t.level}>
+            <span className="pi-tile-label">
+              {t.label}
+              {t.level && <span className="pi-tile-flag">{t.level === "bad" ? "Problem" : "Check"}</span>}
+            </span>
             <strong>{t.value}</strong>
             {t.note && <span className="pi-tile-note">{t.note}</span>}
           </li>
@@ -404,6 +557,140 @@ function NowTiles({ report }: { report: PiReport }) {
 const H = 220;
 const PAD = { top: 14, right: 12, bottom: 26, left: 40 };
 
+/**
+ * Where the tooltip goes: centred over the point, but never past the chart's sides, and below the point when
+ * there's no room above it.
+ */
+function tipAt(px: number, py: number, size: { w: number; h: number }, w: number) {
+  const EDGE = 8;
+  const left = Math.min(Math.max(px - size.w / 2, EDGE), Math.max(w - size.w - EDGE, EDGE));
+  const above = py - 14 - size.h;
+  return { left, top: above >= EDGE ? above : py + 14 };
+}
+
+/**
+ * Thirty days of temperature, a day each: the band runs from the day's coolest check to its hottest, the line joins
+ * the averages. Hover or touch for the day; click to open it.
+ */
+function MonthChart({ report, onDay }: { report: PiReport; onDay: (day: string) => void }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [w, setW] = useState(720);
+  const [hover, setHover] = useState<number | null>(null);
+  const tip = useRef<HTMLDivElement>(null);
+  const [tipSize, setTipSize] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setW(Math.round(e.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    const el = tip.current;
+    if (el && (el.offsetWidth !== tipSize.w || el.offsetHeight !== tipSize.h)) setTipSize({ w: el.offsetWidth, h: el.offsetHeight });
+  }, [hover, w, tipSize]);
+
+  const days = report.days ?? [];
+  // Every one of the 30 days has a slot, checks or not, so a gap shows as a gap.
+  const slots = Array.from({ length: 30 }, (_, i) => shiftDay(report.day, i - 29));
+  const byDay = new Map(days.map((d) => [d.day, d]));
+  const lo = Math.min(40, ...days.map((d) => Math.floor(d.min / 10) * 10));
+  const hi = Math.max(THROTTLE_C + 5, ...days.map((d) => Math.ceil(d.max / 5) * 5));
+  const iw = Math.max(w - PAD.left - PAD.right, 10);
+  const ih = H - PAD.top - PAD.bottom;
+  const slot = iw / slots.length;
+  const x = (i: number) => PAD.left + slot * (i + 0.5);
+  const yy = (c: number) => PAD.top + (1 - (c - lo) / (hi - lo)) * ih;
+  const ticks = [];
+  for (let c = lo; c <= hi; c += 10) ticks.push(c);
+
+  // Averages, joined; a day without checks breaks the line.
+  let path = "";
+  slots.forEach((d, i) => {
+    const t = byDay.get(d);
+    if (t) path += `${path && byDay.get(slots[i - 1]) ? "L" : "M"}${x(i).toFixed(1)},${yy(t.avg).toFixed(1)}`;
+  });
+  const label = (d: string) => {
+    const [y, m, dd] = d.split("-").map(Number);
+    return new Date(y, m - 1, dd).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  };
+  const pick = (clientX: number) => {
+    const r = box.current?.getBoundingClientRect();
+    if (!r) return;
+    const i = Math.floor((clientX - r.left - PAD.left) / slot);
+    setHover(i >= 0 && i < slots.length && byDay.has(slots[i]) ? i : null);
+  };
+  const h = hover !== null ? byDay.get(slots[hover]) : undefined;
+  if (!days.length)
+    return (
+      <div className="pi-chart pi-chart-empty" ref={box}>
+        <p className="muted">No health checks in those 30 days.</p>
+      </div>
+    );
+  const avg = days.reduce((a, d) => a + d.avg * d.checks, 0) / days.reduce((a, d) => a + d.checks, 0);
+  const bar = Math.max(Math.min(slot * 0.55, 14), 3);
+  return (
+    <div
+      className="pi-chart pi-month"
+      ref={box}
+      onPointerMove={(e) => pick(e.clientX)}
+      onPointerDown={(e) => pick(e.clientX)}
+      onPointerLeave={() => setHover(null)}
+      onClick={() => hover !== null && onDay(slots[hover])}
+    >
+      <svg width={w} height={H} role="img" aria-label={`Temperature over 30 days: average ${avg.toFixed(1)}°C, hottest ${Math.max(...days.map((d) => d.max))}°C.`}>
+        {ticks.map((c) => (
+          <g key={c}>
+            <line className="pi-grid" x1={PAD.left} x2={w - PAD.right} y1={yy(c)} y2={yy(c)} />
+            <text className="pi-axis" x={PAD.left - 8} y={yy(c)} dy="0.32em" textAnchor="end">{`${c}°`}</text>
+          </g>
+        ))}
+        {[0, 7, 14, 21, 29].map((i) => (
+          <text key={i} className="pi-axis" x={x(i)} y={H - 8} textAnchor={i === 0 ? "start" : i === 29 ? "end" : "middle"}>
+            {label(slots[i])}
+          </text>
+        ))}
+        <line className="pi-limit" x1={PAD.left} x2={w - PAD.right} y1={yy(THROTTLE_C)} y2={yy(THROTTLE_C)} />
+        <text className="pi-limit-label" x={w - PAD.right} y={yy(THROTTLE_C) - 6} textAnchor="end">
+          Slows down at {THROTTLE_C}°C
+        </text>
+        {hover !== null && <rect className="pi-day-hover" x={x(hover) - slot / 2} y={PAD.top} width={slot} height={ih} rx={4} />}
+        {slots.map((d, i) => {
+          const t = byDay.get(d);
+          if (!t) return null;
+          return (
+            <rect
+              key={d}
+              className="pi-range-bar"
+              data-hot={t.hot > 0 || undefined}
+              x={x(i) - bar / 2}
+              y={yy(t.max)}
+              width={bar}
+              height={Math.max(yy(t.min) - yy(t.max), 2)}
+              rx={Math.min(bar / 2, 4)}
+            />
+          );
+        })}
+        <path className="pi-line" d={path} />
+        {slots.map((d, i) => {
+          const t = byDay.get(d);
+          return t && <circle key={d} className={hover === i ? "pi-dot" : "pi-avg-dot"} cx={x(i)} cy={yy(t.avg)} r={hover === i ? 5 : 2.5} />;
+        })}
+      </svg>
+      {h && hover !== null && (
+        <div className="pi-tip" ref={tip} style={tipAt(x(hover), yy(h.max), tipSize, w)}>
+          <strong>{h.avg.toFixed(1)}°C</strong> on average, {label(h.day)}
+          <span>
+            {h.min.toFixed(1)}–{h.max.toFixed(1)}°C · {h.checks} checks
+          </span>
+          {h.hot > 0 && <span className="pi-tip-bad">{h.hot} hot or throttled</span>}
+          <span>Click to open the day</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** A day's temperature, midnight to midnight, against the line where the Pi slows down. Hover or touch for a check. */
 function TempChart({ report, samples }: { report: PiReport; samples: PiSample[] }) {
   const { day, today, tz, dayStart: start, dayEnd: end } = report;
@@ -411,6 +698,13 @@ function TempChart({ report, samples }: { report: PiReport; samples: PiSample[] 
   const [w, setW] = useState(720);
   const [hover, setHover] = useState<number | null>(null);
   const now = useNow(0, 60_000);
+  // The tooltip's own size, measured before it's painted, so it can stay inside the chart.
+  const tip = useRef<HTMLDivElement>(null);
+  const [tipSize, setTipSize] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const el = tip.current;
+    if (el && (el.offsetWidth !== tipSize.w || el.offsetHeight !== tipSize.h)) setTipSize({ w: el.offsetWidth, h: el.offsetHeight });
+  }, [hover, w, tipSize]);
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -495,7 +789,7 @@ function TempChart({ report, samples }: { report: PiReport; samples: PiSample[] 
         avg {avg.toFixed(1)}°
       </span>
       {h && (
-        <div className="pi-tip" style={{ left: Math.min(Math.max(x(h.at), 90), w - 90), top: Math.max(yy(h.tempC) - 12, 0) }}>
+        <div className="pi-tip" ref={tip} style={tipAt(x(h.at), yy(h.tempC), tipSize, w)}>
           <strong>{h.tempC.toFixed(1)}°C</strong> at {hm(h.at, tz)}
           <span>
             Wi-Fi {h.wifiDbm !== null ? `${h.wifiDbm} dBm` : "off"} · load {h.load} · {h.freeGb} GB free

@@ -152,6 +152,16 @@ for unit in papershow.service papershow-panel.service papershow-name.service pap
     "deploy/pi/$unit" | sudo tee "/etc/systemd/system/$unit" >/dev/null
 done
 sudo systemctl daemon-reload
+# The Pi page's Restart buttons: sudo for those two commands only. Checked before it's put in place, since a broken
+# sudoers file locks sudo out.
+rules=$(mktemp)
+sed -e "s|@USER@|$user|g" deploy/pi/sudoers >"$rules"
+if sudo visudo -cqf "$rules"; then
+  sudo install -m 440 "$rules" /etc/sudoers.d/papershow
+else
+  echo "Couldn't add the sudo rule for the Pi page's Restart buttons; they'll say so." >&2
+fi
+rm -f "$rules"
 sudo systemctl enable papershow papershow-panel
 sudo systemctl restart papershow papershow-panel
 if [ -n "$publish" ]; then

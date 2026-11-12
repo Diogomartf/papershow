@@ -136,7 +136,7 @@ export const LOG_TOPICS = [
     icon: "✏️",
     verbs: ["drew", "redrew", "erased", "added-photo", "reframed-photo", "deleted-photo", "made-app", "tuned-app", "deleted-app"],
   },
-  { key: "night", label: "Night and off", icon: "🌙", verbs: ["changed-night", "turned-off", "turned-on"] },
+  { key: "night", label: "Night and off", icon: "🌙", verbs: ["changed-night", "turned-off", "turned-on", "restarted"] },
   {
     key: "people",
     label: "People and invites",
@@ -179,6 +179,8 @@ export type PiReport = {
     version: string | null;
   };
   health: PiSample[];
+  /** With `span: "month"`: the 30 days up to `day`, one summary each. */
+  days: { day: string; at: number; avg: number; min: number; max: number; checks: number; hot: number }[] | null;
   lines: PiLine[];
   more: boolean;
   /** Where Older carries on from (journal microseconds), when `more`. */
@@ -190,11 +192,14 @@ export type PiReport = {
 };
 
 export const getPi = (
-  opts: { day?: string; from?: string; to?: string; q?: string; before?: number; service?: PiService; problems?: 1; limit?: number } = {},
+  opts: { day?: string; span?: "month"; from?: string; to?: string; q?: string; before?: number; service?: PiService; problems?: 1; limit?: number } = {},
 ) => {
   const q = new URLSearchParams(Object.entries(opts).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]));
   return call<PiReport>(`/api/pi?${q}`);
 };
+
+/** Admins: restart the panel client, or the whole Pi. */
+export const restartPi = (what: "panel" | "pi") => call<{ ok: true }>("/api/pi/restart", "POST", { what });
 
 // ── Who's signed in, for any page ──────────────────────────────────────────
 
@@ -286,6 +291,7 @@ export function says(e: LogEntry): string {
     case "said-not-now": return `said "not now" to ${s.person ? `${personOf(s.person)}'s ` : ""}${item}`;
     case "turned-off": return s.back ? `turned the panel off until ${String(s.back)} 💤` : "turned the panel off 💤";
     case "turned-on": return "turned the panel back on ☀️";
+    case "restarted": return s.what === "pi" ? "restarted the Pi 🔄" : "restarted the panel 🔄";
     case "changed-night": return s.enabled ? `set the night to ${String(s.start)}–${String(s.end)} 🌙` : "turned the night off";
     default: return e.verb.replace(/-/g, " ");
   }
