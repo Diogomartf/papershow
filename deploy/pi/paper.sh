@@ -10,7 +10,9 @@
 #   paper:channel [releases|main|<branch>]   what updates follow: releases (the default), or every
 #                          commit on a branch, as a dev. It switches now and reinstalls if the code changed.
 #   paper:status           what's running, which version, where to open it, what the panel last drew
-#   paper:logs [server|panel|update|health] [journalctl options]   follow the logs, both services by default
+#   paper:logs [server|panel|update|health] [day] [--search words] [journalctl options]
+#                          follow the logs, both services by default; with a day (today, yesterday, 2026-11-11,
+#                          or 2026-11-01..2026-11-11) or a search, print what's there and stop
 #   paper:help             list these commands and how to use them; paper:<command> --help does too
 #
 # Or call it directly: deploy/pi/paper.sh status. deploy/pi/paper.sh version prints the version
@@ -50,6 +52,10 @@ ${blue}CHECK ON IT$off
   ${bold}paper:logs server$off         only one: server, panel, update (nightly updates)
                             or health (the temperature every 15 minutes)
   ${bold}paper:logs panel -n 200$off   journalctl options go after: the last 200 lines
+  ${bold}paper:logs yesterday$off      a day's lines, then stop: today, yesterday,
+                            2026-11-11, or 2026-11-01..2026-11-11
+  ${bold}paper:logs -s "timed out"$off  look for words, in any case (--search); with a day,
+                            only that day: paper:logs panel today -s drew
 
 ${blue}UPDATE$off
   ${bold}paper:update$off              get the latest release and reinstall; if there's
@@ -273,17 +279,34 @@ case "$cmd" in
 
   logs)
     units=(-u papershow -u papershow-panel)
-    case "${1:-}" in
-      server) units=(-u papershow); shift ;;
-      panel) units=(-u papershow-panel); shift ;;
-      update) units=(-u papershow-update); shift ;;
-      health) units=(-u papershow-health); shift ;;
-    esac
+    # A service, a day or days, and words to look for, in any order; anything else goes to journalctl.
+    # With a day or a search it prints what it finds and stops; without, it follows the last 50 lines.
+    when=() search=() follow=(-n 50 -f)
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        server) units=(-u papershow) ;;
+        panel) units=(-u papershow-panel) ;;
+        update) units=(-u papershow-update) ;;
+        health) units=(-u papershow-health) ;;
+        today | yesterday) when=(--since "$1" --until "$( [ "$1" = today ] && echo tomorrow || echo today)") follow=() ;;
+        [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9])
+          when=(--since "$1" --until "$(date -d "$1 + 1 day" +%F)") follow=() ;;
+        [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]..[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9])
+          when=(--since "${1%%..*}" --until "$(date -d "${1##*..} + 1 day" +%F)") follow=() ;;
+        -s | --search)
+          [ $# -ge 2 ] || { echo "$1 needs the words to look for: paper:logs --search \"timed out\"" >&2; exit 1; }
+          # The words as typed, in any case: no pattern characters.
+          search=(--grep "$(printf '%s' "$2" | sed 's/[][\\^$.*+?(){}|]/\\&/g')" --case-sensitive=false) follow=()
+          shift ;;
+        *) break ;;
+      esac
+      shift
+    done
     # In colour on a terminal; plain when piped, or when you pick journalctl's own output format.
     if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && ! [[ " $* " =~ \ (-o|--output)[\ =] ]]; then
-      journalctl "${units[@]}" -n 50 -f -o json "$@" | python3 -u "$repo/deploy/pi/logs.py"
+      journalctl "${units[@]}" ${when[@]+"${when[@]}"} ${search[@]+"${search[@]}"} ${follow[@]+"${follow[@]}"} --no-pager -o json "$@" | python3 -u "$repo/deploy/pi/logs.py"
     else
-      exec journalctl "${units[@]}" -n 50 -f "$@"
+      exec journalctl "${units[@]}" ${when[@]+"${when[@]}"} ${search[@]+"${search[@]}"} ${follow[@]+"${follow[@]}"} --no-pager "$@"
     fi
     ;;
 

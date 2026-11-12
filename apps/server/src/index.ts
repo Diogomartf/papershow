@@ -15,6 +15,7 @@ import * as store from "./db.ts";
 import { inviteFrame, qrSvg } from "./invite.tsx";
 import * as people from "./people.ts";
 import { namePlaces } from "./places.ts";
+import { piReport, type Service } from "./pi.ts";
 import { panelFiles } from "./render.ts";
 import { awayUntil, blockAt, justAired, sameSource, sequence, showing, sleepUntil, upcoming, type Days, type Live, type Showing, type Source } from "./schedule.ts";
 import { sleepFrame } from "./sleep.tsx";
@@ -277,7 +278,7 @@ app.use("/api/*", async (c, next) => {
   return next();
 });
 
-// Guests draw, make apps and ask for things to go on the panel. The show, the playlists, the log and the
+// Guests draw, make apps and ask for things to go on the panel. The show, the playlists, the logs and the
 // house's settings stay with the household, so everything a guest may change is listed here.
 const GUEST_MAY: [string, RegExp][] = [
   ["PATCH", /^\/api\/me$/],
@@ -302,13 +303,13 @@ app.use("/api/*", async (c, next) => {
   const role = c.get("me")?.role;
   if (role !== "guest" && role !== "party") return next();
   const { method, path } = c.req;
-  const reading = method === "GET" && path !== "/api/log";
+  const reading = method === "GET" && path !== "/api/log" && path !== "/api/pi";
   if (reading || (role === "guest" ? GUEST_MAY : PARTY_MAY).some(([m, re]) => m === method && re.test(path))) return next();
   return c.json({ error: role === "guest" ? "Guests can't change this. Ask someone in the house?" : "At the party, you can add to the party. The rest is for the house" }, 403);
 });
 
 const isAdmin = (c: C) => c.get("me").role === "admin";
-/** Guests and party guests: they see what the household sees, less the log and other people's asks. */
+/** Guests and party guests: they see what the household sees, less the logs and other people's asks. */
 const isGuest = (c: C) => ["guest", "party"].includes(c.get("me").role);
 /** Anyone can use anything; only its maker or an admin changes or deletes it. */
 const mayChange = (c: C, madeBy: string | null | undefined) => isAdmin(c) || !madeBy || madeBy === c.get("me").id;
@@ -581,6 +582,24 @@ app.get("/api/log", (c) =>
     }),
   ),
 );
+
+// How the Pi is doing: readings now, a day's health checks and the services' log lines, older ones a page at a time.
+// The household's, like the log.
+app.get("/api/pi", async (c) => {
+  const service = c.req.query("service");
+  return c.json(
+    await piReport({
+      day: c.req.query("day"),
+      from: c.req.query("from"),
+      to: c.req.query("to"),
+      q: c.req.query("q"),
+      before: Number(c.req.query("before")) || undefined,
+      service: ["server", "panel", "update", "name"].includes(service ?? "") ? (service as Service) : undefined,
+      problems: c.req.query("problems") === "1",
+      limit: Number(c.req.query("limit")) || undefined,
+    }),
+  );
+});
 
 // ── Images ─────────────────────────────────────────────────────────────────
 

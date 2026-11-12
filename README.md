@@ -199,7 +199,7 @@ The install adds these commands:
 | `paper:update` | Gets the latest release and reinstalls, or the newest commit when the Pi follows a branch. If there's nothing new, it stops, so the panel isn't restarted for the same picture. A local edit to a tracked file is dropped only when there is something to update to; `.env` stays. A release that isn't signed with a [release key](#what-the-install-changes-on-your-pi) is refused. Running the [one line](#2-on-the-pi-install) again does the same. The Pi also does it on its own every night (see [Updates](#what-the-install-changes-on-your-pi)). |
 | `paper:channel` | What updates follow. `paper:channel main` puts the Pi in dev mode: every commit merged to `main` reaches it that night. `paper:channel releases` goes back to releases, and a branch's name follows that branch, to try a PR on the real panel; commits on a branch aren't checked like releases. It switches right away and reinstalls if the code changed; alone, it says which one the Pi follows. `paper:status` shows it too, on the Updates line. |
 | `paper:status` | Whether the server and panel are running, the version (`v0.2.0` on a release, `v0.2.0+3` three commits after one) and whether a newer one is out, where to open Papershow, whether it updates itself and when it last checked, which keys are set, what the panel last drew, and the last health check. |
-| `paper:logs` | Follows the server's and the panel's logs, coloured by service, with problems in red, warnings in yellow and drawn frames in green. `paper:logs server`, `paper:logs panel`, `paper:logs update` (the nightly updates) or `paper:logs health` (the temperature every 15 minutes) for one; journalctl options go after, like `paper:logs panel -n 200`. |
+| `paper:logs` | Follows the server's and the panel's logs, coloured by service, with problems in red, warnings in yellow and drawn frames in green. `paper:logs server`, `paper:logs panel`, `paper:logs update` (the nightly updates) or `paper:logs health` (the temperature every 15 minutes) for one. Add a day to see it whole and stop (`today`, `yesterday`, `2026-11-11`, or `2026-11-01..2026-11-11`), and `--search` (`-s`) to look for words in any case, like `paper:logs panel yesterday -s "timed out"`. journalctl options go after, like `paper:logs panel -n 200`. |
 | `paper:help` | Lists these commands and how to use each, with examples. `paper:<command> --help` shows the same. |
 
 Installed before these commands existed? Update once the long way, which adds them:
@@ -240,6 +240,7 @@ Environment=PANEL_PARTIAL=0
 ### When something's off
 
 - `paper:status` for a summary, `paper:logs` for the logs (or `journalctl -u papershow -u papershow-panel -f`).
+- Or, from any browser: **The Pi** in your face menu (`/pi`) shows the same readings, the temperature through the day and the logs, for any day the journal still has.
 - The Dashboard's **Device** card shows when the panel last fetched `/live`.
 - Panel blank or stuck: check that SPI is on (`ls /dev/spidev0.0`) and that the HAT is seated, then `sudo systemctl restart papershow-panel`.
 - Try the client without a panel, on any machine: `PANEL_OUT=/tmp/panel.png python3 apps/panel/panel.py`.
@@ -420,6 +421,10 @@ Admins only. Everyone in the house with their role (**Admin**, **Household**, **
 
 Everything people did, newest first, with a filter per person. The Dashboard's **Lately** card shows the last few.
 
+### The Pi (`/pi`)
+
+How the Pi is doing, from the face menu: the temperature now and its average for the day, Wi-Fi, free memory and disk, how long it's been up, whether the panel client runs, and the version. Below, the day's temperature from the health check (every 15 minutes), against the 80 °C where the Pi slows itself down, and the server's, panel's and nightly update's log lines, newest first, with a filter per service and **Problems only**. Pick any earlier day the journal still has. Search the logs, on that day or over a range of days (**7 days**, **Everything**, or any two dates); what you searched for is marked in each line. If the Pi keeps its journal in memory only (no `/var/log/journal`), the page says so: a restart then forgets the days before. Not for guests. Off a Pi, as in `pnpm dev`, it shows sample readings.
+
 ### Image page (`/i/:id`)
 
 A saved drawing on its own, to look at, drag out or download.
@@ -473,6 +478,7 @@ Long-poll: send `?wait=1` with `If-None-Match: <etag>`. The server holds the req
 | `POST /api/invites`, `PATCH /api/invites/:code`, `PUT`/`DELETE /api/invites/:code/panel`, `GET /api/invites/:code/qr.svg` | Admins: a 10-minute invite (`{ origin, role?: "member" \| "guest" }`), changing its `role`, putting it on the panel for 2 minutes or taking it off, its QR code. |
 | `POST /api/asks`, `POST /api/asks/:id/yes`, `DELETE /api/asks/:id` | A guest's Show now: ask (`{ source, forS?, from? }`); the household says yes (it goes live for `forS`) or Not now (delete), and the guest can take it back (delete). |
 | `GET /api/log?before=&person=&limit=` | The log, newest first. Not for guests. |
+| `GET /api/pi?day=&from=&to=&q=&service=&problems=1&before=&limit=` | The Pi's readings now, `day`'s health checks, and its services' log lines from `from` to `to` (both `day` by default), newest first; `q` looks for words in any case, and `before` (microseconds) pages back. Days are `YYYY-MM-DD` in the Pi's time zone, today by default. Not for guests. |
 | `GET /api/state`, `GET /api/state/wait` | Everything the app shows: on air, show, playlists, clips, sequence, night, you, people, guests' asks, the last few log entries (none for guests). `wait` long-polls up to 25 s. |
 | `GET /api/images`, `GET /api/images/:id` | Saved drawings and photos (`kind`: `drawing` or `photo`); one with its scene. |
 | `GET /api/images/:id/:kind` | `png`, `mono` or `bin` file. |

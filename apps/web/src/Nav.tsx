@@ -23,7 +23,7 @@ const SECTIONS = [
   { id: "draw", href: "/draw", label: "Draw" },
 ] as const;
 
-export type Section = (typeof SECTIONS)[number]["id"] | "party" | "people" | "log";
+export type Section = (typeof SECTIONS)[number]["id"] | "party" | "people" | "log" | "pi";
 
 export function Nav({ current }: { current: Section }) {
   // Guests don't run the show, so they don't get its page. A party guest only gets the party.
