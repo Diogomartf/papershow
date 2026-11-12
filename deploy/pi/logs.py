@@ -47,8 +47,12 @@ def line(entry: dict) -> str:
     return f"{DIM}{when:%b %d %H:%M:%S}{OFF} {colour}{BOLD}{name:<7}{OFF} {message}"
 
 
-for raw in sys.stdin:
-    try:
-        print(line(json.loads(raw)), flush=True)
-    except ValueError:
-        print(raw, end="", flush=True)
+try:
+    for raw in sys.stdin:
+        try:
+            print(line(json.loads(raw)), flush=True)
+        except ValueError:
+            print(raw, end="", flush=True)
+except (KeyboardInterrupt, BrokenPipeError):
+    # Ctrl-C stops paper:logs; that's not a crash, so no traceback.
+    sys.exit(0)

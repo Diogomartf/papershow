@@ -150,6 +150,52 @@ export const getLog = (opts: { before?: number; person?: string; verbs?: string;
   return call<LogEntry[]>(`/api/log?${q}`);
 };
 
+// ── The Pi ────────────────────────────────────────────────────────────────
+
+/** One health check (deploy/pi/health.sh), every 15 minutes. */
+export type PiSample = { at: number; tempC: number; wifiDbm: number | null; load: number; freeGb: number; notes: string[]; asleep: boolean; warn: boolean };
+export type PiService = "server" | "panel" | "update" | "name";
+/** `at` is in microseconds, as the journal keeps it. */
+export type PiLine = { at: number; service: PiService; system: boolean; message: string; tone: "bad" | "warn" | "good" | "plain" };
+export type PiReport = {
+  sample: boolean;
+  day: string;
+  today: string;
+  firstDay: string | null;
+  keepsLogs: boolean;
+  now: {
+    tempC: number | null;
+    throttle: string[];
+    wifiDbm: number | null;
+    load: number | null;
+    memFreeGb: number | null;
+    memTotalGb: number | null;
+    diskFreeGb: number | null;
+    diskTotalGb: number | null;
+    uptimeS: number | null;
+    serverS: number;
+    panel: { state: string; since: number | null } | null;
+    update: { at: number | null; ok: boolean } | null;
+    version: string | null;
+  };
+  health: PiSample[];
+  lines: PiLine[];
+  more: boolean;
+  /** Where Older carries on from (journal microseconds), when `more`. */
+  cursor: number | null;
+  /** The Pi's time zone, and when the day starts and ends there (ms). */
+  tz: string;
+  dayStart: number;
+  dayEnd: number;
+};
+
+export const getPi = (
+  opts: { day?: string; from?: string; to?: string; q?: string; before?: number; service?: PiService; problems?: 1; limit?: number } = {},
+) => {
+  const q = new URLSearchParams(Object.entries(opts).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]));
+  return call<PiReport>(`/api/pi?${q}`);
+};
+
 // ── Who's signed in, for any page ──────────────────────────────────────────
 
 export type MeContext = {

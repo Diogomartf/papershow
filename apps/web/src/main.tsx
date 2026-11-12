@@ -10,6 +10,7 @@ import { Log } from "./Log.tsx";
 import { Manage } from "./Manage.tsx";
 import { navigate } from "./Nav.tsx";
 import { People } from "./People.tsx";
+import { Pi } from "./Pi.tsx";
 import { Photos } from "./Photos.tsx";
 import { hello as getHello, Me, SIGNED_OUT, signOut, useMe, visiting, type Hello as HelloData } from "./house";
 import { Party, PartyStory } from "./Party.tsx";
@@ -33,10 +34,10 @@ function Router() {
     if (path.startsWith("/join/")) navigate("/");
   }, [path]);
 
-  // The show, the playlists and the log are the household's: a guest lands on the Dashboard. A party guest is at
+  // The show, the playlists, the log and the Pi page are the household's: a guest lands on the Dashboard. A party guest is at
   // the party and nowhere else: the Party page, drawing for it, and their own profile.
   const partyGuest = me.role === "party";
-  const offLimits = partyGuest ? !/^\/(party|parties|draw|people)\b/.test(path) || path.startsWith("/people/manage") : guest && /^\/(show|library|playlists?|slides|log)\b/.test(path);
+  const offLimits = partyGuest ? !/^\/(party|parties|draw|people)\b/.test(path) || path.startsWith("/people/manage") : guest && /^\/(show|library|playlists?|slides|log|pi)\b/.test(path);
   const home = partyGuest ? "/party" : "/";
   useEffect(() => {
     if (offLimits) history.replaceState(null, "", home);
@@ -62,6 +63,7 @@ function Router() {
   if (path.startsWith("/people/manage")) return <Manage />;
   if (path.startsWith("/people")) return <People />;
   if (path.startsWith("/log")) return <Log />;
+  if (path === "/pi" || path.startsWith("/pi/")) return <Pi />;
   return <Dashboard />;
 }
 

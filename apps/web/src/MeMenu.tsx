@@ -1,5 +1,5 @@
 // Your face in the top-right corner, and the menu behind it: who you are, everyone else in the house to
-// switch to (a shared tablet changes hands), the house, the log and signing out. The household also sees who's knocking.
+// switch to (a shared tablet changes hands), the house, the log, the Pi and signing out. The household also sees who's knocking.
 import { useEffect, useRef, useState } from "react";
 import { ROLE_NAMES, signOut, tint, useMe, visiting } from "./house";
 import { useLiveState } from "./live";
@@ -107,6 +107,7 @@ export function MeMenu() {
           )}
           <button role="menuitem" className="me-item" onClick={() => go("/people")}>The house</button>
           {!visiting(self) && <button role="menuitem" className="me-item" onClick={() => go("/log")}>Log</button>}
+          {!visiting(self) && <button role="menuitem" className="me-item" onClick={() => go("/pi")}>The Pi</button>}
           <button
             role="menuitem"
             className="me-item"
