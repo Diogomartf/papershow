@@ -15,7 +15,7 @@ import * as store from "./db.ts";
 import { inviteFrame, qrSvg } from "./invite.tsx";
 import * as people from "./people.ts";
 import { namePlaces } from "./places.ts";
-import { piReport, type Service } from "./pi.ts";
+import { piReport, restart, type Service } from "./pi.ts";
 import { panelFiles } from "./render.ts";
 import { awayUntil, blockAt, justAired, sameSource, sequence, showing, sleepUntil, upcoming, type Days, type Live, type Showing, type Source } from "./schedule.ts";
 import { sleepFrame } from "./sleep.tsx";
@@ -590,6 +590,7 @@ app.get("/api/pi", async (c) => {
   return c.json(
     await piReport({
       day: c.req.query("day"),
+      span: (["week", "month", "year"] as const).find((x) => x === c.req.query("span")) ?? "day",
       from: c.req.query("from"),
       to: c.req.query("to"),
       q: c.req.query("q"),
@@ -599,6 +600,17 @@ app.get("/api/pi", async (c) => {
       limit: Number(c.req.query("limit")) || undefined,
     }),
   );
+});
+
+// Admins restart the panel client, or the whole Pi, from the Pi page. A reboot answers first, then goes.
+app.post("/api/pi/restart", async (c) => {
+  if (!isAdmin(c)) return adminsOnly(c);
+  const { what } = await c.req.json<{ what?: string }>().catch(() => ({ what: undefined }));
+  if (what !== "panel" && what !== "pi") return c.json({ error: "Restart the panel or the Pi" }, 400);
+  const why = await restart(what);
+  if (why) return c.json({ error: why }, 409);
+  note(c, "restarted", { what });
+  return c.json({ ok: true });
 });
 
 // ── Images ─────────────────────────────────────────────────────────────────

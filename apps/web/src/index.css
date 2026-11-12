@@ -2791,21 +2791,57 @@ button.link.danger { color: var(--danger); }
 /* The Pi page */
 .pi-note { margin: 0; padding: 12px 14px; border-radius: 14px; background: var(--tint); color: var(--ink-2); font-size: 14px; line-height: 1.45; }
 .pi-note code { font: 12px/1.4 var(--mono); overflow-wrap: anywhere; }
+/* Restarts: a card under the readings. Asking turns the card into the question. */
+.pi-restarts {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-top: -16px; padding: 14px 16px;
+  border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px var(--line);
+}
+.pi-restarts[data-asking] { background: color-mix(in srgb, var(--danger) 6%, var(--surface)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 35%, var(--line)); }
+.pi-restart-text { display: grid; gap: 2px; flex: 1 1 220px; min-width: 0; }
+.pi-restart-text strong { font-size: 15px; font-weight: 650; }
+.pi-restart-text span { font-size: 13px; color: var(--ink-2); line-height: 1.4; }
+.pi-restart-text span[data-bad] { color: var(--danger); }
+.pi-restart-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.pi-restart-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.pi-restart-button {
+  display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px; border: 0; border-radius: 999px;
+  background: var(--tint); color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;
+  transition: background 160ms var(--ease-out), transform 160ms var(--ease-out);
+}
+.pi-restart-button:hover { background: color-mix(in srgb, var(--ink) 12%, transparent); }
+.pi-restart-button:active, .pi-restart-yes:active { transform: scale(0.97); }
+.pi-restart-yes {
+  height: 34px; padding: 0 14px; border: 0; border-radius: 999px; cursor: pointer;
+  background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); font: inherit; font-size: 13.5px; font-weight: 650;
+  transition: background 160ms var(--ease-out), transform 160ms var(--ease-out);
+}
+.pi-restart-yes:hover { background: color-mix(in srgb, var(--danger) 24%, transparent); }
+.pi-restart-yes:disabled { opacity: .6; cursor: default; }
+.pi-note[data-back="back"] { color: var(--here); font-weight: 600; }
 .pi-tiles { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
 .pi-tiles li {
   display: grid; gap: 3px; align-content: start; padding: 14px 16px; border-radius: 16px;
   background: var(--surface); box-shadow: 0 0 0 1px var(--line);
 }
-.pi-tiles li[data-bad] { box-shadow: 0 0 0 1.5px var(--danger); }
-.pi-tile-label { font: 600 10px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.pi-tile-label { display: flex; align-items: center; justify-content: space-between; gap: 6px; font: 600 10px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+/* A card that needs a look: amber; something wrong: red. The tint, the ring, the value and a word all say it, so
+   it reads at a glance and without colour. */
+.pi-tiles li[data-level] { --level: var(--signal); background: color-mix(in srgb, var(--level) 7%, var(--surface)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--level) 45%, var(--line)); }
+.pi-tiles li[data-level="bad"] { --level: var(--danger); }
+.pi-tiles li[data-level] .pi-tile-note { color: var(--level); }
+.pi-tile-flag { padding: 2px 6px; border-radius: 999px; background: color-mix(in srgb, var(--level) 16%, transparent); color: var(--level); letter-spacing: .06em; }
+.pi-verdict { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 12px; border-radius: 999px; background: var(--tint); color: var(--ink-2); font-size: 13.5px; font-weight: 600; }
+.pi-verdict svg { flex-shrink: 0; color: var(--here); }
+.pi-verdict[data-level] { --level: var(--signal); background: color-mix(in srgb, var(--level) 12%, transparent); color: var(--level); }
+.pi-verdict[data-level="bad"] { --level: var(--danger); }
+.pi-verdict[data-level] svg { color: inherit; }
 .pi-tiles strong { font-size: 24px; font-weight: 640; letter-spacing: -0.015em; font-variant-numeric: tabular-nums; }
 .pi-tile-note { font-size: 12.5px; color: var(--ink-2); }
-.pi-tiles li[data-bad] .pi-tile-note { color: var(--danger); }
 
 .pi-day { display: flex; align-items: center; gap: 2px; }
-.pi-day button.ghost { min-width: 34px; font-size: 18px; line-height: 1; }
+.pi-day button.ghost { min-width: 28px; height: 26px; padding: 0 6px; font-size: 16px; line-height: 1; }
 .pi-day button.ghost:disabled { opacity: .3; cursor: default; }
-.pi-date { position: relative; display: inline-flex; align-items: center; height: 34px; padding: 0 12px; border-radius: 999px; background: var(--tint); font-weight: 600; font-size: 14px; cursor: pointer; }
+.pi-date { position: relative; display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--tint); font-weight: 600; font-size: 12.5px; cursor: pointer; }
 /* The browser's own date picker, invisible over the day's name, so tapping the name opens it. */
 .pi-date input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
 .pi-date input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; }
@@ -2820,12 +2856,19 @@ button.link.danger { color: var(--danger); }
 .pi-avg { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 2 3; }
 .pi-avg-label { position: absolute; font: 600 10.5px/1 var(--mono); color: var(--ink-2); background: var(--surface); padding: 2px 4px; border-radius: 4px; pointer-events: none; }
 .pi-now { stroke: var(--focus); stroke-width: 1; opacity: .5; }
+.pi-span { margin-right: 6px; }
+.pi-span button { height: 22px; padding: 0 8px; font-size: 11.5px; }
+.pi-month { cursor: pointer; }
+.pi-range-bar { fill: color-mix(in srgb, var(--ink) 22%, transparent); }
+.pi-range-bar[data-hot] { fill: color-mix(in srgb, var(--danger) 55%, transparent); }
+.pi-day-hover { fill: var(--tint); }
+.pi-avg-dot { fill: var(--ink); }
 .pi-line { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .pi-warn { fill: var(--danger); stroke: var(--surface); stroke-width: 2; }
 .pi-cross { stroke: var(--ink-3); stroke-width: 1; }
 .pi-dot { fill: var(--ink); stroke: var(--surface); stroke-width: 2; }
 .pi-tip {
-  position: absolute; transform: translate(-50%, -100%); pointer-events: none;
+  position: absolute; pointer-events: none;
   display: grid; gap: 2px; padding: 8px 10px; border-radius: 10px; white-space: nowrap;
   background: var(--ink); color: var(--wall-lit); font-size: 13px; box-shadow: 0 6px 18px -8px var(--drop);
 }
@@ -2833,30 +2876,46 @@ button.link.danger { color: var(--danger); }
 .pi-tip .pi-tip-bad { opacity: 1; font-weight: 600; }
 
 .pi-filter { align-items: center; justify-content: space-between; }
+/* Each service has its colour, on its filter and on its lines, so a glance tells them apart. */
+[data-service="server"] { --svc: var(--c-teal); }
+[data-service="panel"] { --svc: var(--c-lilac); }
+[data-service="update"] { --svc: var(--c-lime); }
+[data-service="name"] { --svc: var(--c-sand); }
+.pi-page .log-filter { gap: 4px; }
+.pi-page .log-filter button, .pi-problems { height: 22px; padding: 0 8px; font-size: 11.5px; font-weight: 600; gap: 4px; }
+.pi-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--svc); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 25%, transparent); }
+.pi-page .log-filter button[aria-checked="true"] .pi-dot { background: var(--ink); box-shadow: none; }
+.pi-page .log-filter button[data-service][aria-checked="true"] { background: var(--svc); color: var(--ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 18%, transparent); }
 .pi-search-row { display: grid; gap: 10px; }
-.pi-search {
-  height: 42px; padding: 0 14px; border: 0; border-radius: 12px;
-  background: var(--surface); box-shadow: 0 0 0 1px var(--line); color: var(--ink); font: inherit; font-size: 15px;
+.pi-search-box {
+  display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 14px; border-radius: 12px;
+  background: var(--surface); box-shadow: 0 0 0 1px var(--line); color: var(--ink-3); cursor: text;
 }
-.pi-search:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); }
+.pi-search-box:focus-within { box-shadow: 0 0 0 2px var(--focus); color: var(--ink-2); }
+.pi-search-box svg { flex-shrink: 0; }
+.pi-search { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-size: 15px; }
+.pi-search:focus { outline: none; }
 .pi-range { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .pi-days { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-3); }
 .pi-days input {
-  height: 34px; padding: 0 10px; border: 0; border-radius: 999px;
-  background: var(--tint); color: var(--ink-2); font: inherit; font-size: 13.5px; font-weight: 560;
+  height: 22px; padding: 0 8px; border: 0; border-radius: 999px;
+  background: var(--tint); color: var(--ink-2); font: inherit; font-size: 11.5px; font-weight: 600;
 }
 .pi-line-day { color: var(--ink-2); }
 .pi-message mark { background: color-mix(in srgb, var(--c-yellow) 70%, transparent); color: inherit; border-radius: 2px; }
 .pi-problems {
-  height: 34px; padding: 0 12px; border: 0; border-radius: 999px;
+  padding: 0 12px; border: 0; border-radius: 999px;
   background: var(--tint); color: var(--ink-2); font-weight: 560; font-size: 14px; cursor: pointer;
 }
-.pi-problems[aria-pressed="true"] { background: var(--danger); color: #fff; }
+/* Problems only: a touch of red, more when it's on. */
+.pi-page .pi-problems { background: color-mix(in srgb, var(--danger) 9%, transparent); color: color-mix(in srgb, var(--danger) 80%, var(--ink-2)); }
+.pi-page .pi-problems[aria-pressed="true"] { background: color-mix(in srgb, var(--danger) 20%, transparent); color: var(--danger); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 45%, transparent); }
 .pi-lines { list-style: none; margin: 0; padding: 0; display: grid; font: 12.5px/1.45 var(--mono); }
-.pi-lines li { display: grid; grid-template-columns: auto 58px 1fr; gap: 10px; padding: 5px 8px; margin: 0 -8px; border-radius: 6px; border-bottom: 1px solid var(--line); }
+.pi-lines li { display: grid; grid-template-columns: auto 64px 1fr; gap: 10px; padding: 5px 8px; margin: 0 -8px; border-radius: 6px; border-bottom: 1px solid var(--line); }
 .pi-lines li:last-child { border-bottom: 0; }
 .pi-lines time { color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.pi-service { color: var(--ink-2); font-weight: 600; }
+.pi-service { display: inline-flex; align-items: center; gap: 6px; align-self: start; color: var(--ink-2); font-weight: 600; }
+.pi-service::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--svc, var(--ink-3)); }
 .pi-message { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; color: var(--ink); }
 .pi-lines li[data-system] .pi-message { color: var(--ink-2); font-style: italic; }
 .pi-lines li[data-tone="bad"] { background: var(--danger-tint); }
@@ -2864,6 +2923,10 @@ button.link.danger { color: var(--danger); }
 .pi-lines li[data-tone="warn"] .pi-message { color: var(--signal); }
 .pi-lines li[data-tone="good"] .pi-message::before { content: "✓ "; color: var(--here); }
 @media (max-width: 560px) {
+  /* The chart's controls get their own line under the title, spans on the left, the day on the right. */
+  .pi-page .section-head { flex-wrap: wrap; }
+  .pi-page .pi-day { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; }
+  .pi-page .pi-span { margin-right: auto; }
   .pi-lines li { grid-template-columns: auto 1fr; gap: 2px 10px; }
   .pi-lines .pi-message { grid-column: 1 / -1; }
 }

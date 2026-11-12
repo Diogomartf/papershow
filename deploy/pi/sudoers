@@ -1,0 +1,4 @@
+# Lets the Papershow server restart the panel client or the Pi, from the Pi page (admins only), and nothing else.
+# The server runs as you, without root. install.sh fills in @USER@ and puts this in /etc/sudoers.d/papershow;
+# uninstall.sh removes it.
+@USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart papershow-panel, /usr/bin/systemctl reboot
