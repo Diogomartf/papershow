@@ -590,7 +590,7 @@ app.get("/api/pi", async (c) => {
   return c.json(
     await piReport({
       day: c.req.query("day"),
-      span: c.req.query("span") === "month" ? "month" : "day",
+      span: (["week", "month", "year"] as const).find((x) => x === c.req.query("span")) ?? "day",
       from: c.req.query("from"),
       to: c.req.query("to"),
       q: c.req.query("q"),

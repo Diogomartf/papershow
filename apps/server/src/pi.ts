@@ -23,7 +23,7 @@ export type Sample = {
   warn: boolean;
 };
 
-/** A day's temperature in short, for the month chart. */
+/** A day's temperature in short, for the 7-day, 30-day and year charts. */
 export type DayTemp = { day: string; at: number; avg: number; min: number; max: number; checks: number; hot: number };
 
 export type Service = "server" | "panel" | "update" | "name";
@@ -73,7 +73,7 @@ export type PiReport = {
   keepsLogs: boolean;
   now: Now;
   health: Sample[];
-  /** With `span: "month"`: the 30 days up to `day`, one summary each, oldest first. Days with no checks are left out. */
+  /** With a `span` longer than a day: the days up to `day`, one summary each, oldest first. Days with no checks are left out. */
   days: DayTemp[] | null;
   lines: Line[];
   /** The chosen days may hold older lines than these: ask again with `before: cursor`. */
@@ -154,8 +154,30 @@ export function parseHealth(message: string, at: number, priority: number): Samp
   };
 }
 
-/** The days a month chart shows: 30, up to and including `day`. */
-export const MONTH = 30;
+/** How many days each chart shows, up to and including `day`. A year is 52 whole weeks, so it groups by week evenly. */
+export const SPANS = { day: 1, week: 7, month: 30, year: 364 } as const;
+export type Span = keyof typeof SPANS;
+
+/** Past days' summaries: a day that's over doesn't change, so a year's chart reads the journal for it once. */
+const pastDays = new Map<string, DayTemp | null>();
+
+/** The summaries of `first` to `last`: past days from what's kept, the rest from the journal (once, for all of them). */
+async function daysFor(first: string, last: string): Promise<DayTemp[]> {
+  const today = dayOf(Date.now());
+  const all: string[] = [];
+  for (let d = first; d <= last; d = nextDay(d)) all.push(d);
+  const missing = all.filter((d) => d >= today || !pastDays.has(d));
+  if (missing.length) {
+    const read = summarize(await healthFor(missing[0], missing.at(-1)));
+    const byDay = new Map(read.map((t) => [t.day, t]));
+    for (const d of missing) if (d < today) pastDays.set(d, byDay.get(d) ?? null);
+    for (const t of read) if (t.day >= today) pastDays.set(`now:${t.day}`, t);
+  }
+  return all.flatMap((d) => {
+    const t = d >= today ? pastDays.get(`now:${d}`) : pastDays.get(d);
+    return t ? [t] : [];
+  });
+}
 
 /** Each day's checks in short: the average, the low and high, and how many were hot or throttled. */
 export function summarize(samples: Sample[]): DayTemp[] {
@@ -184,7 +206,8 @@ async function healthFor(day: string, last = day): Promise<Sample[]> {
     "--since", `${day} 00:00:00`,
     "--until", `${nextDay(last)} 00:00:00`,
     "-o", "json", "--output-fields=MESSAGE,PRIORITY", "--no-pager",
-  ]);
+    // A year is some 35,000 checks: more than the usual few seconds, once; past days are kept after (daysFor).
+  ], 30_000);
   return entries(out).flatMap((e) => {
     const s = parseHealth(messageOf(e), Number(e.__REALTIME_TIMESTAMP) / 1000, Number(e.PRIORITY ?? 6));
     return s ? [s] : [];
@@ -388,8 +411,8 @@ let hasJournal: boolean | null = null;
 /** The Pi page's report for `day` (today by default). `before` pages back through that day's lines. */
 export async function piReport(opts: {
   day?: string;
-  /** "month" also sends the 30 days up to `day`, a summary each. */
-  span?: "day" | "month";
+  /** "week", "month" or "year" also sends the days up to `day`, a summary each. */
+  span?: Span;
   from?: string;
   to?: string;
   before?: number;
@@ -414,18 +437,16 @@ export async function piReport(opts: {
     limit: Math.min(Math.max(opts.limit ?? 150, 1), 500),
   };
   hasJournal ??= (await run("journalctl", ["--version"])) !== null;
-  const month = opts.span === "month" && !opts.before;
-  if (!hasJournal) return standIn(day, today, lineOpts, month);
-  const [now, health, page, first] = await Promise.all([
+  const long = opts.span && opts.span !== "day" && !opts.before ? SPANS[opts.span] : 0;
+  if (!hasJournal) return standIn(day, today, lineOpts, long);
+  const [now, health, days, page, first] = await Promise.all([
     readNow(),
-    opts.before ? Promise.resolve([]) : healthFor(month ? shiftDays(day, 1 - MONTH) : day, day),
+    opts.before ? Promise.resolve([]) : healthFor(day),
+    long ? daysFor(shiftDays(day, 1 - long), day) : Promise.resolve(null),
     linesFor(lineOpts),
     journalStart(),
   ]);
-  // The month's checks, summed up a day each; the chart's own day keeps every check.
-  const days = month ? summarize(health) : null;
-  const dayHealth = month ? health.filter((s) => dayOf(s.at) === day) : health;
-  return { sample: false, day, today, firstDay: first, keepsLogs: existsSync("/var/log/journal"), now, health: dayHealth, days, ...page, ...dayBounds(day) };
+  return { sample: false, day, today, firstDay: first, keepsLogs: existsSync("/var/log/journal"), now, health, days, ...page, ...dayBounds(day) };
 }
 
 // ── Stand-in, off the Pi ───────────────────────────────────────────────────
@@ -482,11 +503,10 @@ function sampleLines(day: string): Line[] {
 }
 
 /** Readings for working on the page off the Pi, marked as a sample. */
-function standIn(day: string, today: string, opts: LineOpts, month: boolean): PiReport {
+function standIn(day: string, today: string, opts: LineOpts, long: number): PiReport {
   const health = healthSamples(day);
-  const monthDays = month
-    ? summarize(Array.from({ length: MONTH }, (_, i) => healthSamples(shiftDays(day, i + 1 - MONTH))).flat())
-    : null;
+  // A sample journal goes back as far as asked, so the year chart has something to show.
+  const monthDays = long ? summarize(Array.from({ length: long }, (_, i) => healthSamples(shiftDays(day, i + 1 - long))).flat()) : null;
   const firstDay = dayOf(Date.now() - 6 * 86_400_000);
   const days: string[] = [];
   for (let d = opts.to; d >= opts.from && d >= firstDay; d = shiftDays(d, -1)) days.push(d);

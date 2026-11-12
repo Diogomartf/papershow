@@ -179,7 +179,7 @@ export type PiReport = {
     version: string | null;
   };
   health: PiSample[];
-  /** With `span: "month"`: the 30 days up to `day`, one summary each. */
+  /** With a `span` of a week, a month or a year: the days up to `day`, one summary each. */
   days: { day: string; at: number; avg: number; min: number; max: number; checks: number; hot: number }[] | null;
   lines: PiLine[];
   more: boolean;
@@ -192,7 +192,7 @@ export type PiReport = {
 };
 
 export const getPi = (
-  opts: { day?: string; span?: "month"; from?: string; to?: string; q?: string; before?: number; service?: PiService; problems?: 1; limit?: number } = {},
+  opts: { day?: string; span?: "week" | "month" | "year"; from?: string; to?: string; q?: string; before?: number; service?: PiService; problems?: 1; limit?: number } = {},
 ) => {
   const q = new URLSearchParams(Object.entries(opts).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]));
   return call<PiReport>(`/api/pi?${q}`);

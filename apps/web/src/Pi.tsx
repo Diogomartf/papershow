@@ -52,7 +52,7 @@ export function Pi() {
   const params = new URLSearchParams(location.search);
   const [day, setDay] = useState<string | null>(() => params.get("day"));
   // The chart: one day's checks, or the 30 days up to it, a day each.
-  const [span, setSpan] = useState<"day" | "month">(() => (params.get("span") === "month" ? "month" : "day"));
+  const [span, setSpan] = useState<Span>(() => (["week", "month", "year"] as const).find((x) => x === params.get("span")) ?? "day");
   // The logs' own days, first and last; null follows the chart's day.
   const [range, setRange] = useState<{ from: string; to: string } | null>(() => {
     const from = params.get("from");
@@ -90,7 +90,7 @@ export function Pi() {
     if (!report) return;
     const p = new URLSearchParams();
     if (report.day !== report.today) p.set("day", report.day);
-    if (span === "month") p.set("span", "month");
+    if (span !== "day") p.set("span", span);
     if (range) {
       p.set("from", range.from);
       p.set("to", range.to);
@@ -109,7 +109,7 @@ export function Pi() {
   const asked = useRef(0);
   const load = useCallback(() => {
     const n = ++asked.current;
-    return getPi({ day: day ?? undefined, span: span === "month" ? "month" : undefined, ...filters, limit: PAGE }).then(
+    return getPi({ day: day ?? undefined, span: span === "day" ? undefined : span, ...filters, limit: PAGE }).then(
         (r) => {
           if (n !== asked.current) return;
           setReport(r);
@@ -236,14 +236,18 @@ export function Pi() {
             <h2>Temperature</h2>
             <div className="pi-day">
               <div className="log-filter pi-span" role="radiogroup" aria-label="How long">
-                <button role="radio" aria-checked={span === "day"} onClick={() => setSpan("day")}>
-                  Day
-                </button>
-                <button role="radio" aria-checked={span === "month"} onClick={() => setSpan("month")}>
-                  30 days
-                </button>
+                {(Object.keys(SPAN_LABELS) as Span[]).map((x) => (
+                  <button key={x} role="radio" aria-checked={span === x} onClick={() => setSpan(x)}>
+                    {SPAN_LABELS[x]}
+                  </button>
+                ))}
               </div>
-              <button className="ghost" onClick={() => go(shiftDay(shown, -1))} disabled={!shown || (!!first && shown <= first)} aria-label="The day before">
+              <button
+                className="ghost"
+                onClick={() => go(shiftDay(shown, -SPAN_DAYS[span]))}
+                disabled={!shown || (!!first && shiftDay(shown, 1 - SPAN_DAYS[span]) <= first)}
+                aria-label={span === "day" ? "The day before" : "Further back"}
+              >
                 ‹
               </button>
               <label className="pi-date">
@@ -259,9 +263,9 @@ export function Pi() {
               </label>
               <button
                 className="ghost"
-                onClick={() => go(shiftDay(shown, 1))}
+                onClick={() => go(shiftDay(shown, SPAN_DAYS[span]) > (report?.today ?? "") ? (report?.today ?? shown) : shiftDay(shown, SPAN_DAYS[span]))}
                 disabled={!report || shown >= report.today}
-                aria-label="The day after"
+                aria-label={span === "day" ? "The day after" : "Later"}
               >
                 ›
               </button>
@@ -273,9 +277,9 @@ export function Pi() {
             </div>
           </div>
           {report &&
-            (span === "month" ? (
+            (span !== "day" ? (
               report.days ? (
-                <MonthChart report={report} onDay={(d) => (setSpan("day"), go(d))} />
+                <RangeChart report={report} span={span} onPick={(d, to) => (setSpan(to), go(d))} />
               ) : (
                 <div className="pi-chart pi-chart-empty" />
               )
@@ -393,6 +397,103 @@ function Marked({ text, q }: { text: string; q: string }) {
   return <>{parts}</>;
 }
 
+const RESTARTS = {
+  panel: {
+    label: "Restart the panel",
+    question: "Restart the panel?",
+    detail: "The panel client starts again and redraws. Papershow itself stays up.",
+    yes: "Restart",
+  },
+  pi: {
+    label: "Restart the Pi",
+    question: "Restart the Pi?",
+    detail: "Papershow and the panel go away for about a minute. This page picks up again when the Pi is back.",
+    yes: "Restart the Pi",
+  },
+} as const;
+
+/** ↻ for the panel, ⏻ for the Pi. */
+function RestartIcon({ what }: { what: "panel" | "pi" }) {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      {what === "panel" ? (
+        <>
+          <path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.75" />
+          <path d="M13.2 2.6v2.9h-2.9" />
+        </>
+      ) : (
+        <>
+          <path d="M8 2v5.5" />
+          <path d="M4.6 4.2a5.2 5.2 0 1 0 6.8 0" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+/** Admins: restart the panel client, or the whole Pi. Each asks once more, in the card, before it goes. */
+function Restarts({ onPi }: { onPi: () => void }) {
+  const [sure, setSure] = useState<"panel" | "pi" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState<{ text: string; bad: boolean } | null>(null);
+  const go = async (what: "panel" | "pi") => {
+    setBusy(true);
+    setSaid(null);
+    try {
+      await restartPi(what);
+      if (what === "pi") onPi();
+      else {
+        setSaid({ text: "The panel restarted. It redraws in a moment.", bad: false });
+        cue("success");
+      }
+    } catch (err) {
+      setSaid({ text: reason(err, "That didn't work"), bad: true });
+      cue("error");
+    } finally {
+      setBusy(false);
+      setSure(null);
+    }
+  };
+  if (sure) {
+    const r = RESTARTS[sure];
+    return (
+      <div className="pi-restarts" data-asking>
+        <span className="pi-restart-icon" aria-hidden>
+          <RestartIcon what={sure} />
+        </span>
+        <div className="pi-restart-text">
+          <strong>{r.question}</strong>
+          <span>{r.detail}</span>
+        </div>
+        <div className="pi-restart-actions">
+          <button className="ghost" onClick={() => setSure(null)} disabled={busy}>
+            Cancel
+          </button>
+          <button className="danger pi-restart-yes" onClick={() => go(sure)} disabled={busy}>
+            {busy ? "Restarting…" : r.yes}
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="pi-restarts">
+      <div className="pi-restart-text">
+        <strong>Restart</strong>
+        {said ? <span data-bad={said.bad || undefined}>{said.text}</span> : <span>When the panel or the Pi is stuck.</span>}
+      </div>
+      <div className="pi-restart-actions">
+        {(["panel", "pi"] as const).map((what) => (
+          <button key={what} className="pi-restart-button" data-cuelume-open onClick={() => setSure(what)}>
+            <RestartIcon what={what} />
+            {RESTARTS[what].label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type Level = "bad" | "warn";
 type Tile = { label: string; value: string; note?: string; level?: Level };
 
@@ -403,54 +504,6 @@ const worse = (...ls: (Level | false | undefined)[]) => (ls.includes("bad") ? "b
  * The Pi now, a card a reading. A card that needs a look is amber; one where something's wrong is red, and says why.
  * The thresholds follow health.sh (75°C is a warning, 80°C the Pi slows down) and what keeps the panel up.
  */
-/** Admins: restart the panel client, or the whole Pi. Each asks once more before it goes. */
-function Restarts({ onPi }: { onPi: () => void }) {
-  const [sure, setSure] = useState<"panel" | "pi" | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [said, setSaid] = useState<string | null>(null);
-  const go = async (what: "panel" | "pi") => {
-    setBusy(true);
-    setSaid(null);
-    try {
-      await restartPi(what);
-      if (what === "pi") onPi();
-      else {
-        setSaid("The panel restarted. It redraws in a moment.");
-        cue("success");
-      }
-    } catch (err) {
-      setSaid(reason(err, "That didn't work"));
-      cue("error");
-    } finally {
-      setBusy(false);
-      setSure(null);
-    }
-  };
-  const ask = (what: "panel" | "pi", label: string, question: string, yes: string) =>
-    sure === what ? (
-      <span className="pi-confirm">
-        <span>{question}</span>
-        <button className="danger" onClick={() => go(what)} disabled={busy}>
-          {busy ? "…" : yes}
-        </button>
-        <button className="ghost" onClick={() => setSure(null)} disabled={busy}>
-          Cancel
-        </button>
-      </span>
-    ) : (
-      <button className="ghost" onClick={() => setSure(what)} disabled={busy || sure !== null}>
-        {label}
-      </button>
-    );
-  return (
-    <div className="pi-restarts">
-      {ask("panel", "Restart the panel", "Restart the panel? It redraws.", "Restart")}
-      {ask("pi", "Restart the Pi", "Restart the Pi? Papershow is gone for about a minute.", "Restart the Pi")}
-      {said && <span className="muted">{said}</span>}
-    </div>
-  );
-}
-
 function NowTiles({ report }: { report: PiReport }) {
   const { now, health } = report;
   const today = report.day === report.today;
@@ -568,11 +621,53 @@ function tipAt(px: number, py: number, size: { w: number; h: number }, w: number
   return { left, top: above >= EDGE ? above : py + 14 };
 }
 
+type Span = "day" | "week" | "month" | "year";
+/** How many days each span shows, up to the chosen day; a year is 52 whole weeks. */
+const SPAN_DAYS: Record<Span, number> = { day: 1, week: 7, month: 30, year: 364 };
+const SPAN_LABELS: Record<Span, string> = { day: "Day", week: "7 days", month: "30 days", year: "1 year" };
+
+type DayTemp = NonNullable<PiReport["days"]>[number];
+/** A bar on the chart: a day, or a week of them in the year. */
+type Bucket = { first: string; last: string; t: DayTemp | null };
+
+/** The days' summaries as one: the coolest and hottest of them, and the average over all their checks. */
+function merge(days: DayTemp[]): DayTemp | null {
+  if (!days.length) return null;
+  const checks = days.reduce((a, d) => a + d.checks, 0);
+  return {
+    day: days[0].day,
+    at: days[0].at,
+    avg: Math.round((days.reduce((a, d) => a + d.avg * d.checks, 0) / checks) * 10) / 10,
+    min: Math.min(...days.map((d) => d.min)),
+    max: Math.max(...days.map((d) => d.max)),
+    checks,
+    hot: days.reduce((a, d) => a + d.hot, 0),
+  };
+}
+
 /**
- * Thirty days of temperature, a day each: the band runs from the day's coolest check to its hottest, the line joins
- * the averages. Hover or touch for the day; click to open it.
+ * The year's labels: a month's name on the week it starts in, at least `gap` weeks after the last one shown, so a
+ * phone shows every other month instead of names on top of each other. A month that falls inside a week takes it.
  */
-function MonthChart({ report, onDay }: { report: PiReport; onDay: (day: string) => void }) {
+function monthMarks(buckets: Bucket[], gap: number) {
+  const marks: { i: number; text: string }[] = [];
+  buckets.forEach((b, i) => {
+    const starts = b.first.slice(5, 7) !== b.last.slice(5, 7) || b.first.slice(8) === "01";
+    if (starts && (!marks.length || i - marks.at(-1)!.i >= gap)) marks.push({ i, text: short(b.last, { month: "short" }) });
+  });
+  return marks;
+}
+
+const short = (d: string, opts: Intl.DateTimeFormatOptions) => {
+  const [y, m, dd] = d.split("-").map(Number);
+  return new Date(y, m - 1, dd).toLocaleDateString(undefined, opts);
+};
+
+/**
+ * Days or weeks of temperature: each bar runs from the coolest check to the hottest, the line joins the averages.
+ * 7 and 30 days show a bar a day, a year a bar a week. Hover or touch for one; click to open it (a day, or a week).
+ */
+function RangeChart({ report, span, onPick }: { report: PiReport; span: Exclude<Span, "day">; onPick: (day: string, span: Span) => void }) {
   const box = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(720);
   const [hover, setHover] = useState<number | null>(null);
@@ -591,44 +686,59 @@ function MonthChart({ report, onDay }: { report: PiReport; onDay: (day: string) 
   }, [hover, w, tipSize]);
 
   const days = report.days ?? [];
-  // Every one of the 30 days has a slot, checks or not, so a gap shows as a gap.
-  const slots = Array.from({ length: 30 }, (_, i) => shiftDay(report.day, i - 29));
   const byDay = new Map(days.map((d) => [d.day, d]));
+  // Every day (or week) in the span has a slot, checks or not, so a gap shows as a gap.
+  const per = span === "year" ? 7 : 1;
+  const count = SPAN_DAYS[span] / per;
+  const buckets: Bucket[] = Array.from({ length: count }, (_, i) => {
+    const last = shiftDay(report.day, (i - count + 1) * per);
+    const first = shiftDay(last, 1 - per);
+    const inside = Array.from({ length: per }, (_, k) => byDay.get(shiftDay(first, k))).filter((d): d is DayTemp => !!d);
+    return { first, last, t: merge(inside) };
+  });
   const lo = Math.min(40, ...days.map((d) => Math.floor(d.min / 10) * 10));
   const hi = Math.max(THROTTLE_C + 5, ...days.map((d) => Math.ceil(d.max / 5) * 5));
   const iw = Math.max(w - PAD.left - PAD.right, 10);
   const ih = H - PAD.top - PAD.bottom;
-  const slot = iw / slots.length;
+  const slot = iw / count;
   const x = (i: number) => PAD.left + slot * (i + 0.5);
   const yy = (c: number) => PAD.top + (1 - (c - lo) / (hi - lo)) * ih;
   const ticks = [];
   for (let c = lo; c <= hi; c += 10) ticks.push(c);
 
-  // Averages, joined; a day without checks breaks the line.
+  // Averages, joined; a slot without checks breaks the line.
   let path = "";
-  slots.forEach((d, i) => {
-    const t = byDay.get(d);
-    if (t) path += `${path && byDay.get(slots[i - 1]) ? "L" : "M"}${x(i).toFixed(1)},${yy(t.avg).toFixed(1)}`;
+  buckets.forEach((b, i) => {
+    if (b.t) path += `${path && buckets[i - 1]?.t ? "L" : "M"}${x(i).toFixed(1)},${yy(b.t.avg).toFixed(1)}`;
   });
-  const label = (d: string) => {
-    const [y, m, dd] = d.split("-").map(Number);
-    return new Date(y, m - 1, dd).toLocaleDateString(undefined, { day: "numeric", month: "short" });
-  };
+
+  // Labels along the bottom: each weekday for 7 days, every week for 30, the months for a year.
+  const marks =
+    span === "week"
+      ? buckets.map((b, i) => ({ i, text: short(b.last, { weekday: "short" }) }))
+      : span === "month"
+        ? [0, 7, 14, 21, 29].map((i) => ({ i, text: short(buckets[i].last, { day: "numeric", month: "short" }) }))
+        : monthMarks(buckets, w < 500 ? 8 : 3);
+  const what = (b: Bucket) =>
+    per === 1
+      ? short(b.last, { weekday: "short", day: "numeric", month: "short" })
+      : `${short(b.first, { day: "numeric", month: "short" })} – ${short(b.last, { day: "numeric", month: "short" })}`;
+
   const pick = (clientX: number) => {
     const r = box.current?.getBoundingClientRect();
     if (!r) return;
     const i = Math.floor((clientX - r.left - PAD.left) / slot);
-    setHover(i >= 0 && i < slots.length && byDay.has(slots[i]) ? i : null);
+    setHover(i >= 0 && i < count && buckets[i].t ? i : null);
   };
-  const h = hover !== null ? byDay.get(slots[hover]) : undefined;
+  const h = hover !== null ? buckets[hover] : null;
   if (!days.length)
     return (
       <div className="pi-chart pi-chart-empty" ref={box}>
-        <p className="muted">No health checks in those 30 days.</p>
+        <p className="muted">No health checks in those days.</p>
       </div>
     );
-  const avg = days.reduce((a, d) => a + d.avg * d.checks, 0) / days.reduce((a, d) => a + d.checks, 0);
-  const bar = Math.max(Math.min(slot * 0.55, 14), 3);
+  const all = merge(days)!;
+  const bar = Math.max(Math.min(slot * 0.6, 14), 2);
   return (
     <div
       className="pi-chart pi-month"
@@ -636,55 +746,57 @@ function MonthChart({ report, onDay }: { report: PiReport; onDay: (day: string) 
       onPointerMove={(e) => pick(e.clientX)}
       onPointerDown={(e) => pick(e.clientX)}
       onPointerLeave={() => setHover(null)}
-      onClick={() => hover !== null && onDay(slots[hover])}
+      onClick={() => h && onPick(h.last, per === 1 ? "day" : "week")}
     >
-      <svg width={w} height={H} role="img" aria-label={`Temperature over 30 days: average ${avg.toFixed(1)}°C, hottest ${Math.max(...days.map((d) => d.max))}°C.`}>
+      <svg width={w} height={H} role="img" aria-label={`Temperature over ${SPAN_LABELS[span]}: average ${all.avg.toFixed(1)}°C, hottest ${all.max}°C.`}>
         {ticks.map((c) => (
           <g key={c}>
             <line className="pi-grid" x1={PAD.left} x2={w - PAD.right} y1={yy(c)} y2={yy(c)} />
             <text className="pi-axis" x={PAD.left - 8} y={yy(c)} dy="0.32em" textAnchor="end">{`${c}°`}</text>
           </g>
         ))}
-        {[0, 7, 14, 21, 29].map((i) => (
-          <text key={i} className="pi-axis" x={x(i)} y={H - 8} textAnchor={i === 0 ? "start" : i === 29 ? "end" : "middle"}>
-            {label(slots[i])}
+        {marks.map((m) => (
+          <text key={m.i} className="pi-axis" x={x(m.i)} y={H - 8} textAnchor={m.i === 0 && span !== "week" ? "start" : m.i === count - 1 && span !== "week" ? "end" : "middle"}>
+            {m.text}
           </text>
         ))}
         <line className="pi-limit" x1={PAD.left} x2={w - PAD.right} y1={yy(THROTTLE_C)} y2={yy(THROTTLE_C)} />
         <text className="pi-limit-label" x={w - PAD.right} y={yy(THROTTLE_C) - 6} textAnchor="end">
           Slows down at {THROTTLE_C}°C
         </text>
+        <line className="pi-avg" x1={PAD.left} x2={w - PAD.right} y1={yy(all.avg)} y2={yy(all.avg)} />
         {hover !== null && <rect className="pi-day-hover" x={x(hover) - slot / 2} y={PAD.top} width={slot} height={ih} rx={4} />}
-        {slots.map((d, i) => {
-          const t = byDay.get(d);
-          if (!t) return null;
-          return (
-            <rect
-              key={d}
-              className="pi-range-bar"
-              data-hot={t.hot > 0 || undefined}
-              x={x(i) - bar / 2}
-              y={yy(t.max)}
-              width={bar}
-              height={Math.max(yy(t.min) - yy(t.max), 2)}
-              rx={Math.min(bar / 2, 4)}
-            />
-          );
-        })}
+        {buckets.map(
+          (b, i) =>
+            b.t && (
+              <rect
+                key={b.last}
+                className="pi-range-bar"
+                data-hot={b.t.hot > 0 || undefined}
+                x={x(i) - bar / 2}
+                y={yy(b.t.max)}
+                width={bar}
+                height={Math.max(yy(b.t.min) - yy(b.t.max), 2)}
+                rx={Math.min(bar / 2, 4)}
+              />
+            ),
+        )}
         <path className="pi-line" d={path} />
-        {slots.map((d, i) => {
-          const t = byDay.get(d);
-          return t && <circle key={d} className={hover === i ? "pi-dot" : "pi-avg-dot"} cx={x(i)} cy={yy(t.avg)} r={hover === i ? 5 : 2.5} />;
-        })}
+        {count <= 60 &&
+          buckets.map((b, i) => b.t && <circle key={b.last} className={hover === i ? "pi-dot" : "pi-avg-dot"} cx={x(i)} cy={yy(b.t.avg)} r={hover === i ? 5 : 2.5} />)}
+        {count > 60 && h?.t && <circle className="pi-dot" cx={x(hover!)} cy={yy(h.t.avg)} r={5} />}
       </svg>
-      {h && hover !== null && (
-        <div className="pi-tip" ref={tip} style={tipAt(x(hover), yy(h.max), tipSize, w)}>
-          <strong>{h.avg.toFixed(1)}°C</strong> on average, {label(h.day)}
+      <span className="pi-avg-label" style={{ top: yy(all.avg) - 9, left: PAD.left + 6 }}>
+        avg {all.avg.toFixed(1)}°
+      </span>
+      {h?.t && (
+        <div className="pi-tip" ref={tip} style={tipAt(x(hover!), yy(h.t.max), tipSize, w)}>
+          <strong>{h.t.avg.toFixed(1)}°C</strong> on average, {what(h)}
           <span>
-            {h.min.toFixed(1)}–{h.max.toFixed(1)}°C · {h.checks} checks
+            {h.t.min.toFixed(1)}–{h.t.max.toFixed(1)}°C · {h.t.checks} checks
           </span>
-          {h.hot > 0 && <span className="pi-tip-bad">{h.hot} hot or throttled</span>}
-          <span>Click to open the day</span>
+          {h.t.hot > 0 && <span className="pi-tip-bad">{h.t.hot} hot or throttled</span>}
+          <span>Click to open the {per === 1 ? "day" : "week"}</span>
         </div>
       )}
     </div>
