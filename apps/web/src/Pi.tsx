@@ -585,7 +585,22 @@ function NowTiles({ report }: { report: PiReport }) {
       <div className="section-head">
         <h2>The Pi now</h2>
         <span className="pi-verdict" data-level={level} role="status">
-          <span aria-hidden>{level ? "!" : "✓"}</span>
+          <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            {level ? (
+              // A warning triangle.
+              <>
+                <path d="M7.13 2.5a1 1 0 0 1 1.74 0l5.4 9.5a1 1 0 0 1-.87 1.5H2.6a1 1 0 0 1-.87-1.5z" />
+                <path d="M8 6.2v3" />
+                <circle cx="8" cy="11.2" r=".4" fill="currentColor" />
+              </>
+            ) : (
+              // A check in a circle.
+              <>
+                <circle cx="8" cy="8" r="6" />
+                <path d="m5.4 8.2 1.8 1.8 3.4-3.6" />
+              </>
+            )}
+          </svg>
           {level
             ? `${flagged.length === 1 ? "1 thing needs" : `${flagged.length} things need`} a look: ${flagged.map((t) => t.label).join(", ")}`
             : "All good"}
