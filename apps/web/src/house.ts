@@ -181,6 +181,12 @@ export type PiReport = {
   health: PiSample[];
   lines: PiLine[];
   more: boolean;
+  /** Where Older carries on from (journal microseconds), when `more`. */
+  cursor: number | null;
+  /** The Pi's time zone, and when the day starts and ends there (ms). */
+  tz: string;
+  dayStart: number;
+  dayEnd: number;
 };
 
 export const getPi = (

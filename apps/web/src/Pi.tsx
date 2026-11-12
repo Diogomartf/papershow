@@ -19,8 +19,10 @@ const SERVICES: { key: PiService | null; label: string }[] = [
   { key: "update", label: "Update" },
 ];
 
-const hm = (t: number) => new Date(t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-const hms = (t: number) => new Date(t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+// Times as the Pi tells them, in its time zone: a Pi in Lisbon read from New York still says 18:00 at its 18:00.
+const hm = (t: number, tz: string) => new Date(t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", timeZone: tz });
+const hms = (t: number, tz: string) =>
+  new Date(t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: tz });
 
 /** "3 days", "5 h", "12 min": how long something has been up. */
 function span(s: number) {
@@ -66,6 +68,10 @@ export function Pi() {
   const [report, setReport] = useState<PiReport | null>(null);
   const [lines, setLines] = useState<PiLine[]>([]);
   const [more, setMore] = useState(false);
+  // Where Older carries on from: the oldest entry the server read, which a filter may have skipped every one of.
+  const [cursor, setCursor] = useState<number | null>(null);
+  const [fetchingOlder, setFetchingOlder] = useState(false);
+  const olderPending = useRef(false);
   const [paged, setPaged] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -102,6 +108,7 @@ export function Pi() {
           setReport(r);
           setLines(r.lines);
           setMore(r.more);
+          setCursor(r.cursor);
           setPaged(false);
           setFailed(false);
         },
@@ -121,14 +128,25 @@ export function Pi() {
     return () => clearInterval(t);
   }, [live, load]);
 
+  // One at a time: a second click before the answer would ask from the same place and add the same lines twice.
   const older = async () => {
-    if (!report) return;
+    if (!report || cursor === null || olderPending.current) return;
+    olderPending.current = true;
+    setFetchingOlder(true);
     const n = asked.current;
-    const r = await getPi({ day: report.day, ...filters, limit: PAGE, before: lines.at(-1)?.at });
-    if (n !== asked.current) return;
-    setLines((xs) => [...xs, ...r.lines]);
-    setMore(r.more);
-    setPaged(true);
+    try {
+      const r = await getPi({ day: report.day, ...filters, limit: PAGE, before: cursor });
+      if (n !== asked.current) return;
+      setLines((xs) => [...xs, ...r.lines]);
+      setMore(r.more);
+      setCursor(r.cursor);
+      setPaged(true);
+    } catch {
+      // Older stays, to try again.
+    } finally {
+      olderPending.current = false;
+      setFetchingOlder(false);
+    }
   };
 
   // A new day for the chart brings the logs back to that day.
@@ -213,7 +231,7 @@ export function Pi() {
               )}
             </div>
           </div>
-          {report && <TempChart day={report.day} samples={report.day === shown ? report.health : []} today={report.today} />}
+          {report && <TempChart report={report} samples={report.day === shown ? report.health : []} />}
         </section>
 
         <section className="people-section">
@@ -262,7 +280,7 @@ export function Pi() {
               Problems only
             </button>
           </div>
-          {report && !lines.length && (
+          {report && !lines.length && !more && (
             <p className="muted people-empty">
               {q
                 ? `Nothing with “${q}” ${manyDays ? "on those days" : "that day"}.`
@@ -277,17 +295,24 @@ export function Pi() {
             {lines.map((l) => (
               <li key={`${l.at}-${l.service}`} data-tone={l.tone} data-system={l.system || undefined}>
                 <time dateTime={new Date(l.at / 1000).toISOString()}>
-                  {manyDays && <span className="pi-line-day">{new Date(l.at / 1000).toLocaleDateString(undefined, { day: "numeric", month: "short" })} </span>}
-                  {hms(l.at / 1000)}
+                  {manyDays && (
+                    <span className="pi-line-day">
+                      {new Date(l.at / 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", timeZone: report?.tz })}{" "}
+                    </span>
+                  )}
+                  {hms(l.at / 1000, report?.tz ?? "UTC")}
                 </time>
                 <span className="pi-service">{l.service}</span>
                 <span className="pi-message">{q ? <Marked text={l.message} q={q} /> : l.message}</span>
               </li>
             ))}
           </ol>
+          {report && !lines.length && more && (
+            <p className="muted people-empty">Nothing yet in the newest lines. There's more further back.</p>
+          )}
           {more && (
-            <button className="ghost log-more" onClick={older}>
-              Older
+            <button className="ghost log-more" onClick={older} disabled={fetchingOlder}>
+              {fetchingOlder ? "Looking…" : lines.length ? "Older" : "Look further back"}
             </button>
           )}
         </section>
@@ -348,13 +373,15 @@ function NowTiles({ report }: { report: PiReport }) {
     {
       label: "Panel",
       value: now.panel?.state === "active" ? "Running" : (now.panel?.state ?? "–"),
-      note: now.panel?.since ? `since ${new Date(now.panel.since).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}` : undefined,
+      note: now.panel?.since
+        ? `since ${new Date(now.panel.since).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: report.tz })}`
+        : undefined,
       bad: !!now.panel && now.panel.state !== "active",
     },
     {
       label: "Version",
       value: now.version?.split(" ")[0] ?? "–",
-      note: now.update ? (now.update.ok ? `checked ${now.update.at ? hm(now.update.at) : "–"}` : "last update failed") : undefined,
+      note: now.update ? (now.update.ok ? `checked ${now.update.at ? hm(now.update.at, report.tz) : "–"}` : "last update failed") : undefined,
       bad: !!now.update && !now.update.ok,
     },
   ];
@@ -378,7 +405,8 @@ const H = 220;
 const PAD = { top: 14, right: 12, bottom: 26, left: 40 };
 
 /** A day's temperature, midnight to midnight, against the line where the Pi slows down. Hover or touch for a check. */
-function TempChart({ day, samples, today }: { day: string; samples: PiSample[]; today: string }) {
+function TempChart({ report, samples }: { report: PiReport; samples: PiSample[] }) {
+  const { day, today, tz, dayStart: start, dayEnd: end } = report;
   const box = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(720);
   const [hover, setHover] = useState<number | null>(null);
@@ -391,9 +419,6 @@ function TempChart({ day, samples, today }: { day: string; samples: PiSample[]; 
     return () => ro.disconnect();
   }, []);
 
-  const [y, m, d] = day.split("-").map(Number);
-  const start = new Date(y, m - 1, d).getTime();
-  const end = new Date(y, m - 1, d + 1).getTime();
   const temps = samples.map((s) => s.tempC);
   const lo = Math.min(40, ...temps.map((t) => Math.floor(t / 10) * 10));
   const hi = Math.max(THROTTLE_C + 5, ...temps.map((t) => Math.ceil(t / 5) * 5));
@@ -409,7 +434,8 @@ function TempChart({ day, samples, today }: { day: string; samples: PiSample[]; 
 
   const ticks = [];
   for (let c = lo; c <= hi; c += 10) ticks.push(c);
-  const hours = [0, 6, 12, 18, 24];
+  // Every six hours from the Pi's midnight; the last mark is the next midnight, wherever a clock change put it.
+  const marks = [0, 6, 12, 18].map((h) => start + h * 3_600_000).concat(end);
   const nowX = day === today ? x(now) : null;
 
   const pick = (clientX: number) => {
@@ -445,9 +471,9 @@ function TempChart({ day, samples, today }: { day: string; samples: PiSample[]; 
             <text className="pi-axis" x={PAD.left - 8} y={yy(c)} dy="0.32em" textAnchor="end">{`${c}°`}</text>
           </g>
         ))}
-        {hours.map((hr) => (
-          <text key={hr} className="pi-axis" x={x(start + hr * 3_600_000)} y={H - 8} textAnchor={hr === 0 ? "start" : hr === 24 ? "end" : "middle"}>
-            {`${String(hr % 24).padStart(2, "0")}:00`}
+        {marks.map((t, i) => (
+          <text key={t} className="pi-axis" x={x(t)} y={H - 8} textAnchor={i === 0 ? "start" : i === marks.length - 1 ? "end" : "middle"}>
+            {hm(t, tz)}
           </text>
         ))}
         <line className="pi-limit" x1={PAD.left} x2={w - PAD.right} y1={yy(THROTTLE_C)} y2={yy(THROTTLE_C)} />
@@ -470,7 +496,7 @@ function TempChart({ day, samples, today }: { day: string; samples: PiSample[]; 
       </span>
       {h && (
         <div className="pi-tip" style={{ left: Math.min(Math.max(x(h.at), 90), w - 90), top: Math.max(yy(h.tempC) - 12, 0) }}>
-          <strong>{h.tempC.toFixed(1)}°C</strong> at {hm(h.at)}
+          <strong>{h.tempC.toFixed(1)}°C</strong> at {hm(h.at, tz)}
           <span>
             Wi-Fi {h.wifiDbm !== null ? `${h.wifiDbm} dBm` : "off"} · load {h.load} · {h.freeGb} GB free
             {h.asleep ? " · asleep" : ""}

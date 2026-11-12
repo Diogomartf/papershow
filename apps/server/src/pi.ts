@@ -71,8 +71,17 @@ export type PiReport = {
   now: Now;
   health: Sample[];
   lines: Line[];
-  /** There are older lines on this day than these. */
+  /** The chosen days may hold older lines than these: ask again with `before: cursor`. */
   more: boolean;
+  /**
+   * Where the next page starts, in journal microseconds: the oldest entry read, not the oldest line shown. A filter
+   * (Problems only, a search) can skip every entry read, and the page still needs a way further back.
+   */
+  cursor: number | null;
+  /** The Pi's time zone, and when `day` starts and ends there (ms): the chart's midnight is the Pi's, not the viewer's. */
+  tz: string;
+  dayStart: number;
+  dayEnd: number;
 };
 
 const DAY = /^\d{4}-\d\d-\d\d$/;
@@ -173,6 +182,8 @@ const toneOf = (message: string, priority: number): Tone =>
 
 /** One read of the journal: plenty for a page, even of a day the clock app drew every minute of. */
 const BATCH = 3000;
+/** Reads per request, when a filter skips most of what's read: past this, the page asks for more itself. */
+const READS = 4;
 
 export type LineOpts = {
   /** The days to read, first and last, both included. */
@@ -189,7 +200,27 @@ export type LineOpts = {
 /** A search as the journal's --grep takes it: the words as they are, case ignored, no pattern characters. */
 const escapeGrep = (q: string) => q.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 
-async function linesFor(opts: LineOpts) {
+/** A page of lines, newest first, before `opts.before`. Reads on through the journal until the page is full or the days run out. */
+async function linesFor(opts: LineOpts): Promise<{ lines: Line[]; more: boolean; cursor: number | null }> {
+  const lines: Line[] = [];
+  let before = opts.before;
+  for (let i = 0; i < READS; i++) {
+    const read = await readLines({ ...opts, before });
+    lines.push(...read.lines);
+    if (lines.length > opts.limit) {
+      // Full: the next page starts after the last line shown.
+      const shown = lines.slice(0, opts.limit);
+      return { lines: shown, more: true, cursor: shown.at(-1)!.at };
+    }
+    if (read.oldest === null || !read.full) return { lines, more: false, cursor: null };
+    before = read.oldest;
+  }
+  // Still room on the page, but the journal goes on: the page can ask from where this stopped.
+  return { lines, more: true, cursor: before ?? null };
+}
+
+/** One read of the journal, newest first: the lines that pass the filters, the oldest entry read, and whether the read was full. */
+async function readLines(opts: LineOpts): Promise<{ lines: Line[]; oldest: number | null; full: boolean }> {
   const until = opts.before ? `@${Math.ceil(opts.before / 1e6)}` : `${nextDay(opts.to)} 00:00:00`;
   const units = opts.service
     ? Object.keys(UNITS).filter((u) => UNITS[u] === opts.service)
@@ -204,9 +235,11 @@ async function linesFor(opts: LineOpts) {
   ], 15_000);
   const raw = entries(out);
   const lines: Line[] = [];
+  let oldest: number | null = null;
   for (const e of raw) {
     const at = Number(e.__REALTIME_TIMESTAMP);
     if (opts.before && at >= opts.before) continue;
+    oldest = at;
     const own = UNITS[String(e._SYSTEMD_UNIT ?? "")];
     const service = own ?? UNITS[String(e.UNIT ?? "")];
     if (!service) continue;
@@ -216,7 +249,7 @@ async function linesFor(opts: LineOpts) {
     if (opts.problems && tone !== "bad" && tone !== "warn") continue;
     lines.push({ at, service, system: !own, message, tone });
   }
-  return { lines: lines.slice(0, opts.limit), more: lines.length > opts.limit || raw.length === BATCH };
+  return { lines, oldest, full: raw.length === BATCH };
 }
 
 // ── Now ────────────────────────────────────────────────────────────────────
@@ -305,6 +338,13 @@ async function journalStart() {
   return firstDay;
 }
 
+/** The Pi's time zone, and the start and end of `day` there: 23 or 25 hours on the days the clocks change. */
+const dayBounds = (day: string) => ({
+  tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  dayStart: startOf(day),
+  dayEnd: startOf(nextDay(day)),
+});
+
 let hasJournal: boolean | null = null;
 
 /** The Pi page's report for `day` (today by default). `before` pages back through that day's lines. */
@@ -341,7 +381,7 @@ export async function piReport(opts: {
     linesFor(lineOpts),
     journalStart(),
   ]);
-  return { sample: false, day, today, firstDay: first, keepsLogs: existsSync("/var/log/journal"), now, health, ...page };
+  return { sample: false, day, today, firstDay: first, keepsLogs: existsSync("/var/log/journal"), now, health, ...page, ...dayBounds(day) };
 }
 
 // ── Stand-in, off the Pi ───────────────────────────────────────────────────
@@ -437,5 +477,7 @@ function standIn(day: string, today: string, opts: LineOpts): PiReport {
     health: opts.before ? [] : health,
     lines: lines.slice(0, opts.limit),
     more: lines.length > opts.limit,
+    cursor: lines.length > opts.limit ? lines[opts.limit - 1].at : null,
+    ...dayBounds(day),
   };
 }
