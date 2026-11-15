@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { serve } from "@hono/node-server";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { serveStatic } from "@hono/node-server/serve-static";
+import { compress } from "hono/compress";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -1499,6 +1500,14 @@ app.delete("/api/asks/:id", async (c) => {
 
 if (process.env.NODE_ENV === "production") {
   const root = new URL("../../web/dist/", import.meta.url).pathname;
+  // Registered after the API, so only the web app's files get these. Gzip takes its 700 kB of script and styles
+  // to about 200 kB, which counts over Tailscale on a phone.
+  app.use("/*", compress());
+  // Vite names these after their contents, so a file at a given name never changes: the browser keeps it.
+  app.use("/assets/*", async (c, next) => {
+    await next();
+    if (c.res.ok) c.header("Cache-Control", "public, max-age=31536000, immutable");
+  });
   app.use("/*", serveStatic({ root }));
   const index = await readFile(root + "index.html", "utf8");
   app.get("*", (c) => c.html(index));
