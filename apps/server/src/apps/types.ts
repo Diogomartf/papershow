@@ -42,6 +42,23 @@ export type AppDef<C extends Record<string, unknown>, D> = {
 
 export const defineApp = <C extends Record<string, unknown>, D>(def: AppDef<C, D>) => def;
 
+const recent = new Map<string, { at: number; value: Promise<unknown> }>();
+
+/**
+ * `fn()`'s answer, shared by every caller asking for `key` within `ms`. The live panel, other instances and each
+ * keystroke of a settings preview then make one upstream call between them instead of one each. A failed call
+ * isn't kept, so the next caller tries again.
+ */
+export function shared<T>(key: string, ms: number, fn: () => Promise<T>): Promise<T> {
+  const hit = recent.get(key);
+  if (hit && Date.now() - hit.at < ms) return hit.value as Promise<T>;
+  for (const [k, v] of recent) if (Date.now() - v.at >= ms) recent.delete(k);
+  const entry = { at: Date.now(), value: fn() };
+  recent.set(key, entry);
+  entry.value.catch(() => recent.get(key) === entry && recent.delete(key));
+  return entry.value;
+}
+
 /** Every app draws on the panel's 800×480 white sheet in black. */
 export const sheet = {
   width: 800,

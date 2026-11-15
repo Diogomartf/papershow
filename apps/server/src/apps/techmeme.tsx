@@ -1,5 +1,5 @@
 import { FillFrame, fillBox, fitRows } from "./fit.tsx";
-import { decode, defineApp, linesInto, sheet, wrap } from "./types.ts";
+import { decode, defineApp, linesInto, shared, sheet, wrap } from "./types.ts";
 
 type Story = { cite: string; headline: string; excerpt: string };
 
@@ -86,7 +86,8 @@ export default defineApp({
   mock: false,
   data: async () => {
     try {
-      const stories = await topNews();
+      // Shared for a minute: every instance and each preview of its settings read the same page.
+      const stories = await shared("techmeme", 60_000, topNews);
       if (!stories.length) throw new Error("techmeme: no stories");
       last = stories;
       return stories;

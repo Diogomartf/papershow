@@ -1,7 +1,7 @@
 import type { JSX } from "#jsx/jsx-runtime";
-import { ditheredImage } from "../render.ts";
+import { ditheredImage, isOriginal } from "../render.ts";
 import { FillFrame } from "./fit.tsx";
-import { clip, decode, defineApp, linesInto, sheet, wrap } from "./types.ts";
+import { clip, decode, defineApp, linesInto, shared, sheet, wrap } from "./types.ts";
 
 /**
  * How the page is set. Poster reads from across the room (2–3 m). Clean is Poster under a smaller masthead,
@@ -118,7 +118,8 @@ function newspaper(paper: Paper) {
       const photo = config.photo ? PHOTO[config.style] : null;
       const key = `${section.value}:${photo}`;
       try {
-        const story = await leadStory(paper, section.feed, photo);
+        // Shared for a minute: a preview re-renders on every change of settings, and each would fetch the feed and photo.
+        const story = await shared(`${paper.kind}:${key}:${isOriginal()}`, 60_000, () => leadStory(paper, section.feed, photo));
         last.set(key, story);
         return story;
       } catch (err) {
