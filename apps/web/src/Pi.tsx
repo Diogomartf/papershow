@@ -48,6 +48,31 @@ function dayName(day: string, today: string) {
 /** Wi-Fi in words, from dBm: -30 is as good as it gets, under -75 drops out. */
 const signal = (dbm: number) => (dbm >= -55 ? "excellent" : dbm >= -67 ? "good" : dbm >= -75 ? "fair" : "weak");
 
+type Ask = NonNullable<Parameters<typeof getPi>[0]>;
+
+/** What the page asks the server for. One function, so a kept report is found by the same key it was kept under. */
+const askOf = (day: string | null, span: Span, service: PiService | null, problems: boolean, q: string, range: { from: string; to: string } | null): Ask => ({
+  day: day ?? undefined,
+  span: span === "day" ? undefined : span,
+  service: service ?? undefined,
+  problems: problems ? 1 : undefined,
+  q: q || undefined,
+  from: range?.from,
+  to: range?.to,
+  limit: PAGE,
+});
+
+/**
+ * The last few reports, by what was asked. Coming back to the page shows the last one at once while a fresh one
+ * loads, instead of the skeleton: on the Pi, reading the journal takes a moment.
+ */
+const kept = new Map<string, PiReport>();
+function keep(key: string, report: PiReport) {
+  kept.delete(key);
+  kept.set(key, report);
+  if (kept.size > 8) kept.delete(kept.keys().next().value!);
+}
+
 export function Pi() {
   const params = new URLSearchParams(location.search);
   const [day, setDay] = useState<string | null>(() => params.get("day"));
@@ -68,11 +93,13 @@ export function Pi() {
   }, [typed]);
   const [service, setService] = useState<PiService | null>(null);
   const [problems, setProblems] = useState(false);
-  const [report, setReport] = useState<PiReport | null>(null);
-  const [lines, setLines] = useState<PiLine[]>([]);
-  const [more, setMore] = useState(false);
+  // What was last seen for this same view, if anything: shown until the fresh one comes.
+  const [cached] = useState(() => kept.get(JSON.stringify(askOf(day, span, null, false, q, range))));
+  const [report, setReport] = useState<PiReport | null>(cached ?? null);
+  const [lines, setLines] = useState<PiLine[]>(cached?.lines ?? []);
+  const [more, setMore] = useState(cached?.more ?? false);
   // Where Older carries on from: the oldest entry the server read, which a filter may have skipped every one of.
-  const [cursor, setCursor] = useState<number | null>(null);
+  const [cursor, setCursor] = useState<number | null>(cached?.cursor ?? null);
   const [fetchingOlder, setFetchingOlder] = useState(false);
   const olderPending = useRef(false);
   const [paged, setPaged] = useState(false);
@@ -100,18 +127,16 @@ export function Pi() {
     if (location.pathname + location.search !== url) history.replaceState(history.state, "", url);
   }, [report, range, q, span]);
 
-  const filters = useMemo(
-    () => ({ service: service ?? undefined, problems: problems ? (1 as const) : undefined, q: q || undefined, from: range?.from, to: range?.to }),
-    [service, problems, q, range],
-  );
+  const ask = useMemo(() => askOf(day, span, service, problems, q, range), [day, span, service, problems, q, range]);
 
   // Only the newest request's answer counts: a slow one from before the last keystroke mustn't land on top of it.
   const asked = useRef(0);
   const load = useCallback(() => {
     const n = ++asked.current;
-    return getPi({ day: day ?? undefined, span: span === "day" ? undefined : span, ...filters, limit: PAGE }).then(
+    return getPi(ask).then(
         (r) => {
           if (n !== asked.current) return;
+          keep(JSON.stringify(ask), r);
           setReport(r);
           setLines(r.lines);
           setMore(r.more);
@@ -121,7 +146,7 @@ export function Pi() {
         },
         () => n === asked.current && setFailed(true),
       );
-  }, [day, span, filters]);
+  }, [ask]);
 
   useEffect(() => {
     load();
@@ -162,7 +187,7 @@ export function Pi() {
     setFetchingOlder(true);
     const n = asked.current;
     try {
-      const r = await getPi({ day: report.day, ...filters, limit: PAGE, before: cursor });
+      const r = await getPi({ ...ask, day: report.day, span: undefined, before: cursor });
       if (n !== asked.current) return;
       setLines((xs) => [...xs, ...r.lines]);
       setMore(r.more);
@@ -223,7 +248,7 @@ export function Pi() {
           </p>
         )}
 
-        {report && <NowTiles report={report} />}
+        {report ? <NowTiles report={report} /> : !failed && <NowSkeleton restarts={isAdmin} />}
         {report && isAdmin && !report.sample && <Restarts onPi={() => setBack("waiting")} />}
         {back && (
           <p className="pi-note" data-back={back} role="status">
@@ -276,6 +301,7 @@ export function Pi() {
               )}
             </div>
           </div>
+          {!report && !failed && <div className="pi-chart pi-chart-empty pi-sk-fade" aria-hidden><span className="pi-sk pi-sk-chart" /></div>}
           {report &&
             (span !== "day" ? (
               report.days ? (
@@ -352,6 +378,17 @@ export function Pi() {
                     : `Nothing logged ${manyDays ? "on those days" : "that day"}.`}
             </p>
           )}
+          {!report && !failed && (
+            <ol className="pi-lines pi-sk-fade" aria-hidden>
+              {SKELETON_LINES.map((w, i) => (
+                <li key={i}>
+                  <span className="pi-sk" style={{ width: 58 }} />
+                  <span className="pi-sk" style={{ width: 44 }} />
+                  <span className="pi-sk" style={{ width: `${w}%` }} />
+                </li>
+              ))}
+            </ol>
+          )}
           <ol className="pi-lines">
             {lines.map((l) => (
               <li key={`${l.at}-${l.service}`} data-tone={l.tone} data-system={l.system || undefined}>
@@ -379,6 +416,36 @@ export function Pi() {
         </section>
       </main>
     </div>
+  );
+}
+
+/** Message widths for the skeleton's log lines, uneven like real ones. */
+const SKELETON_LINES = [62, 38, 74, 51, 45, 68, 33, 57];
+
+/**
+ * The cards' shape while the first report loads, so the page doesn't jump when it comes. It fades in after a beat:
+ * a report that comes quickly never shows it. The Restart card is there for admins, who'll see it on a Pi.
+ */
+function NowSkeleton({ restarts }: { restarts: boolean }) {
+  return (
+    <>
+      <section className="people-section pi-sk-fade" aria-busy="true" aria-label="Reading the Pi">
+        <div className="section-head">
+          <h2>The Pi now</h2>
+          <span className="pi-verdict pi-sk" style={{ width: 92 }} />
+        </div>
+        <ul className="pi-tiles">
+          {Array.from({ length: 8 }, (_, i) => (
+            <li key={i}>
+              <span className="pi-sk" style={{ width: 64, height: 10 }} />
+              <span className="pi-sk" style={{ width: [96, 88, 120, 84, 104, 80, 100, 92][i], height: 26, margin: "4px 0 3px" }} />
+              <span className="pi-sk" style={{ width: [116, 140, 72, 124, 70, 84, 112, 108][i], height: 12 }} />
+            </li>
+          ))}
+        </ul>
+      </section>
+      {restarts && <div className="pi-restarts pi-sk-fade pi-sk-restarts" aria-hidden />}
+    </>
   );
 }
 

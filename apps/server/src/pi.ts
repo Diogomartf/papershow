@@ -232,7 +232,11 @@ const NOISE = /^(Deactivated successfully|Consumed .* CPU time|.*: Consumed )/;
 const toneOf = (message: string, priority: number): Tone =>
   priority <= 3 || BAD.test(message) ? "bad" : priority === 4 || WARN.test(message) ? "warn" : GOOD.test(message) ? "good" : "plain";
 
-/** One read of the journal: plenty for a page, even of a day the clock app drew every minute of. */
+/**
+ * The most one read of the journal takes. The first read asks for little more than a page, since without a filter
+ * nearly every line is shown and reading 3,000 entries as JSON to show 150 was most of the page's wait on the Pi.
+ * When a filter skips most of what's read, each read after asks for four times as much, up to this.
+ */
 const BATCH = 3000;
 /** Reads per request, when a filter skips most of what's read: past this, the page asks for more itself. */
 const READS = 4;
@@ -256,8 +260,9 @@ const escapeGrep = (q: string) => q.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 async function linesFor(opts: LineOpts): Promise<{ lines: Line[]; more: boolean; cursor: number | null }> {
   const lines: Line[] = [];
   let before = opts.before;
-  for (let i = 0; i < READS; i++) {
-    const read = await readLines({ ...opts, before });
+  let n = Math.min(BATCH, opts.limit + 100);
+  for (let i = 0; i < READS; i++, n = Math.min(BATCH, n * 4)) {
+    const read = await readLines({ ...opts, before }, n);
     lines.push(...read.lines);
     if (lines.length > opts.limit) {
       // Full: the next page starts after the last line shown.
@@ -272,7 +277,7 @@ async function linesFor(opts: LineOpts): Promise<{ lines: Line[]; more: boolean;
 }
 
 /** One read of the journal, newest first: the lines that pass the filters, the oldest entry read, and whether the read was full. */
-async function readLines(opts: LineOpts): Promise<{ lines: Line[]; oldest: number | null; full: boolean }> {
+async function readLines(opts: LineOpts, n: number): Promise<{ lines: Line[]; oldest: number | null; full: boolean }> {
   const until = opts.before ? `@${Math.ceil(opts.before / 1e6)}` : `${nextDay(opts.to)} 00:00:00`;
   const units = opts.service
     ? Object.keys(UNITS).filter((u) => UNITS[u] === opts.service)
@@ -282,7 +287,7 @@ async function readLines(opts: LineOpts): Promise<{ lines: Line[]; oldest: numbe
     "--since", `${opts.from} 00:00:00`,
     "--until", until,
     ...(opts.q ? ["--grep", escapeGrep(opts.q), "--case-sensitive=false"] : []),
-    "-r", "-n", String(BATCH),
+    "-r", "-n", String(n),
     "-o", "json", "--output-fields=MESSAGE,PRIORITY,_SYSTEMD_UNIT,UNIT,_PID", "--no-pager",
   ], 15_000);
   const raw = entries(out);
@@ -301,7 +306,7 @@ async function readLines(opts: LineOpts): Promise<{ lines: Line[]; oldest: numbe
     if (opts.problems && tone !== "bad" && tone !== "warn") continue;
     lines.push({ at, service, system: !own, message, tone });
   }
-  return { lines, oldest, full: raw.length === BATCH };
+  return { lines, oldest, full: raw.length === n };
 }
 
 // ── Now ────────────────────────────────────────────────────────────────────

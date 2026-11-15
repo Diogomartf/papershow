@@ -2842,6 +2842,18 @@ button.link.danger { color: var(--danger); }
 .pi-verdict[data-level] svg { color: inherit; }
 .pi-tiles strong { font-size: 24px; font-weight: 640; letter-spacing: -0.015em; font-variant-numeric: tabular-nums; }
 .pi-tile-note { font-size: 12.5px; color: var(--ink-2); }
+/* The page while its first report loads: the cards', chart's and lines' shapes in a soft tint. It fades in after a
+   beat, so a quick answer never flashes it, and breathes slowly while it waits. */
+.pi-sk { display: block; height: 12px; border-radius: 6px; background: var(--tint); }
+.pi-sk-fade { opacity: 0; animation: loadingIn 240ms var(--ease-out) 180ms forwards; }
+.pi-sk-fade .pi-sk { animation: pulse 1.6s ease-in-out 420ms infinite; }
+.pi-sk-chart { width: calc(100% - 48px); height: calc(100% - 48px); border-radius: 10px; opacity: .6; }
+.pi-sk-restarts { min-height: 66px; }
+.pi-lines.pi-sk-fade li { align-items: center; }
+@media (prefers-reduced-motion: reduce) {
+  .pi-sk-fade { animation-duration: 1ms; }
+  .pi-sk-fade .pi-sk { animation: none; }
+}
 
 .pi-day { display: flex; align-items: center; gap: 2px; }
 .pi-day button.ghost { min-width: 28px; height: 26px; padding: 0 6px; font-size: 16px; line-height: 1; }
