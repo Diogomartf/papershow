@@ -136,6 +136,9 @@ export default function App() {
   const [pickerOpen, setPickerOpen] = useState(false);
   // True once the name field is typed in. Until then the name follows the text, instead of staying Untitled.
   const nameEdited = useRef(false);
+  // New canvas: a drawing with unsaved changes asks once ("Discard?") before it goes. `spins` restarts the arrow's turn.
+  const [confirmNew, setConfirmNew] = useState(false);
+  const [spins, setSpins] = useState(0);
 
   /** A drawing nobody named takes its name from its text. A name that already is that text still follows it. */
   const adopt = (s: Scene): Scene => {
@@ -345,6 +348,17 @@ export default function App() {
     setPlacing(false);
     setSelecting(false);
     draw.current?.setStrokes([]);
+    setConfirmNew(false);
+    setSpins((n) => n + 1);
+  };
+
+  /** Refresh: a blank canvas now, unless that would throw away changes nobody saved; then it asks first. */
+  const refresh = () => {
+    if (!scene) return;
+    const empty = !scene.strokes.length && !scene.texts?.length && !scene.photo;
+    if (empty || confirmNew || looksKey(scene) === savedLooks) return startNew();
+    setConfirmNew(true);
+    window.setTimeout(() => setConfirmNew(false), 3000);
   };
 
   useEffect(() => {
@@ -448,7 +462,17 @@ export default function App() {
           >
             <span aria-hidden className="text-glyph">T</span> <span className="text-label">Text</span>
           </button>
-          <button className="ghost" onClick={startNew}>New</button>
+          <button
+            className={confirmNew ? "ghost text-toggle danger" : "ghost text-toggle"}
+            onClick={refresh}
+            title={confirmNew ? "Tap again to throw away the unsaved changes" : "A fresh canvas"}
+          >
+            <svg key={spins} className="refresh-glyph" data-spin={spins > 0} viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+              <path d="M13 8a5 5 0 1 1-1.6-3.7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <path d="M13.5 1.8v3.6H9.9z" fill="currentColor" />
+            </svg>{" "}
+            <span className={confirmNew ? undefined : "text-label"}>{confirmNew ? "Discard?" : "New"}</span>
+          </button>
           {scene.photo ? (
             // The photo on the drawing, and what you can do with it, together.
             <span className="photo-card">

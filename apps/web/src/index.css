@@ -2390,6 +2390,11 @@ textarea.text { resize: vertical; min-height: 96px; line-height: 1.45; font-size
 
 .text-toggle { display: inline-flex; align-items: center; gap: 6px; }
 .select-glyph { display: block; }
+/* New: the arrow turns once as the fresh canvas comes in */
+.refresh-glyph { display: block; }
+.refresh-glyph[data-spin="true"] { animation: refresh-turn 420ms cubic-bezier(.2,.8,.2,1); }
+@keyframes refresh-turn { from { transform: rotate(-360deg); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .refresh-glyph[data-spin="true"] { animation: none; } }
 
 /* ── Selecting what's drawn ────────────────────────── */
 
