@@ -131,22 +131,33 @@ export function Pi() {
 
   // Only the newest request's answer counts: a slow one from before the last keystroke mustn't land on top of it.
   const asked = useRef(0);
+  // The first report waits until the skeleton has been up a moment: the page settles in instead of popping.
+  // A kept report is already on screen, so later ones come straight away.
+  const [opened] = useState(() => performance.now());
+  const showing = useRef(!!cached);
   const load = useCallback(() => {
     const n = ++asked.current;
     return getPi(ask).then(
         (r) => {
           if (n !== asked.current) return;
           keep(JSON.stringify(ask), r);
-          setReport(r);
-          setLines(r.lines);
-          setMore(r.more);
-          setCursor(r.cursor);
-          setPaged(false);
-          setFailed(false);
+          const wait = showing.current ? 0 : Math.max(0, SKELETON_MS - (performance.now() - opened));
+          showing.current = true;
+          const show = () => {
+            if (n !== asked.current) return;
+            setReport(r);
+            setLines(r.lines);
+            setMore(r.more);
+            setCursor(r.cursor);
+            setPaged(false);
+            setFailed(false);
+          };
+          if (wait) setTimeout(show, wait);
+          else show();
         },
         () => n === asked.current && setFailed(true),
       );
-  }, [ask]);
+  }, [ask, opened]);
 
   useEffect(() => {
     load();
@@ -419,12 +430,15 @@ export function Pi() {
   );
 }
 
+/** The least time the skeleton is up on a first visit, however quick the Pi answers. */
+const SKELETON_MS = 450;
+
 /** Message widths for the skeleton's log lines, uneven like real ones. */
 const SKELETON_LINES = [62, 38, 74, 51, 45, 68, 33, 57];
 
 /**
- * The cards' shape while the first report loads, so the page doesn't jump when it comes. It fades in after a beat:
- * a report that comes quickly never shows it. The Restart card is there for admins, who'll see it on a Pi.
+ * The cards' shape while the first report loads, so the page doesn't jump when it comes. It's up for at least
+ * SKELETON_MS, then the readings fade in where it was. The Restart card is there for admins, who'll see it on a Pi.
  */
 function NowSkeleton({ restarts }: { restarts: boolean }) {
   return (
