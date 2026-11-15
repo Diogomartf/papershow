@@ -1,30 +1,54 @@
-import { StrictMode, useCallback, useEffect, useState } from "react";
+import { lazy, StrictMode, Suspense, startTransition, useCallback, useEffect, useState, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
-import App from "./App.tsx";
-import { Apps } from "./Apps.tsx";
 import { booting, loadEverything } from "./boot.ts";
 import { Dashboard } from "./Dashboard.tsx";
 import { Hello } from "./Hello.tsx";
-import { Log } from "./Log.tsx";
-import { Manage } from "./Manage.tsx";
 import { navigate } from "./Nav.tsx";
 import { People } from "./People.tsx";
-import { Pi } from "./Pi.tsx";
-import { Photos } from "./Photos.tsx";
 import { hello as getHello, Me, SIGNED_OUT, signOut, useMe, visiting, type Hello as HelloData } from "./house";
-import { Party, PartyStory } from "./Party.tsx";
-import { Playlist } from "./Playlist.tsx";
-import { Show } from "./Show.tsx";
 import { cue, startSound } from "./sound.ts";
-import { Viewer } from "./Viewer.tsx";
+
+// Each page is its own bundle, so the first page opened starts sooner and an update only re-downloads the pages
+// that changed. The Dashboard (where most visits land), the front door and People (the Dashboard shows its log)
+// stay in the main one.
+const pages: (() => Promise<unknown>)[] = [];
+/** A page loaded on demand, from `load`, a module whose `name` export is the page. */
+function page<P>(load: () => Promise<Record<string, unknown>>, name: string) {
+  pages.push(load);
+  return lazy(() => load().then((m) => ({ default: m[name] as ComponentType<P> })));
+}
+const App = page<object>(() => import("./App.tsx"), "default");
+const Apps = page<{ id: string | null; newKind?: string }>(() => import("./Apps.tsx"), "Apps");
+const Log = page<object>(() => import("./Log.tsx"), "Log");
+const Manage = page<object>(() => import("./Manage.tsx"), "Manage");
+const Pi = page<object>(() => import("./Pi.tsx"), "Pi");
+const Photos = page<{ id: string | null }>(() => import("./Photos.tsx"), "Photos");
+const Party = page<object>(() => import("./Party.tsx"), "Party");
+const PartyStory = page<{ id: string }>(() => import("./Party.tsx"), "PartyStory");
+const Playlist = page<{ id: string | null }>(() => import("./Playlist.tsx"), "Playlist");
+const Show = page<object>(() => import("./Show.tsx"), "Show");
+const Viewer = page<{ id: string }>(() => import("./Viewer.tsx"), "Viewer");
+
+/**
+ * Fetch every page's bundle once the first page is up and the browser is idle, so moving to another page
+ * doesn't wait on the network. The browser keeps them, so this costs nothing on later visits.
+ */
+function preloadPages() {
+  const all = () => pages.forEach((load) => load().catch(() => {}));
+  if ("requestIdleCallback" in window) requestIdleCallback(all, { timeout: 3000 });
+  else setTimeout(all, 1500);
+}
 
 function Router() {
   const [path, setPath] = useState(location.pathname);
   const { me } = useMe();
   const guest = visiting(me);
+  // Only once someone's in: the front door shouldn't spend the network on pages it can't open.
+  useEffect(preloadPages, []);
   useEffect(() => {
-    const onPop = () => setPath(location.pathname);
+    // A transition: while the next page's bundle loads, the current page stays up instead of going blank.
+    const onPop = () => startTransition(() => setPath(location.pathname));
     addEventListener("popstate", onPop);
     return () => removeEventListener("popstate", onPop);
   }, []);
@@ -114,10 +138,25 @@ function Gate() {
   }
   return (
     <Me.Provider value={{ me: hello.me, hello, refresh, switchTo }}>
-      <Router />
+      <Suspense fallback={null}>
+        <Router />
+      </Suspense>
     </Me.Provider>
   );
 }
+
+// A tab left open across an update asks for page bundles that are gone (their names change with each build):
+// load the new version instead of showing a blank page. Once a minute at most, in case the server is the problem.
+addEventListener("vite:preloadError", (e) => {
+  try {
+    if (Date.now() - Number(sessionStorage.getItem("reloaded-for-update") ?? 0) < 60_000) return;
+    sessionStorage.setItem("reloaded-for-update", String(Date.now()));
+  } catch {
+    // Without storage, still reload: a blank page is worse than an extra reload.
+  }
+  e.preventDefault();
+  location.reload();
+});
 
 startSound();
 
